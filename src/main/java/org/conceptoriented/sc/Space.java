@@ -8,6 +8,8 @@ import java.util.List;
  */
 public class Space {
 	
+	public String name;
+	
 	// A list of all input/output streams
 
 	//
@@ -21,7 +23,7 @@ public class Space {
 	}
 	public Table getTable(String table) {
 		for(Table tab : tables) {
-			if(tab.name == table) return tab;
+			if(tab.getName() == table) return tab;
 		}
 		return null;
 	}
@@ -37,9 +39,18 @@ public class Space {
 	}
 	public Column getColumn(String table, String column) {
 		for(Column col : columns) {
-			if(col.name == column) return col;
+			if(col.getName() == column) return col;
 		}
 		return null;
+	}
+	public List<Column> getColumns(String table) {
+		List<Column> res = new ArrayList<Column>();
+		for(Column col : columns) {
+			if(col.input.getName() == table) {
+				res.add(col);
+			}
+		}
+		return res;
 	}
 
 	//
@@ -85,26 +96,6 @@ public class Space {
 	public void evaluate() {
 		
 		//
-		// Update the space. Make inconsistent (dirty).
-		//
-
-		// Get a list of input streams from the Space
-		List<InputStream> streams = null;
-		
-		for(InputStream stream : streams) {
-			Table table = null;
-
-			// Read records from the stream and insert them into tables
-			while(!stream.isEmpty()) {
-				// Read record
-				Record record = stream.pop();
-				// Insert record into the corresponding table
-				table.push(record);
-			}
-		}
-		
-
-		//
 		// Evaluate the space. Make again consistent (non-dirty).
 		// Bring the state back to consistent state by re-computing the values which are known to be dirty.
 		//
@@ -112,10 +103,11 @@ public class Space {
 		// Build a list/graph of columns to be evaluated. Either in the sequence of creation, or using dependencies.
 		// Evaluate each column individually from this structure. 
 		// Any column has to provide an evaluation function which knows how to compute the output value.
-		List<Column> columns = null;
+		List<Column> columns = this.columns;
 
 		// For each dirty value, evaluate it again and store the result
 		for(Column column : columns) {
+			if(column.evaluator == null) continue;
 			column.evaluate();
 		}
 		
@@ -126,6 +118,20 @@ public class Space {
 		// We need to provide a mechanism for marking records for deletion
 		// We need to provide a mechanism for real deletion of records: either explicitly by the driver or implicitly by the table data access operator, e.g., if this record is read 
 		
+	}
+	
+	public Space(String name) {
+		this.name = name;
+		
+		// Create primitive tables
+		Table doubleType = createTable("Double");
+		tables.add(doubleType);
+		
+		Table integerType = createTable("Integer");
+		tables.add(integerType);
+		
+		Table stringType = createTable("String");
+		tables.add(stringType);
 	}
 
 }

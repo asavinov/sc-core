@@ -21,13 +21,17 @@ public class EvaluatorB extends EvaluatorBase {
 	}
 
 	public void evaluate() {
-		double currentValue = (double)thisColumn.getValue(thisRow);
-
-		double result = (double)columnA.getValue(thisRow) + 2.0;
+		Double currentValue = (Double)thisColumn.getValue(thisRow);
 		
-		thisColumn.setValue(result);
+		Double valueA = (Double)columnA.getValue(thisRow);
+		Double result = null;
+		if(valueA != null) {
+			result = valueA + 2.0;
+		}
+		
+		thisColumn.setValue(thisRow, result);
 
 		// We could also accumulate/update the current value by using SUM
-		thisColumn.setValue(currentValue + result);
+		///thisColumn.setValue(thisRow, currentValue + result);
 	}
 }

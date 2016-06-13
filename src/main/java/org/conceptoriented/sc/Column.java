@@ -7,31 +7,32 @@ public class Column {
 	Space space;
 
 	String name;
+	public String getName() {
+		return name;
+	}
 	
 	Table input;
 	Table output;
 
 	EvaluatorBase evaluator;
 
-	public String getName() {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
 	//
 	// Data access
 	//
 	
+	Object[] values;
+	long length = 0;
+	
 	public Object getValue(long row) {
-		return null;
+		return values[(int)row];
 	}
-	public void setValue(Object value) {
-		// TODO Auto-generated method stub
+	public void setValue(long row, Object value) {
+		values[(int)row] = value;
 	}
 	public long push(Object value) {
-		// TODO Auto-generated method stub
-		// Append the value and mark as dirty.
-		return 0;
+		long row = length++;
+		values[(int)row] = value;
+		return row;
 	}
 
 	//
@@ -52,7 +53,7 @@ public class Column {
 	 */
 	public Object evaluate() {
 		// Get dirty offsets
-		Range range = new Range(0,0);
+		Range range = new Range(0,this.length);
 		
 		// Initialize/prepare evaluator
 
@@ -69,11 +70,18 @@ public class Column {
 		return null;
 	}
 
+	@Override
+	public String toString() {
+		return "[" + getName() + "]: " + input.getName() + " -> " + output.getName();
+	}
+	
 	public Column(Space space, String name, String input, String output) {
 		this.space = space;
 		this.name = name;
 		this.input = space.getTable(input);
 		this.output = space.getTable(output);
+		
+		values = new Object[1000];
 	}
 
 }

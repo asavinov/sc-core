@@ -1,10 +1,11 @@
 package org.conceptoriented.sc;
 
+import java.util.HashMap;
 import java.util.Map;
 
 public class Record {
 	
-	Map<String, Object> recod;
+	Map<String, Object> recod = new HashMap<String, Object>();
 
 	public Object get(String name) {
 		return recod.get(name);
@@ -12,6 +13,9 @@ public class Record {
 
 	public void set(String name, Object value) {
 		recod.put(name, value);
+	}
+	
+	public Record() {
 	}
 
 }
