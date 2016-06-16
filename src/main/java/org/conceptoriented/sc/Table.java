@@ -1,11 +1,17 @@
 package org.conceptoriented.sc;
 
 import java.util.List;
+import java.util.UUID;
 
 public class Table {
-	Space space;
+	private Space space;
+	
+	private final UUID id;
+	public UUID getId() {
+		return id;
+	}
 
-	String name;
+	private String name;
 	public String getName() {
 		return name;
 	}
@@ -103,6 +109,7 @@ public class Table {
 	
 	public Table(Space space, String name) {
 		this.space = space;
+		this.id = UUID.randomUUID();
 		this.name = name;
 	}
 

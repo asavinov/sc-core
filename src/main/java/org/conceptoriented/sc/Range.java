@@ -8,6 +8,11 @@ public class Range {
 	public long getLength() {
 		return end - start;
 	}
+	
+	public boolean isIn(long row) {
+		if(row >= start && row < end) return true;
+		return false;
+	}
 
 	@Override
     public String toString() {

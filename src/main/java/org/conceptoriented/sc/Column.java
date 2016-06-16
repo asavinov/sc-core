@@ -2,19 +2,29 @@ package org.conceptoriented.sc;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 public class Column {
 	Space space;
 
-	String name;
+	private final UUID id;
+	public UUID getId() {
+		return id;
+	}
+
+	private String name;
 	public String getName() {
 		return name;
 	}
 	
-	Table input;
-	Table output;
-
-	EvaluatorBase evaluator;
+	private Table input;
+	public Table getInput() {
+		return input;
+	}
+	private Table output;
+	public Table getOutput() {
+		return output;
+	}
 
 	//
 	// Data access
@@ -43,6 +53,8 @@ public class Column {
 	// Evaluate and formula
 	//
 	
+	EvaluatorBase evaluator;
+
 	public void setEvaluator(EvaluatorBase evaluator) {
 		this.evaluator = evaluator;
 		
@@ -80,6 +92,7 @@ public class Column {
 	
 	public Column(Space space, String name, String input, String output) {
 		this.space = space;
+		this.id = UUID.randomUUID();
 		this.name = name;
 		this.input = space.getTable(input);
 		this.output = space.getTable(output);
