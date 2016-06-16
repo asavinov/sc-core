@@ -5,7 +5,11 @@ public class Range {
     public long start;
     public long end;
 
-    @Override
+	public long getLength() {
+		return end - start;
+	}
+
+	@Override
     public String toString() {
       return String.format("[%s, %s)", start, end);
     }

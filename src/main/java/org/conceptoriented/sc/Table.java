@@ -20,6 +20,8 @@ public class Table {
 	// [del)[clean)[new)
 	// [rowRange) - all records that can be accessed
 	
+	public long maxRows = -1; // If more rows then they will be automatically deleted. In reality, there can be more rows if evaluate is not called but many records are pushed..  
+	
 	// Records to be deleted after the next re-evaluation
 	// We need to store records marked for removal after they have been used for evaluating new records.
 	protected Range delRange = new Range();
@@ -63,7 +65,11 @@ public class Table {
 		newRange.end++;
 		rowRange.end++;
 		
-		// Some record might need to be marked for deletion (if the table gets too long)
+		// If too many records then mark some of them for deletion
+		long excess = rowRange.getLength() - maxRows;
+		if(excess > 0) {
+			delRange.end += excess;
+		}
 	}
 
 	public void addNewRange() { // Mark dirty records as clean
@@ -78,7 +84,7 @@ public class Table {
 
 		for(Column column : columns) { // We must push a new value to all columns even if it has not been provided (null)
 			// Remove initial elements of the column
-			column.removeDelRange(this.getDelRange());
+			column.removeDelRange(delRange);
 		}
 		
 		//

@@ -27,6 +27,7 @@ public class Tests {
     	// Create and configure: space, tables, columns
         space = new Space("My Space");
         Table table = space.createTable("T");
+        table.maxRows = 2;
 
         // Data column will get its data from pushed records (input column)
         Column columnA = space.createColumn("A", "T", "Double");
