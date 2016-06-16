@@ -112,6 +112,17 @@ public class Space {
 		}
 		
 		
+		//
+		// Update ranges of all tables
+		//
+
+		for(Table table : tables) {
+			if(table.isPrimitive()) continue;
+			table.addNewRange(); // Mark dirty as clean
+			table.removeDelRange(); // Really remove old records
+		}
+		
+		
 		// How do we treat tables?
 		// We need to take into account that records might have been added - so only they have to be evaluated
 		// We need to take into account that some tables can appended during other column evaluation. 
@@ -125,13 +136,8 @@ public class Space {
 		
 		// Create primitive tables
 		Table doubleType = createTable("Double");
-		tables.add(doubleType);
-		
 		Table integerType = createTable("Integer");
-		tables.add(integerType);
-		
 		Table stringType = createTable("String");
-		tables.add(stringType);
 	}
 
 }

@@ -46,10 +46,20 @@ public class Tests {
     	
         // Add one or more records to the table
         Record record = new Record();
+
         record.set("A", 5.0);
         table.push(record); // The number of added/dirty records is incremented. Some records can be marked for deletion/old. 
     	
-    	// Evaluate space by updating its space. Mark new records as clean and finally remove records for deletion.
+        record.set("A", 10.0);
+        table.push(record); // The number of added/dirty records is incremented. Some records can be marked for deletion/old. 
+
+        // Evaluate space by updating its space. Mark new records as clean and finally remove records for deletion.
+        space.evaluate();
+        
+        record.set("A", 20.0);
+        table.push(record); 
+
+        // Evaluate space by updating its space. Mark new records as clean and finally remove records for deletion.
         space.evaluate();
         
         // Check the result

@@ -35,6 +35,10 @@ public class Column {
 		return row;
 	}
 
+	public void removeDelRange(Range delRange) {
+		// Currently, do not do anything. The deleted values are still there - they are not supposed to be accessed. The table knows about semantics of these intervals.
+	}
+
 	//
 	// Evaluate and formula
 	//
@@ -51,23 +55,22 @@ public class Column {
 	 * Any column has to provide a method which knows how to produce an output value. 
 	 * The output is produced by using all other columns.  
 	 */
-	public Object evaluate() {
+	public void evaluate() {
 		// Get dirty offsets
-		Range range = new Range(0,this.length);
+		Range range = input.getNewRange();
 		
 		// Initialize/prepare evaluator
+		// For example, pass direct column references or other info that is needed to access and manipulate data in the space
 
-		// For each dirty offset in the range, evaluate it by executing the corresponding function
+		// Evaluate for all rows in the range
 		for(long i=range.start; i<range.end; i++) {
+			// Init one iteration
 			evaluator.thisRow = i;
+			// Really compute
 			evaluator.evaluate();
 		}
 
-		// Mark the range as clean
-
-		// De-initialize/clean evaluator
-
-		return null;
+		// De-initialize/clean evaluator. For example, free resources allocated for its computations.
 	}
 
 	@Override
@@ -83,5 +86,4 @@ public class Column {
 		
 		values = new Object[1000];
 	}
-
 }

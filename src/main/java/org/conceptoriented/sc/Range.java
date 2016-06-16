@@ -2,8 +2,8 @@ package org.conceptoriented.sc;
 
 public class Range {
 
-    public final long start;
-    public final long end;
+    public long start;
+    public long end;
 
     @Override
     public String toString() {
@@ -31,9 +31,19 @@ public class Range {
     	return Long.hashCode(start) ^ Long.hashCode(end);
     }
 
+    public Range(Range range) {
+        super();
+        this.start = range.start;
+        this.end = range.end;
+      }
+
     public Range(long start, long end) {
         super();
         this.start = start;
         this.end = end;
+      }
+
+    public Range() {
+        this(0,0);
       }
 }
