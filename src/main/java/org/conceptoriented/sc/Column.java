@@ -73,6 +73,7 @@ public class Column {
 		
 		// Initialize/prepare evaluator
 		// For example, pass direct column references or other info that is needed to access and manipulate data in the space
+		evaluator.beginEvaluate();
 
 		// Evaluate for all rows in the range
 		for(long i=range.start; i<range.end; i++) {
@@ -83,6 +84,7 @@ public class Column {
 		}
 
 		// De-initialize/clean evaluator. For example, free resources allocated for its computations.
+		evaluator.endEvaluate();
 	}
 
 	@Override
