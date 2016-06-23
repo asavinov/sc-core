@@ -1,8 +1,12 @@
-package org.conceptoriented.sc;
+package org.conceptoriented.sc.core;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import org.conceptoriented.sc.core.Column;
+import org.conceptoriented.sc.core.EvaluatorBase;
+import org.conceptoriented.sc.core.Range;
 
 public class EvaluatorB extends EvaluatorBase {
 

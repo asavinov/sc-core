@@ -1,4 +1,4 @@
-package org.conceptoriented.sc;
+package org.conceptoriented.sc.core;
 
 public class Range {
 

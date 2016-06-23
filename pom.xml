@@ -5,7 +5,7 @@
   <groupId>org.conceptoriented.sc</groupId>
   <artifactId>sc-core</artifactId>
   <packaging>jar</packaging>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>0.1</version>
 
   <name>StreamCommander Engine</name>
   <url>http://conceptoriented.org</url>

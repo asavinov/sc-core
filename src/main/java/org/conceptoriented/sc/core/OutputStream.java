@@ -1,4 +1,4 @@
-package org.conceptoriented.sc;
+package org.conceptoriented.sc.core;
 
 /**
  * It is used to collect outgoing events in row format.

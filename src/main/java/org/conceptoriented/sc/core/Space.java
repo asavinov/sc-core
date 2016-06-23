@@ -1,4 +1,4 @@
-package org.conceptoriented.sc;
+package org.conceptoriented.sc.core;
 
 import java.util.ArrayList;
 import java.util.List;

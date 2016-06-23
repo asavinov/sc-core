@@ -1,10 +1,15 @@
-package org.conceptoriented.sc;
+package org.conceptoriented.sc.core;
 
 import static org.junit.Assert.*;
 
 import java.util.HashMap;
 import java.util.Map;
 
+import org.conceptoriented.sc.core.Column;
+import org.conceptoriented.sc.core.EvaluatorBase;
+import org.conceptoriented.sc.core.Record;
+import org.conceptoriented.sc.core.Space;
+import org.conceptoriented.sc.core.Table;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
