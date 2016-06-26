@@ -102,6 +102,16 @@ public class Table {
 		rowRange.start = delRange.end;
 	}
 
+	public String toJson() {
+		// Trick to avoid backslashing double quotes: use backticks and then replace it at the end 
+		String jid = "`id`: `" + this.getId() + "`";
+		String jname = "`name`: `" + this.getName() + "`";
+		
+		String json = jid + ", " + jname;
+
+		return ("{" + json + "}").replace('`', '"');
+	}
+	
 	@Override
 	public String toString() {
 		return "[" + name + "]";

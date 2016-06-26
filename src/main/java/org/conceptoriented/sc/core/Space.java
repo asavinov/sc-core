@@ -25,10 +25,8 @@ public class Space {
 	// Tables
 	//
 	private List<Table> tables = new ArrayList<Table>();
-	public Table createTable(String name) {
-		Table table = new Table(this, name);
-		tables.add(table);
-		return table;
+	public List<Table> getTables() {
+		return tables;
 	}
 	public Table getTable(String table) {
 		for(Table tab : tables) {
@@ -36,21 +34,18 @@ public class Space {
 		}
 		return null;
 	}
+	public Table createTable(String name) {
+		Table table = new Table(this, name);
+		tables.add(table);
+		return table;
+	}
 
 	//
 	// Columns
 	//
 	private List<Column> columns = new ArrayList<Column>();
-	public Column createColumn(String name, String input, String output) {
-		Column column = new Column(this, name, input, output);
-		columns.add(column);
-		return column;
-	}
-	public Column getColumn(String table, String column) {
-		for(Column col : columns) {
-			if(col.getName() == column) return col;
-		}
-		return null;
+	public List<Column> getColumns() {
+		return columns;
 	}
 	public List<Column> getColumns(String table) {
 		List<Column> res = new ArrayList<Column>();
@@ -60,6 +55,17 @@ public class Space {
 			}
 		}
 		return res;
+	}
+	public Column getColumn(String table, String column) {
+		for(Column col : columns) {
+			if(col.getName() == column) return col;
+		}
+		return null;
+	}
+	public Column createColumn(String name, String input, String output) {
+		Column column = new Column(this, name, input, output);
+		columns.add(column);
+		return column;
 	}
 
 	//
@@ -94,6 +100,21 @@ public class Space {
 			table.removeDelRange(); // Really remove old records
 		}
 		
+	}
+	
+	public String toJson() {
+		// Trick to avoid backslashing double quotes: use backticks and then replace it at the end 
+		String jid = "`id`: `" + this.getId() + "`";
+		String jname = "`name`: `" + this.getName() + "`";
+		
+		String json = jid + ", " + jname;
+
+		return ("{" + json + "}").replace('`', '"');
+	}
+	
+	@Override
+	public String toString() {
+		return "[" + name + "]";
 	}
 	
 	public Space(String name) {

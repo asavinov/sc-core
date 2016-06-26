@@ -87,6 +87,22 @@ public class Column {
 		evaluator.endEvaluate();
 	}
 
+	public String toJson() {
+		// Trick to avoid backslashing double quotes: use backticks and then replace it at the end 
+		String jid = "`id`: `" + this.getId() + "`";
+		String jname = "`name`: `" + this.getName() + "`";
+		
+		String jinid = "`id`: `" + this.getInput().getId() + "`";
+		String jin = "`input`: {" + jinid + "}";
+
+		String joutid = "`id`: `" + this.getOutput().getId() + "`";
+		String jout = "`output`: {" + joutid + "}";
+
+		String json = jid + ", " + jname + ", " + jin + ", " + jout;
+
+		return ("{" + json + "}").replace('`', '"');
+	}
+	
 	@Override
 	public String toString() {
 		return "[" + getName() + "]: " + input.getName() + " -> " + output.getName();
