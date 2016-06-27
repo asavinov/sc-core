@@ -4,6 +4,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+import org.json.JSONObject;
+
 public class Column {
 	Space space;
 
@@ -15,6 +17,9 @@ public class Column {
 	private String name;
 	public String getName() {
 		return name;
+	}
+	public void setName(String name) {
+		this.name = name;
 	}
 	
 	private Table input;
@@ -101,6 +106,19 @@ public class Column {
 		String json = jid + ", " + jname + ", " + jin + ", " + jout;
 
 		return ("{" + json + "}").replace('`', '"');
+	}
+	public static Column fromJson(String json) {
+		JSONObject obj = new JSONObject(json);
+		String id = obj.getString("id");
+		String name = obj.getString("name");
+
+		JSONObject input_table = obj.getJSONObject("input");
+		String input_id = input_table.getString("id");
+
+		JSONObject output_table = obj.getJSONObject("output");
+		String output_id = output_table.getString("id");
+
+		return null;
 	}
 	
 	@Override
