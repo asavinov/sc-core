@@ -2,7 +2,11 @@ package org.conceptoriented.sc.core;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
+
+import org.json.JSONObject;
 
 /**
  * Stream space stores the complete data state and is able to consistently update it. 
@@ -22,11 +26,10 @@ public class Space {
 		this.name = name;
 	}
 	
-	// A list of all input/output streams
-
 	//
 	// Tables
 	//
+
 	private List<Table> tables = new ArrayList<Table>();
 	public List<Table> getTables() {
 		return tables;
@@ -37,15 +40,75 @@ public class Space {
 		}
 		return null;
 	}
+	public Table getTableById(String id) {
+        Optional<Table> ret = tables.stream().filter(x -> x.getId().toString().equals(id)).findAny();
+        if(ret.isPresent()) {
+        	return ret.get();
+        }
+        else {
+    		return null;
+        }
+	}
+
 	public Table createTable(String name) {
 		Table table = new Table(this, name);
 		tables.add(table);
 		return table;
 	}
+	public Table createTableFromJson(String json) {
+		JSONObject obj = new JSONObject(json);
+
+		// Extract all necessary parameters
+		
+		String id = obj.getString("id");
+		String name = obj.getString("name");
+
+		// Check validity
+
+		boolean isValid = true;
+		if(name == null || name.isEmpty()) isValid = false;
+
+		// Create
+
+		if(isValid) {
+			return this.createTable(name);
+		}
+		else {
+			return null;
+		}
+	}
+	public void updateTableFromJson(String json) {
+		JSONObject obj = new JSONObject(json);
+
+		// Extract all necessary parameters
+		
+		String id = obj.getString("id");
+		String name = obj.getString("name");
+		Table table = getTableById(id);
+
+		// Update the properties
+
+		table.setName(name);
+	}
+	public void deleteTable(String id) {
+		Table table = getTableById(id);
+
+		// Remove input columns
+		List<Column> inColumns = columns.stream().filter(x -> x.getInput().equals(table)).collect(Collectors.<Column>toList());
+		columns.removeAll(inColumns);
+		
+		// Remove output columns
+		List<Column> outColumns = columns.stream().filter(x -> x.getOutput().equals(table)).collect(Collectors.<Column>toList());
+		columns.removeAll(outColumns);
+		
+		// Remove table itself
+		tables.remove(table);
+	}
 
 	//
 	// Columns
 	//
+
 	private List<Column> columns = new ArrayList<Column>();
 	public List<Column> getColumns() {
 		return columns;
@@ -65,10 +128,79 @@ public class Space {
 		}
 		return null;
 	}
+	public Column getColumnById(String id) {
+        Optional<Column> ret = columns.stream().filter(x -> x.getId().toString().equals(id)).findAny();
+        if(ret.isPresent()) {
+        	return ret.get();
+        }
+        else {
+    		return null;
+        }
+	}
+
 	public Column createColumn(String name, String input, String output) {
 		Column column = new Column(this, name, input, output);
 		columns.add(column);
 		return column;
+	}
+	public Column createColumnFromJson(String json) {
+		JSONObject obj = new JSONObject(json);
+
+		// Extract all necessary parameters
+		
+		String id = obj.getString("id");
+		String name = obj.getString("name");
+
+		JSONObject input_table = obj.getJSONObject("input");
+		String input_id = input_table.getString("id");
+		Table input = this.getTableById(input_id);
+
+		JSONObject output_table = obj.getJSONObject("output");
+		String output_id = output_table.getString("id");
+		Table output = this.getTableById(output_id);
+
+		// Check validity
+
+		boolean isValid = true;
+		if(name == null || name.isEmpty()) isValid = false;
+		if(input == null) isValid = false;
+		if(output == null) isValid = false;
+
+		// Create
+
+		if(isValid) {
+			return this.createColumn(name, input.getName(), output.getName());
+		}
+		else {
+			return null;
+		}
+	}
+	public void updateColumnFromJson(String json) {
+		JSONObject obj = new JSONObject(json);
+
+		// Extract all necessary parameters
+		
+		String id = obj.getString("id");
+		String name = obj.getString("name");
+		Column column = getColumnById(id);
+
+		JSONObject input_table = obj.getJSONObject("input");
+		String input_id = input_table.getString("id");
+		Table input = this.getTableById(input_id);
+
+		JSONObject output_table = obj.getJSONObject("output");
+		String output_id = output_table.getString("id");
+		Table output = this.getTableById(output_id);
+
+		// Update the properties
+
+		column.setName(name);
+		column.setInput(input);
+		column.setOutput(output);
+	}
+	public void deleteColumn(String id) {
+		Column column = getColumnById(id);
+		columns.remove(column);
 	}
 
 	//

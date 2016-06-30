@@ -26,9 +26,16 @@ public class Column {
 	public Table getInput() {
 		return input;
 	}
+	public void setInput(Table table) {
+		this.input = table;
+	}
+
 	private Table output;
 	public Table getOutput() {
 		return output;
+	}
+	public void setOutput(Table table) {
+		this.output = table;
 	}
 
 	//
@@ -107,25 +114,24 @@ public class Column {
 
 		return ("{" + json + "}").replace('`', '"');
 	}
-	public static Column fromJson(String json) {
-		JSONObject obj = new JSONObject(json);
-		String id = obj.getString("id");
-		String name = obj.getString("name");
-
-		JSONObject input_table = obj.getJSONObject("input");
-		String input_id = input_table.getString("id");
-
-		JSONObject output_table = obj.getJSONObject("output");
-		String output_id = output_table.getString("id");
-
-		return null;
-	}
 	
 	@Override
 	public String toString() {
 		return "[" + getName() + "]: " + input.getName() + " -> " + output.getName();
 	}
 	
+	@Override
+	public boolean equals(Object aThat) {
+		if (this == aThat) return true;
+		if ( !(aThat instanceof Table) ) return false;
+		
+		Column that = (Column)aThat;
+		
+		if(!that.getId().toString().equals(id.toString())) return false;
+		
+		return true;
+	}
+
 	public Column(Space space, String name, String input, String output) {
 		this.space = space;
 		this.id = UUID.randomUUID();

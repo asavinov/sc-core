@@ -120,7 +120,19 @@ public class Table {
 		return "[" + name + "]";
 	}
 	
-	public Table(Space space, String name) {
+	@Override
+	public boolean equals(Object aThat) {
+		if (this == aThat) return true;
+		if ( !(aThat instanceof Table) ) return false;
+		
+		Table that = (Table)aThat;
+		
+		if(!that.getId().toString().equals(id.toString())) return false;
+		
+		return true;
+	}
+
+	 public Table(Space space, String name) {
 		this.space = space;
 		this.id = UUID.randomUUID();
 		this.name = name;
