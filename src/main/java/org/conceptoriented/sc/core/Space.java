@@ -29,7 +29,7 @@ public class Space {
 	//
 	// Tables
 	//
-
+	
 	private List<Table> tables = new ArrayList<Table>();
 	public List<Table> getTables() {
 		return tables;

@@ -1,5 +1,6 @@
 package org.conceptoriented.sc.core;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -103,6 +104,32 @@ public class Table {
 		// Empty the old records range
 		delRange.start = delRange.end;
 		rowRange.start = delRange.end;
+	}
+
+	public List<Record> read(Range range) {
+		if(range == null) {
+			range = this.getRowRange();
+		}
+
+		// Get all outgoing columns
+		List<Column> columns = space.getColumns(this.getName());
+
+		List<Record> records = new ArrayList<Record>();
+		for(long row = range.start; row < range.end; row++) {
+			
+			Record record = new Record();
+
+			for(Column column : columns) {
+				// Get value from the record
+				Object value = column.getValue(row);
+				// Store the value in the record
+				record.set(column.getName(), value);
+			}
+			
+			records.add(record);
+		}
+		
+		return records;
 	}
 
 	public String toJson() {
