@@ -68,14 +68,8 @@ public class Tests {
         // It is expected to write/update its own value
         // If necessary, it can update its type/output by pushing records to its type/output table and using the returned row id for writing into itself
         Column columnB = space.createColumn("B", "T", "Double");
-        EvaluatorBase evaluator = new EvaluatorB();
-        evaluator.thisColumn = columnB;
-        Map<Object,Column> deps = new HashMap<Object,Column>();
-        deps.put("A", columnA);
-        evaluator.setColumns(deps);
+        columnB.setEvaluatorClass("org.conceptoriented.sc.core.EvaluatorB");
 
-        columnB.setEvaluator(evaluator);
-    	
         // Add one or more records to the table
         Record record = new Record();
 

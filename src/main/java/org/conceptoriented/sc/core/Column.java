@@ -1,6 +1,7 @@
 package org.conceptoriented.sc.core;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -65,14 +66,74 @@ public class Column {
 	// Evaluate and formula
 	//
 	
-	EvaluatorBase evaluator;
+	private String evaluatorClass;
+	public String getEvaluatorClass() {
+		return evaluatorClass;
+	}
+	public void setEvaluatorClass(String className) {
 
+		//
+		// Unload the previous class
+		//
+
+		if(evaluatorClass != null) {
+			;
+		}
+
+		evaluatorClass = className;
+		evaluator = null;
+		
+		//
+		// Dynamically load the class by using the space class loader
+		//
+
+		UdfClassLoader classLoader = space.getClassLoader();
+		
+		Class clazz=null;
+		try {
+			clazz = classLoader.loadClass(evaluatorClass);
+	    } catch (ClassNotFoundException e) {
+	        e.printStackTrace();
+	    }
+		
+		//
+		// Create an instance of an evaluator
+		//
+	    try {
+			evaluator = (EvaluatorBase) clazz.newInstance();
+		} catch (InstantiationException e) {
+			e.printStackTrace();
+		} catch (IllegalAccessException e) {
+			e.printStackTrace();
+		}
+	}
+
+	private EvaluatorBase evaluator;
+	public EvaluatorBase getEvaluator() {
+		return evaluator;
+	}
 	public void setEvaluator(EvaluatorBase evaluator) {
 		this.evaluator = evaluator;
+	}
+	public void initEvaluator() {
+		if(this.evaluator == null) return;
 		
+		// Pass direct references to the required columns so that the evaluator can use them during evaluation
+		
+		// Retrieve dependencies as a list of what this evaluator is going to use
+		List<Object> deps = evaluator.getDependencies();
+		
+		// Resolve all dependencies
 		Map<Object, Column> columns = new HashMap<Object, Column>();
-		columns.put("A", space.getColumn("T", "A"));
+		for(Object dep : deps) {
+			Column col = space.getColumn(this.getInput().getName(), (String)dep);
+			columns.put((String)dep, col);
+		}
+		
+		// Provide the resolved dependencies back to the evaluator
 		evaluator.setColumns(columns);
+		
+		evaluator.thisColumn = this; // Column it belongs to
 	}
 
 	/**
@@ -85,6 +146,7 @@ public class Column {
 		
 		// Initialize/prepare evaluator
 		// For example, pass direct column references or other info that is needed to access and manipulate data in the space
+		this.initEvaluator();
 		evaluator.beginEvaluate();
 
 		// Evaluate for all rows in the range
