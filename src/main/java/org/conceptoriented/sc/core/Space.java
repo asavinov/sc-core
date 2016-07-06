@@ -144,10 +144,13 @@ public class Space {
 		return res;
 	}
 	public Column getColumn(String table, String column) {
-		for(Column col : columns) {
-			if(col.getName() == column) return col;
-		}
-		return null;
+        Optional<Column> ret = columns.stream().filter(x -> x.getInput().getName().equals(table) && x.getName().equals(column)).findAny();
+        if(ret.isPresent()) {
+        	return ret.get();
+        }
+        else {
+    		return null;
+        }
 	}
 	public Column getColumnById(String id) {
         Optional<Column> ret = columns.stream().filter(x -> x.getId().toString().equals(id)).findAny();

@@ -19,36 +19,7 @@ public abstract class EvaluatorBase implements ScEvaluator {
 	// Also static properties of every instance
 	//
 
-	// Get table-column names it depends on. They can be derived from column dependencies.
-	
-	// Set table-column objects it needs (depends on). 
-	// These objects are supposed to be used for computing the function (without name resolution).
-	// We assume that it is static information in the same sense as schema is static and any column is designed to use fixed other columns.
-	public List<Object> getDependencies() {
-		// This method will be called from outside because the system must build execution/evaluation plan
-		// It can be called at these moments:
-		// - instantiation of the evaluator
-		// - change of the space structure or whenever the system thinks an update is needed
-		// It is a run time approach where dependencies are encoded in the evaluator plug-in. 
-		// In the case of no plug-in, for instance, if functionality is provided by a structure like COEL or mapping, 
-		// dependencies are also provided in the column function definition as configuration. 
-		// For example, column definition could have a field with dependencies similar to the name field
-		// For example: name:"Amount", dependencies:"[bla-bla-json]"
-		// Also, it might be possible to extract dependencies from the COEL formula.
-		// If plug-ins have configuration info then dependencies could be included into it along with other parameters. 
-		// For example, the functionality of a generic plug-in could require different columns depending on other parameters.
-		// Manually configuration in this case can override this run time dependency information. 
-		
-		// We need to return some standard dependency structure. 
-		// It is a list of entries
-		// Each entry is a fully-qualified name of a column. We need a special object FQCN like Space:Table:Column.
-		
-		// Note that it is a static function because dependencies are constant for the whole class so it is characteristic of each class and not instance.
-
-		return null;
-	}
-
-	public void setColumns(Map<Object,Column> columns) {
+	public void setColumns(List<Column> columns) {
 		// The system will pass direct references to all the necessary column objects.
 		// This method can be called at any time but we can assume that it will be called when a column is created and its function plug-in instantiated.
 		// These columns object have to be stored so that they can be used in the evaluation method to access data in these columns.

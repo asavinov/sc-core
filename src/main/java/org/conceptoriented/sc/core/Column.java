@@ -1,10 +1,12 @@
 package org.conceptoriented.sc.core;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class Column {
@@ -66,22 +68,21 @@ public class Column {
 	// Evaluate and formula
 	//
 	
-	private String evaluatorClass;
-	public String getEvaluatorClass() {
-		return evaluatorClass;
+	private String descriptor;
+	public String getDescriptor() {
+		return descriptor;
 	}
-	public void setEvaluatorClass(String className) {
-
-		//
-		// Unload the previous class
-		//
-
-		if(evaluatorClass != null) {
-			;
+	public void setDescriptor(String descriptor) {
+		this.descriptor = descriptor;
+	}
+	protected EvaluatorBase evaluator;
+	public EvaluatorBase getEvaluator() {
+		if(evaluator != null) {
+			return evaluator;
 		}
 
-		evaluatorClass = className;
-		evaluator = null;
+		String evaluatorClass = getEvaluatorClass(); // Read from the descriptor
+		if(evaluatorClass == null) return null;
 		
 		//
 		// Dynamically load the class by using the space class loader
@@ -106,28 +107,36 @@ public class Column {
 		} catch (IllegalAccessException e) {
 			e.printStackTrace();
 		}
-	}
-
-	private EvaluatorBase evaluator;
-	public EvaluatorBase getEvaluator() {
+		
 		return evaluator;
 	}
-	public void setEvaluator(EvaluatorBase evaluator) {
-		this.evaluator = evaluator;
+	public List<String> getDependencies() {
+		List<String> deps = new ArrayList<String>();
+		
+		JSONObject jdescr = new JSONObject(descriptor);
+		JSONArray jdeps = jdescr.getJSONArray("dependencies");
+		for (int i = 0 ; i < jdeps.length(); i++) {
+			deps.add(jdeps.getString(i));
+		}
+
+		return deps;
 	}
-	public void initEvaluator() {
+	public String getEvaluatorClass() {
+		if(descriptor == null) return null;
+		JSONObject jdescr = new JSONObject(descriptor);
+		return jdescr.getString("class");
+	}
+
+	public void begingEvaluate() {
 		if(this.evaluator == null) return;
 		
 		// Pass direct references to the required columns so that the evaluator can use them during evaluation
 		
-		// Retrieve dependencies as a list of what this evaluator is going to use
-		List<Object> deps = evaluator.getDependencies();
-		
 		// Resolve all dependencies
-		Map<Object, Column> columns = new HashMap<Object, Column>();
-		for(Object dep : deps) {
+		List<Column> columns = new ArrayList<Column>();
+		for(String dep : this.getDependencies()) {
 			Column col = space.getColumn(this.getInput().getName(), (String)dep);
-			columns.put((String)dep, col);
+			columns.add(col);
 		}
 		
 		// Provide the resolved dependencies back to the evaluator
@@ -146,7 +155,7 @@ public class Column {
 		
 		// Initialize/prepare evaluator
 		// For example, pass direct column references or other info that is needed to access and manipulate data in the space
-		this.initEvaluator();
+		this.begingEvaluate();
 		evaluator.beginEvaluate();
 
 		// Evaluate for all rows in the range

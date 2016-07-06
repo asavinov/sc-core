@@ -50,14 +50,9 @@ public class EvaluatorB extends EvaluatorBase {
 	Range range;
 
 	@Override
-	public List<Object> getDependencies() {
-		List<Object> deps = new ArrayList<Object>();
-		deps.add("A"); // We are going to use column A
-		return deps;
-	}
-	@Override
-	public void setColumns(Map<Object,Column> columns) {
-		columnA = columns.get("A");
+	public void setColumns(List<Column> columns) {
+		thisColumn = columns.get(0);
+		columnA = columns.get(1);
 	}
 
 	@Override
