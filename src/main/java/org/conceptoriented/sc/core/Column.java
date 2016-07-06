@@ -87,7 +87,7 @@ public class Column {
 		// Dynamically load the class by using the space class loader
 		//
 
-		UdfClassLoader classLoader = space.getClassLoader();
+		ClassLoader classLoader = space.getClassLoader();
 		
 		Class clazz=null;
 		try {

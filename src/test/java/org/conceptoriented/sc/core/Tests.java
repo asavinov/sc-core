@@ -2,6 +2,10 @@ package org.conceptoriented.sc.core;
 
 import static org.junit.Assert.*;
 
+import java.io.File;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -90,6 +94,53 @@ public class Tests {
         
         // Check the result
 
+    }
+    
+    
+    @Test
+    public void ClassLoaderTest() 
+    {
+    	// Create class loader for the space
+    	// UDF class have to be always in nested folders corresponding to their package: either directly in file system or in jar
+    	File classDir = new File("C:/TEMP/classes/");
+        URL[] classUrl = new URL[1];
+		try {
+			classUrl[0] = classDir.toURI().toURL();
+		} catch (MalformedURLException e) {
+			e.printStackTrace();
+		}
+		URLClassLoader classLoader = new URLClassLoader(classUrl);
+		// Now the space is expected to dynamically load all class definitions for evaluators by using this class loader from this dir
+
+		
+		try {
+			Class classB = classLoader.loadClass("org.conceptoriented.sc.core.EvaluatorB");
+			Object o = classB.newInstance();
+			classB = null;
+		} catch (ClassNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (InstantiationException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IllegalAccessException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+    	space = new Space("My Space");
+		space.setClassLoader(classLoader);
+
+        Table table = space.createTable("T");
+        table.maxRows = 2;
+
+        // Data column will get its data from pushed records (input column)
+        Column columnA = space.createColumn("A", "T", "Double");
+
+        Column columnB = space.createColumn("B", "T", "Double");
+        columnB.setEvaluatorClass("org.conceptoriented.sc.core.EvaluatorB");
+        
+        
     }
 
 }
