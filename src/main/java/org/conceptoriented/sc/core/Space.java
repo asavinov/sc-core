@@ -183,7 +183,19 @@ public class Space {
 		String output_id = output_table.getString("id");
 		Table output = this.getTableById(output_id);
 
+		// Descriptor is either JSON object or JSON string with an object but we want to store a string
+		String descr_string = null;
+		Object jdescr = obj.get("descriptor");
+		if(jdescr instanceof String) {
+			descr_string = (String)jdescr;
+		}
+		else if(jdescr instanceof JSONObject) {
+			descr_string = ((JSONObject) jdescr).toString();
+		}
+
+		//
 		// Check validity
+		//
 
 		boolean isValid = true;
 		if(name == null || name.isEmpty()) isValid = false;
@@ -193,7 +205,9 @@ public class Space {
 		// Create
 
 		if(isValid) {
-			return this.createColumn(name, input.getName(), output.getName());
+			Column column = this.createColumn(name, input.getName(), output.getName());
+			column.setDescriptor(descr_string);
+			return column;
 		}
 		else {
 			return null;
@@ -216,11 +230,22 @@ public class Space {
 		String output_id = output_table.getString("id");
 		Table output = this.getTableById(output_id);
 
+		// Descriptor is either JSON object or JSON string with an object but we want to store a string
+		String descr_string = null;
+		Object jdescr = obj.get("descriptor");
+		if(jdescr instanceof String) {
+			descr_string = (String)jdescr;
+		}
+		else if(jdescr instanceof JSONObject) {
+			descr_string = ((JSONObject) jdescr).toString();
+		}
+
 		// Update the properties
 
 		column.setName(name);
 		column.setInput(input);
 		column.setOutput(output);
+		column.setDescriptor(descr_string);
 	}
 	public void deleteColumn(String id) {
 		Column column = getColumnById(id);

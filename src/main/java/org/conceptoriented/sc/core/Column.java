@@ -181,7 +181,10 @@ public class Column {
 		String joutid = "`id`: `" + this.getOutput().getId() + "`";
 		String jout = "`output`: {" + joutid + "}";
 
-		String json = jid + ", " + jname + ", " + jin + ", " + jout;
+		// Descriptor must be a valid JSON string because we pass it as JSON (not string value)
+		String jdescr = "`descriptor`: " + (this.getDescriptor() != null ? this.getDescriptor() : "null");
+
+		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jdescr;
 
 		return ("{" + json + "}").replace('`', '"');
 	}
