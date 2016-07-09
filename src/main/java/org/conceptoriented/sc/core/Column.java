@@ -10,8 +10,11 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class Column {
-	Space space;
-
+	private Space space;
+	public Space getSpace() {
+		return space;
+	}
+	
 	private final UUID id;
 	public UUID getId() {
 		return id;
@@ -182,7 +185,7 @@ public class Column {
 		String jout = "`output`: {" + joutid + "}";
 
 		// Descriptor must be a valid JSON string because we pass it as JSON (not string value)
-		String jdescr = "`descriptor`: " + (this.getDescriptor() != null ? this.getDescriptor() : "null");
+		String jdescr = "`descriptor`: " + (this.getDescriptor() != null ? "`"+this.getDescriptor()+"`" : "null");
 
 		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jdescr;
 

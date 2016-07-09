@@ -63,12 +63,8 @@ public class Space {
 	}
 	public Table getTableById(String id) {
         Optional<Table> ret = tables.stream().filter(x -> x.getId().toString().equals(id)).findAny();
-        if(ret.isPresent()) {
-        	return ret.get();
-        }
-        else {
-    		return null;
-        }
+        if(ret.isPresent()) return ret.get();
+        else return null;
 	}
 
 	public Table createTable(String name) {
@@ -91,12 +87,8 @@ public class Space {
 
 		// Create
 
-		if(isValid) {
-			return this.createTable(name);
-		}
-		else {
-			return null;
-		}
+		if(isValid) return this.createTable(name);
+		else return null;
 	}
 	public void updateTableFromJson(String json) {
 		JSONObject obj = new JSONObject(json);
@@ -145,21 +137,13 @@ public class Space {
 	}
 	public Column getColumn(String table, String column) {
         Optional<Column> ret = columns.stream().filter(x -> x.getInput().getName().equals(table) && x.getName().equals(column)).findAny();
-        if(ret.isPresent()) {
-        	return ret.get();
-        }
-        else {
-    		return null;
-        }
+        if(ret.isPresent()) return ret.get();
+        else return null;
 	}
 	public Column getColumnById(String id) {
         Optional<Column> ret = columns.stream().filter(x -> x.getId().toString().equals(id)).findAny();
-        if(ret.isPresent()) {
-        	return ret.get();
-        }
-        else {
-    		return null;
-        }
+        if(ret.isPresent()) return ret.get();
+        else return null;
 	}
 
 	public Column createColumn(String name, String input, String output) {
@@ -184,13 +168,15 @@ public class Space {
 		Table output = this.getTableById(output_id);
 
 		// Descriptor is either JSON object or JSON string with an object but we want to store a string
-		String descr_string = null;
-		Object jdescr = obj.get("descriptor");
-		if(jdescr instanceof String) {
-			descr_string = (String)jdescr;
-		}
-		else if(jdescr instanceof JSONObject) {
-			descr_string = ((JSONObject) jdescr).toString();
+		String descr_string = "";
+		if(obj.has("descriptor")) {
+			Object jdescr = obj.get("descriptor");
+			if(jdescr instanceof String) {
+				descr_string = (String)jdescr;
+			}
+			else if(jdescr instanceof JSONObject) {
+				descr_string = ((JSONObject) jdescr).toString();
+			}
 		}
 
 		//
@@ -294,6 +280,24 @@ public class Space {
 		String json = jid + ", " + jname;
 
 		return ("{" + json + "}").replace('`', '"');
+	}
+	public static Space fromJson(String json) {
+		JSONObject obj = new JSONObject(json);
+
+		// Extract all necessary parameters
+		
+		String id = obj.getString("id");
+		String name = obj.getString("name");
+
+		// Check validity
+
+		boolean isValid = true;
+		if(name == null || name.isEmpty()) isValid = false;
+
+		// Create
+		
+		if(isValid) return new Space(name);
+		else return null;
 	}
 	
 	@Override

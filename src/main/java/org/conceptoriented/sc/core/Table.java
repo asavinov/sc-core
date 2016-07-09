@@ -6,6 +6,9 @@ import java.util.UUID;
 
 public class Table {
 	private Space space;
+	public Space getSpace() {
+		return space;
+	}
 	
 	private final UUID id;
 	public UUID getId() {
