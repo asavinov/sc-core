@@ -130,22 +130,22 @@ public class Column {
 		return jdescr.getString("class");
 	}
 
-	public void begingEvaluate() {
-		if(this.evaluator == null) return;
+	protected void begingEvaluate() {
+		EvaluatorBase evaluator = this.getEvaluator(); // It will instantiate one if necessary
+
+		if(evaluator == null) return;
 		
-		// Pass direct references to the required columns so that the evaluator can use them during evaluation
-		
-		// Resolve all dependencies
+		// Resolve all dependencies declared in the descriptor (the first column in the dependencies must be this/output column)
 		List<Column> columns = new ArrayList<Column>();
 		for(String dep : this.getDependencies()) {
 			Column col = space.getColumn(this.getInput().getName(), (String)dep);
 			columns.add(col);
 		}
 		
-		// Provide the resolved dependencies back to the evaluator
+		// Pass direct references to the required columns so that the evaluator can use them during evaluation. The first element has to be this (output) column
 		evaluator.setColumns(columns);
 		
-		evaluator.thisColumn = this; // Column it belongs to
+		evaluator.beginEvaluate();
 	}
 
 	/**
@@ -153,23 +153,23 @@ public class Column {
 	 * The output is produced by using all other columns.  
 	 */
 	public void evaluate() {
-		// Get dirty offsets
-		Range range = input.getNewRange();
+		this.begingEvaluate(); // Prepare (evaluator, computational resources etc.)
 		
-		// Initialize/prepare evaluator
-		// For example, pass direct column references or other info that is needed to access and manipulate data in the space
-		this.begingEvaluate();
-		evaluator.beginEvaluate();
+		if(evaluator == null) return;
 
-		// Evaluate for all rows in the range
+		// Evaluate for all rows in the (dirty, new) range
+		Range range = input.getNewRange();
 		for(long i=range.start; i<range.end; i++) {
 			// Init one iteration
 			evaluator.thisRow = i;
-			// Really compute
+			// Really execute iteration
 			evaluator.evaluate();
 		}
 
-		// De-initialize/clean evaluator. For example, free resources allocated for its computations.
+		this.endEvaluate(); // De-initialize (evaluator, computational resources etc.)
+	}
+
+	protected void endEvaluate() {
 		evaluator.endEvaluate();
 	}
 

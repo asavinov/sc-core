@@ -256,7 +256,6 @@ public class Space {
 
 		// For each dirty value, evaluate it again and store the result
 		for(Column column : columns) {
-			if(column.getEvaluator() == null) continue;
 			column.evaluate();
 		}
 		
