@@ -63,10 +63,6 @@ public class EvaluatorB extends EvaluatorBase {
 	}
 	
 	@Override
-	public void endEvaluate() {
-	}
-	
-	@Override
 	public void evaluate() {
 		// Current value can be used for accumulation
 		Double currentValue = (Double)thisColumn.getValue(thisRow);
@@ -87,4 +83,5 @@ public class EvaluatorB extends EvaluatorBase {
 		// We can also accumulate/update the current value by using SUM
 		///thisColumn.setValue(thisRow, currentValue + result);
 	}
+
 }

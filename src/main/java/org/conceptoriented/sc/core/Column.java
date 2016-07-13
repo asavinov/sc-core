@@ -78,8 +78,8 @@ public class Column {
 	public void setDescriptor(String descriptor) {
 		this.descriptor = descriptor;
 	}
-	protected EvaluatorBase evaluator;
-	public EvaluatorBase getEvaluator() {
+	protected ScEvaluator evaluator;
+	public ScEvaluator getEvaluator() {
 		if(evaluator != null) {
 			return evaluator;
 		}
@@ -104,7 +104,7 @@ public class Column {
 		// Create an instance of an evaluator
 		//
 	    try {
-			evaluator = (EvaluatorBase) clazz.newInstance();
+			evaluator = (ScEvaluator) clazz.newInstance();
 		} catch (InstantiationException e) {
 			e.printStackTrace();
 		} catch (IllegalAccessException e) {
@@ -131,7 +131,7 @@ public class Column {
 	}
 
 	protected void begingEvaluate() {
-		EvaluatorBase evaluator = this.getEvaluator(); // It will instantiate one if necessary
+		ScEvaluator evaluator = this.getEvaluator(); // It will instantiate one if necessary
 
 		if(evaluator == null) return;
 		
@@ -161,7 +161,7 @@ public class Column {
 		Range range = input.getNewRange();
 		for(long i=range.start; i<range.end; i++) {
 			// Init one iteration
-			evaluator.thisRow = i;
+			evaluator.setThisRow(i);
 			// Really execute iteration
 			evaluator.evaluate();
 		}
