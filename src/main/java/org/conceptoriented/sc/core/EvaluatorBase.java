@@ -14,17 +14,11 @@ public abstract class EvaluatorBase implements ScEvaluator {
 		thisColumn = columns.get(0);
 	}
 
-	protected long thisRow;
-	@Override
-	public void setThisRow(long row) {
-		this.thisRow = row;
-	}
-	
 	@Override
 	public void beginEvaluate() { }
 
 	@Override
-	public void evaluate() { }
+	public void evaluate(long row) { }
 
 	@Override
 	public void endEvaluate() {	}

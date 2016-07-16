@@ -8,7 +8,7 @@ import org.conceptoriented.sc.core.EvaluatorBase;
 /**
  * Sum of two numeric columns.
  */
-public class EvaluatorSUM extends EvaluatorBase {
+public class MUL extends EvaluatorBase {
 
 	Column column1;
 	Column column2;
@@ -21,16 +21,16 @@ public class EvaluatorSUM extends EvaluatorBase {
 	}
 
 	@Override
-	public void evaluate() {
-		Double value1 = (Double)column1.getValue(thisRow);
-		Double value2 = (Double)column2.getValue(thisRow);
+	public void evaluate(long row) {
+		double value1 = ((Number)column1.getValue(row)).doubleValue();
+		double value2 = ((Number)column2.getValue(row)).doubleValue();
 
-		Double result = null;
-		if(value1 != null && value2 != null) {
-			result = value1 + value2;
+		double result = Double.NaN;
+		if(!Double.isNaN(value1) && !Double.isNaN(value2)) {
+			result = value1 * value2;
 		}
 		
-		thisColumn.setValue(thisRow, result);
+		thisColumn.setValue(row, result);
 	}
 
 }

@@ -20,14 +20,9 @@ public interface ScEvaluator {
 	public void beginEvaluate();
 
 	//
-	// Initialize and result 
-	//
-	public void setThisRow(long row); // It will be set by the loop driver before each evaluate 
-
-	//
 	// Value/record methods will be called once for each evaluation 
 	//
-	public void evaluate();
+	public void evaluate(long row);
 	// It will be called from each (dirty) input of the table
 	// Here we need to access:
 	// 'this' value (long)

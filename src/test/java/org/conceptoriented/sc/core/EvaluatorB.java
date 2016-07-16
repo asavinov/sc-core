@@ -63,22 +63,22 @@ public class EvaluatorB extends EvaluatorBase {
 	}
 	
 	@Override
-	public void evaluate() {
+	public void evaluate(long row) {
 		// Current value can be used for accumulation
-		Double currentValue = (Double)thisColumn.getValue(thisRow);
+		Double currentValue = (Double)thisColumn.getValue(row);
 		
 		// Previous values can be used for in-column aggregation by the range has to be checked on validity
-		if(thisRow-1 >= range.start) {
-			Double previousValue = (Double)thisColumn.getValue(thisRow-1);
+		if(row-1 >= range.start) {
+			Double previousValue = (Double)thisColumn.getValue(row-1);
 		}
 
-		Double valueA = (Double)columnA.getValue(thisRow);
+		Double valueA = (Double)columnA.getValue(row);
 		Double result = null;
 		if(valueA != null) {
 			result = valueA + 2.0;
 		}
 		
-		thisColumn.setValue(thisRow, result);
+		thisColumn.setValue(row, result);
 
 		// We can also accumulate/update the current value by using SUM
 		///thisColumn.setValue(thisRow, currentValue + result);

@@ -14,6 +14,7 @@ import org.conceptoriented.sc.core.EvaluatorBase;
 import org.conceptoriented.sc.core.Record;
 import org.conceptoriented.sc.core.Space;
 import org.conceptoriented.sc.core.Table;
+import org.json.JSONObject;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;

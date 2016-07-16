@@ -79,9 +79,11 @@ public class Table {
 		rowRange.end++;
 		
 		// If too many records then mark some of them for deletion
-		long excess = rowRange.getLength() - maxRows;
-		if(excess > 0) {
-			delRange.end += excess;
+		if(maxRows >= 0) {
+			long excess = rowRange.getLength() - maxRows;
+			if(excess > 0) {
+				delRange.end += excess;
+			}
 		}
 	}
 

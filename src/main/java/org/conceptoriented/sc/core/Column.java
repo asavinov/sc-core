@@ -77,6 +77,7 @@ public class Column {
 	}
 	public void setDescriptor(String descriptor) {
 		this.descriptor = descriptor;
+		this.evaluator = null;
 	}
 	protected ScEvaluator evaluator;
 	public ScEvaluator getEvaluator() {
@@ -160,10 +161,7 @@ public class Column {
 		// Evaluate for all rows in the (dirty, new) range
 		Range range = input.getNewRange();
 		for(long i=range.start; i<range.end; i++) {
-			// Init one iteration
-			evaluator.setThisRow(i);
-			// Really execute iteration
-			evaluator.evaluate();
+			evaluator.evaluate(i);
 		}
 
 		this.endEvaluate(); // De-initialize (evaluator, computational resources etc.)
@@ -184,8 +182,8 @@ public class Column {
 		String joutid = "`id`: `" + this.getOutput().getId() + "`";
 		String jout = "`output`: {" + joutid + "}";
 
-		// Descriptor must be a valid JSON string because we pass it as JSON (not string value)
-		String jdescr = "`descriptor`: " + (this.getDescriptor() != null ? "`"+this.getDescriptor()+"`" : "null");
+		//String jdescr = "`descriptor`: " + (this.getDescriptor() != null ? "`"+this.getDescriptor()+"`" : "null");
+		String jdescr = "`descriptor`: " + JSONObject.valueToString(this.getDescriptor()) + "";
 
 		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jdescr;
 
