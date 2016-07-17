@@ -10,9 +10,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class Column {
-	private Space space;
-	public Space getSpace() {
-		return space;
+	private Schema schema;
+	public Schema getSchema() {
+		return schema;
 	}
 	
 	private final UUID id;
@@ -89,10 +89,10 @@ public class Column {
 		if(evaluatorClass == null) return null;
 		
 		//
-		// Dynamically load the class by using the space class loader
+		// Dynamically load the class by using the schema class loader
 		//
 
-		ClassLoader classLoader = space.getClassLoader();
+		ClassLoader classLoader = schema.getClassLoader();
 		
 		Class clazz=null;
 		try {
@@ -139,7 +139,7 @@ public class Column {
 		// Resolve all dependencies declared in the descriptor (the first column in the dependencies must be this/output column)
 		List<Column> columns = new ArrayList<Column>();
 		for(String dep : this.getDependencies()) {
-			Column col = space.getColumn(this.getInput().getName(), (String)dep);
+			Column col = schema.getColumn(this.getInput().getName(), (String)dep);
 			columns.add(col);
 		}
 		
@@ -207,12 +207,12 @@ public class Column {
 		return true;
 	}
 
-	public Column(Space space, String name, String input, String output) {
-		this.space = space;
+	public Column(Schema schema, String name, String input, String output) {
+		this.schema = schema;
 		this.id = UUID.randomUUID();
 		this.name = name;
-		this.input = space.getTable(input);
-		this.output = space.getTable(output);
+		this.input = schema.getTable(input);
+		this.output = schema.getTable(output);
 		
 		values = new Object[1000];
 	}

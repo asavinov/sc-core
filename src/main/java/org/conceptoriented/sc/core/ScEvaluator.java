@@ -34,10 +34,10 @@ public interface ScEvaluator {
 	
 	// So the main object we want to use is a column reference which provides access to data
 	// How we use it? And how we reference these column objects from the evaluation method? Indeed, there are many columns we want to use. 
-	// One way is to use table-column names: Space.getColumn("My Table", "My Column").getValue(rowid)
+	// One way is to use table-column names: Schema.getColumn("My Table", "My Column").getValue(rowid)
 
 	// Yet, we do not want to resolve names for each access. So we want to store direct references
-	// Column col1 = Space.getColumn("My Table", "My Column");
+	// Column col1 = Schema.getColumn("My Table", "My Column");
 	// Object val1 = col1.getValue(rowid);
 	
 	// We want to use many columns. There references can be stored in two ways:
@@ -58,7 +58,7 @@ public interface ScEvaluator {
 	//Range range3 = thisColumn.removed; // Marked for removal, will be legally removed after this update cycle
 	
 	// There are two ways how column references can be passed to this class: 
-	// - either by the class itself, for example, we always have access to Space and hence can always resolve column names. 
+	// - either by the class itself, for example, we always have access to Schema and hence can always resolve column names. 
 	// - or are provided from outside when the system gets dependency information and we need to store these references wherever we want
 	//   - the dependencies can be requested and column references injected from outside. The system anyway must get dependencies (which columns will be used) in order to build execution plan.  
 	//   - the dependencies and column resolution can be requested from inside at any time.

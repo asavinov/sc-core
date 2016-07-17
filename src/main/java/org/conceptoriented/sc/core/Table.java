@@ -5,9 +5,9 @@ import java.util.List;
 import java.util.UUID;
 
 public class Table {
-	private Space space;
-	public Space getSpace() {
-		return space;
+	private Schema schema;
+	public Schema getSchema() {
+		return schema;
 	}
 	
 	private final UUID id;
@@ -59,7 +59,7 @@ public class Table {
 	public void push(Record record) {
 
 		// Get all outgoing columns
-		List<Column> columns = space.getColumns(this.getName());
+		List<Column> columns = schema.getColumns(this.getName());
 
 		for(Column column : columns) { // We must push a new value to all columns even if it has not been provided (null)
 
@@ -95,7 +95,7 @@ public class Table {
 	public void removeDelRange() { // Really removed records marked for deletion by freeing the resources
 
 		// Get all outgoing columns
-		List<Column> columns = space.getColumns(this.getName());
+		List<Column> columns = schema.getColumns(this.getName());
 
 		for(Column column : columns) { // We must push a new value to all columns even if it has not been provided (null)
 			// Remove initial elements of the column
@@ -117,7 +117,7 @@ public class Table {
 		}
 
 		// Get all outgoing columns
-		List<Column> columns = space.getColumns(this.getName());
+		List<Column> columns = schema.getColumns(this.getName());
 
 		List<Record> records = new ArrayList<Record>();
 		for(long row = range.start; row < range.end; row++) {
@@ -164,8 +164,8 @@ public class Table {
 		return true;
 	}
 
-	 public Table(Space space, String name) {
-		this.space = space;
+	 public Table(Schema schema, String name) {
+		this.schema = schema;
 		this.id = UUID.randomUUID();
 		this.name = name;
 	}

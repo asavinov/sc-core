@@ -17,9 +17,9 @@ import java.util.stream.Collectors;
 import org.json.JSONObject;
 
 /**
- * Stream space stores the complete data state and is able to consistently update it. 
+ * Stream schema stores the complete data state and is able to consistently update it. 
  */
-public class Space {
+public class Schema {
 	
 	private final UUID id;
 	public UUID getId() {
@@ -245,7 +245,7 @@ public class Space {
 	public void evaluate() {
 		
 		//
-		// Evaluate the space. Make again consistent (non-dirty).
+		// Evaluate the schema. Make again consistent (non-dirty).
 		// Bring the state back to consistent state by re-computing the values which are known to be dirty.
 		//
 
@@ -280,7 +280,7 @@ public class Space {
 
 		return ("{" + json + "}").replace('`', '"');
 	}
-	public static Space fromJson(String json) {
+	public static Schema fromJson(String json) {
 		JSONObject obj = new JSONObject(json);
 
 		// Extract all necessary parameters
@@ -295,7 +295,7 @@ public class Space {
 
 		// Create
 		
-		if(isValid) return new Space(name);
+		if(isValid) return new Schema(name);
 		else return null;
 	}
 	
@@ -304,7 +304,7 @@ public class Space {
 		return "[" + name + "]";
 	}
 	
-	public Space(String name) {
+	public Schema(String name) {
 		this.id = UUID.randomUUID();
 		this.name = name;
 		

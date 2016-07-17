@@ -12,7 +12,7 @@ import java.util.Map;
 import org.conceptoriented.sc.core.Column;
 import org.conceptoriented.sc.core.EvaluatorBase;
 import org.conceptoriented.sc.core.Record;
-import org.conceptoriented.sc.core.Space;
+import org.conceptoriented.sc.core.Schema;
 import org.conceptoriented.sc.core.Table;
 import org.json.JSONObject;
 import org.junit.Before;
@@ -25,7 +25,7 @@ public class Tests {
     public static void setUpClass() {
     }
 
-    Space space;
+    Schema schema;
 
     @Before
     public void setUp() {
@@ -44,7 +44,7 @@ public class Tests {
 	//     the only problem is that we do not want to output all records so we need a mechanism of filtering for mapping
 	//     filter can be specified as some other binary column (so it depends on it) computed by the user: if it is true then this export column outputs a record according to the mapping
 	//
-	// - evaluate space
+	// - evaluate schema
 	//   - retrieve dependencies from all column functions
 	//   - build dependency graph
 	//   - initialize column functions by passing column references and other parameters needed for evaluation.
@@ -60,19 +60,19 @@ public class Tests {
     @Test
     public void SchemaTest()
     {
-    	// Create and configure: space, tables, columns
-        space = new Space("My Space");
-        Table table = space.createTable("T");
+    	// Create and configure: schema, tables, columns
+        schema = new Schema("My Schema");
+        Table table = schema.createTable("T");
         table.maxRows = 2;
 
         // Data column will get its data from pushed records (input column)
-        Column columnA = space.createColumn("A", "T", "Double");
+        Column columnA = schema.createColumn("A", "T", "Double");
 
         // Calculated column. It has a user-defined evaluation method (plug-in, mapping, coel etc.)
         // This column can read its own and other column values, and it knows about new/valid/old record ranges 
         // It is expected to write/update its own value
         // If necessary, it can update its type/output by pushing records to its type/output table and using the returned row id for writing into itself
-        Column columnB = space.createColumn("B", "T", "Double");
+        Column columnB = schema.createColumn("B", "T", "Double");
         String descr = "{ `class`:`org.conceptoriented.sc.core.EvaluatorB`, `dependencies`:[`B`,`A`] }";
         columnB.setDescriptor(descr.replace('`', '"'));
 
@@ -85,14 +85,14 @@ public class Tests {
         record.set("A", 10.0);
         table.push(record); // The number of added/dirty records is incremented. Some records can be marked for deletion/old. 
 
-        // Evaluate space by updating its space. Mark new records as clean and finally remove records for deletion.
-        space.evaluate();
+        // Evaluate schema by updating its schema. Mark new records as clean and finally remove records for deletion.
+        schema.evaluate();
         
         record.set("A", 20.0);
         table.push(record); 
 
-        // Evaluate space by updating its space. Mark new records as clean and finally remove records for deletion.
-        space.evaluate();
+        // Evaluate schema by updating its schema. Mark new records as clean and finally remove records for deletion.
+        schema.evaluate();
         
         // Check the result
 
@@ -102,7 +102,7 @@ public class Tests {
     @Test
     public void ClassLoaderTest() 
     {
-    	// Create class loader for the space
+    	// Create class loader for the schema
     	// UDF class have to be always in nested folders corresponding to their package: either directly in file system or in jar
     	File classDir = new File("C:/TEMP/classes/");
         URL[] classUrl = new URL[1];
@@ -112,7 +112,7 @@ public class Tests {
 			e.printStackTrace();
 		}
 		URLClassLoader classLoader = new URLClassLoader(classUrl);
-		// Now the space is expected to dynamically load all class definitions for evaluators by using this class loader from this dir
+		// Now the schema is expected to dynamically load all class definitions for evaluators by using this class loader from this dir
 
 		
 		try {
@@ -130,16 +130,16 @@ public class Tests {
 			e.printStackTrace();
 		}
 		
-    	space = new Space("My Space");
-		space.setClassLoader(classLoader);
+    	schema = new Schema("My Schema");
+		schema.setClassLoader(classLoader);
 
-        Table table = space.createTable("T");
+        Table table = schema.createTable("T");
         table.maxRows = 2;
 
         // Data column will get its data from pushed records (input column)
-        Column columnA = space.createColumn("A", "T", "Double");
+        Column columnA = schema.createColumn("A", "T", "Double");
 
-        Column columnB = space.createColumn("B", "T", "Double");
+        Column columnB = schema.createColumn("B", "T", "Double");
         columnB.setDescriptor("{org.conceptoriented.sc.core.EvaluatorB}");
         
         
