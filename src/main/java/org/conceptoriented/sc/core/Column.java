@@ -114,13 +114,15 @@ public class Column {
 		
 		return evaluator;
 	}
-	public List<String> getDependencies() {
-		List<String> deps = new ArrayList<String>();
+	public List<QName> getDependencies() {
+		List<QName> deps = new ArrayList<QName>();
+    	QNameBuilder qnb = new QNameBuilder();
 		
 		JSONObject jdescr = new JSONObject(descriptor);
 		JSONArray jdeps = jdescr.getJSONArray("dependencies");
 		for (int i = 0 ; i < jdeps.length(); i++) {
-			deps.add(jdeps.getString(i));
+			QName qn = qnb.buildQName(jdeps.getString(i));
+			deps.add(qn);
 		}
 
 		return deps;
@@ -138,8 +140,8 @@ public class Column {
 		
 		// Resolve all dependencies declared in the descriptor (the first column in the dependencies must be this/output column)
 		List<Column> columns = new ArrayList<Column>();
-		for(String dep : this.getDependencies()) {
-			Column col = schema.getColumn(this.getInput().getName(), (String)dep);
+		for(QName dep : this.getDependencies()) {
+			Column col = dep.resolveColumn(schema, this.getInput());
 			columns.add(col);
 		}
 		

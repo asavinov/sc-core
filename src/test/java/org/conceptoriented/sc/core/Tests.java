@@ -145,4 +145,11 @@ public class Tests {
         
     }
 
+    @Test
+    public void ParserTest() 
+    {
+    	QNameBuilder b = new QNameBuilder();
+    	
+    	QName name = b.buildQName("[a1 1 1].b222");
+    }
 }
