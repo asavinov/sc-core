@@ -44,15 +44,12 @@ import org.conceptoriented.sc.core.Range;
  */
 public class EvaluatorB extends EvaluatorBase {
 
-	// We are going to use these columns and want to store direct references to them
-	Column columnA;
-	
 	Range range;
 
+	Column columnA;
 	@Override
 	public void setColumns(List<Column> columns) {
-		thisColumn = columns.get(0);
-		columnA = columns.get(1);
+		columnA = columns.get(0);
 	}
 
 	@Override

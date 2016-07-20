@@ -75,16 +75,50 @@ public class Column {
 	public String getDescriptor() {
 		return descriptor;
 	}
-	public void setDescriptor(String descriptor) {
-		this.descriptor = descriptor;
-		this.evaluator = null;
+	public String getEvaluatorClass() {
+		if(descriptor == null) return null;
+		JSONObject jdescr = new JSONObject(descriptor);
+		return jdescr.getString("class");
 	}
-	protected ScEvaluator evaluator;
-	public ScEvaluator getEvaluator() {
-		if(evaluator != null) {
-			return evaluator;
+	public List<QName> getDependencies() {
+		List<QName> deps = new ArrayList<QName>();
+		if(descriptor == null) return deps;
+
+		JSONObject jdescr = new JSONObject(descriptor);
+		if(jdescr == null || !jdescr.has("dependencies")) return deps;
+
+		JSONArray jdeps = jdescr.getJSONArray("dependencies");
+
+		QNameBuilder qnb = new QNameBuilder();
+		for (int i = 0 ; i < jdeps.length(); i++) {
+			QName qn = qnb.buildQName(jdeps.getString(i));
+			deps.add(qn);
 		}
 
+		return deps;
+	}
+	public void setDescriptor(String descriptor) {
+		this.descriptor = descriptor;
+
+		//
+		// Resolve all dependencies declared in the descriptor (the first column in the dependencies must be this/output column)
+		//
+		List<Column> columns = new ArrayList<Column>();
+		for(QName dep : this.getDependencies()) {
+			Column col = dep.resolveColumn(schema, this.getInput());
+			columns.add(col);
+		}
+		
+		// Update dependency graph
+		schema.setDependency(this, columns);
+
+		// Here we might want to check the validity of the dependency graph (cycles, at least for this column)
+	}
+
+	protected ScEvaluator evaluator;
+	public ScEvaluator setEvaluator() {
+		evaluator = null;
+		
 		String evaluatorClass = getEvaluatorClass(); // Read from the descriptor
 		if(evaluatorClass == null) return null;
 		
@@ -114,38 +148,21 @@ public class Column {
 		
 		return evaluator;
 	}
-	public List<QName> getDependencies() {
-		List<QName> deps = new ArrayList<QName>();
-    	QNameBuilder qnb = new QNameBuilder();
-		
-		JSONObject jdescr = new JSONObject(descriptor);
-		JSONArray jdeps = jdescr.getJSONArray("dependencies");
-		for (int i = 0 ; i < jdeps.length(); i++) {
-			QName qn = qnb.buildQName(jdeps.getString(i));
-			deps.add(qn);
-		}
-
-		return deps;
-	}
-	public String getEvaluatorClass() {
-		if(descriptor == null) return null;
-		JSONObject jdescr = new JSONObject(descriptor);
-		return jdescr.getString("class");
-	}
 
 	protected void begingEvaluate() {
-		ScEvaluator evaluator = this.getEvaluator(); // It will instantiate one if necessary
+		//
+		// Prepare evaluator instance
+		//
 
-		if(evaluator == null) return;
-		
-		// Resolve all dependencies declared in the descriptor (the first column in the dependencies must be this/output column)
-		List<Column> columns = new ArrayList<Column>();
-		for(QName dep : this.getDependencies()) {
-			Column col = dep.resolveColumn(schema, this.getInput());
-			columns.add(col);
+		if(evaluator == null) {
+			setEvaluator();
 		}
 		
+		if(evaluator == null) return;
+		
 		// Pass direct references to the required columns so that the evaluator can use them during evaluation. The first element has to be this (output) column
+		evaluator.setColumn(this);
+		List<Column> columns = schema.getDependency(this);
 		evaluator.setColumns(columns);
 		
 		evaluator.beginEvaluate();

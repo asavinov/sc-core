@@ -15,9 +15,8 @@ public class MUL extends EvaluatorBase {
 	
 	@Override
 	public void setColumns(List<Column> columns) {
-		thisColumn = columns.get(0);
-		column1 = columns.get(1);
-		column2 = columns.get(2);
+		column1 = columns.get(0);
+		column2 = columns.get(1);
 	}
 
 	@Override

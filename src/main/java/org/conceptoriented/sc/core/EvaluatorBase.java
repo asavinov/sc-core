@@ -9,9 +9,14 @@ import java.util.Map;
 public abstract class EvaluatorBase implements ScEvaluator {
 
 	public Column thisColumn; // It is output column. It is the first column in dependencies.
+
+	@Override
+	public void setColumn(Column column) {
+		thisColumn = column;
+	}
+	
 	@Override
 	public void setColumns(List<Column> columns) {
-		thisColumn = columns.get(0);
 	}
 
 	@Override

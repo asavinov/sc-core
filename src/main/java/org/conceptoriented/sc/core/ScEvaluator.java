@@ -7,6 +7,8 @@ import java.util.List;
  */
 public interface ScEvaluator {
 
+	public void setColumn(Column column);
+
 	// The system will pass direct references to all the necessary column objects.
 	// This method can be called at any time but we can assume that it will be called when a column is created and its function plug-in instantiated.
 	// These columns object have to be stored so that they can be used in the evaluation method to access data in these columns.

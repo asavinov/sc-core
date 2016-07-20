@@ -9,7 +9,9 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URLConnection;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -242,6 +244,37 @@ public class Schema {
 	// Data (state)
 	//
 	
+	protected Map<Column,List<Column>> dependencies = new HashMap<Column,List<Column>>();
+	public List<Column> getDependency(Column column) {
+		return dependencies.get(column);
+	}
+	public void setDependency(Column column, List<Column> deps) {
+		dependencies.put(column, deps);
+	}
+
+	protected List<Column> getPassiveColumns() {
+		// Return all columns without definition (which need not be evaluated and always non-dirty)
+		List<Column> res = columns.stream().filter(x -> x.getDescriptor() == null).collect(Collectors.<Column>toList());
+		return res;
+	}
+
+	// The parameter is a list of already evaluated (non-dirty) columns
+	// Output is a list of columns which are ready to be evaluated because all their dependencies are evaluated
+	protected List<Column> getCanEvaluate(List<Column> evaluated) {
+		List<Column> res = new ArrayList<Column>();
+		
+		for(Map.Entry<Column, List<Column>> entry : dependencies.entrySet()) {
+			Column col = entry.getKey();
+			List<Column> deps = entry.getValue();
+			if(evaluated.contains(col)) continue; // Skip already evaluated columns
+			if(evaluated.containsAll(deps)) { // All deps have to be evaluated (non-dirty)
+				res.add(col); 
+			}
+		}
+		
+		return res;
+	}
+
 	public void evaluate() {
 		
 		//
@@ -252,13 +285,31 @@ public class Schema {
 		// Build a list/graph of columns to be evaluated. Either in the sequence of creation, or using dependencies.
 		// Evaluate each column individually from this structure. 
 		// Any column has to provide an evaluation function which knows how to compute the output value.
-		List<Column> columns = this.columns;
 
-		// For each dirty value, evaluate it again and store the result
-		for(Column column : columns) {
-			column.evaluate();
-		}
+		// A column graph includes all columns that can be (and hence have to be) evaluated. Non-evaluabable columns are not included.
+		// A graph has a list of origin columns which can be evaluated independently. 
+
+		// We need a function which takes two inputs: a graph of dependencies, and a list of already evaluated columns.
+		// It returns a column if all its direct dependencies are evaluated (which are supposed to be evaluated only if their direct deps are evaluated)
+		// If no evaluated columns are provided, then only columns with empty deps are returned. 
+		// Input evaluated columns are not returned. 
 		
+ 		// Start from input 0 (no evaluated columns)
+		// After some columns has been evaluted, it is added to the list of evaluated columns and can be again used for input
+		// So after each addition of evaluated columns the return columns will decrease down to 0
+
+		List<Column> evaluated = getPassiveColumns(); // Already evaluated. Initially non-dirty columns without definition
+		List<Column> toBeEvaluated = getCanEvaluate(evaluated);
+		while(toBeEvaluated.size() > 0) {
+			// Evaluate all columns that can be evaluated
+			for(Column col : toBeEvaluated) {
+				col.evaluate();
+				evaluated.add(col);
+			}
+			// Next iteration
+			toBeEvaluated = getCanEvaluate(evaluated);
+		}
+
 		//
 		// Update ranges of all tables
 		//
