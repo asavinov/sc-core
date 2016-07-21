@@ -82,28 +82,35 @@ public class Schema {
 		String id = obj.getString("id");
 		String name = obj.getString("name");
 
+		long maxLength = obj.has("maxLength") ? obj.getLong("maxLength") : -1;
+
 		// Check validity
 
 		boolean isValid = true;
 		if(name == null || name.isEmpty()) isValid = false;
+		
+		if(!isValid) return null;
 
 		// Create
-
-		if(isValid) return this.createTable(name);
-		else return null;
+		
+		Table table = this.createTable(name);
+		table.setMaxLength(maxLength);
+		
+		return table;
 	}
 	public void updateTableFromJson(String json) {
 		JSONObject obj = new JSONObject(json);
 
-		// Extract all necessary parameters
+		// Find table
 		
 		String id = obj.getString("id");
-		String name = obj.getString("name");
 		Table table = getTableById(id);
+		if(table == null) return;
+		
+		// Update only properties which are present
 
-		// Update the properties
-
-		table.setName(name);
+		if(obj.has("name")) table.setName(obj.getString("name"));
+		if(obj.has("maxLength")) table.setMaxLength(obj.getLong("maxLength"));
 	}
 	public void deleteTable(String id) {
 		Table table = getTableById(id);

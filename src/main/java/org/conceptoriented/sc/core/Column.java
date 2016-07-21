@@ -9,6 +9,8 @@ import java.util.UUID;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import com.google.common.base.Strings;
+
 public class Column {
 	private Schema schema;
 	public Schema getSchema() {
@@ -82,7 +84,7 @@ public class Column {
 	}
 	public List<QName> getDependencies() {
 		List<QName> deps = new ArrayList<QName>();
-		if(descriptor == null) return deps;
+		if(descriptor == null || descriptor.isEmpty()) return deps;
 
 		JSONObject jdescr = new JSONObject(descriptor);
 		if(jdescr == null || !jdescr.has("dependencies")) return deps;

@@ -32,9 +32,32 @@ public class Table {
 	// 0,1,2,...,100,...,1000,...
 	// [del)[clean)[new)
 	// [rowRange) - all records that can be accessed
+	// |clean|+|new| <= maxLength
 	
-	public long maxRows = -1; // If more rows then they will be automatically deleted. In reality, there can be more rows if evaluate is not called but many records are pushed..  
-	
+	// If more rows are added then then the oldest will be marked for deletion.  
+	// The real deletion happens only after evaluation.
+	protected long maxLength = -1;  
+	public long getMaxLength() {
+		return maxLength;
+	}
+	public void setMaxLength(long maxLength) {
+		
+		if(maxLength == this.maxLength) {
+			return;
+		}
+		if(maxLength < 0) {
+			// Remove all del-markers. Any length is possible.
+		}
+		else if(maxLength > this.maxLength) {
+			// Remove some del-markers until fit into new max length
+		}
+		else {
+			// Add some del-markers to fit into the new max length
+		}
+
+		this.maxLength = maxLength;
+	}
+
 	// Records to be deleted after the next re-evaluation
 	// We need to store records marked for removal after they have been used for evaluating new records.
 	protected Range delRange = new Range();
@@ -56,7 +79,7 @@ public class Table {
 		return new Range(newRange);
 	}
 	
-	public void push(Record record) {
+	public void write(Record record) {
 
 		// Get all outgoing columns
 		List<Column> columns = schema.getColumns(this.getName());
@@ -79,8 +102,8 @@ public class Table {
 		rowRange.end++;
 		
 		// If too many records then mark some of them for deletion
-		if(maxRows >= 0) {
-			long excess = rowRange.getLength() - maxRows;
+		if(maxLength >= 0) {
+			long excess = rowRange.getLength() - maxLength;
 			if(excess > 0) {
 				delRange.end += excess;
 			}
@@ -142,7 +165,9 @@ public class Table {
 		String jid = "`id`: `" + this.getId() + "`";
 		String jname = "`name`: `" + this.getName() + "`";
 		
-		String json = jid + ", " + jname;
+		String jmaxLength = "`maxLength`: " + this.getMaxLength() + "";
+
+		String json = jid + ", " + jname + ", " + jmaxLength;
 
 		return ("{" + json + "}").replace('`', '"');
 	}
