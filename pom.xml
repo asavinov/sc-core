@@ -2,10 +2,10 @@
 
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>org.conceptoriented.sc</groupId>
+  <groupId>org.conceptoriented</groupId>
   <artifactId>sc-core</artifactId>
   <packaging>jar</packaging>
-  <version>0.1</version>
+  <version>0.1.0</version>
 
   <name>StreamCommander Engine</name>
   <url>http://conceptoriented.org</url>
