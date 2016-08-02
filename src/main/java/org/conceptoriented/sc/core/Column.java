@@ -5,6 +5,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -73,6 +75,44 @@ public class Column {
 	// Evaluate and formula
 	//
 	
+	private List<List<Integer>> getPathEntries(String expr) { // Find all entries of column paths and return pairs start-end
+		List<List<Integer>> names = new ArrayList<List<Integer>>();
+		
+		if(expr == null || expr.isEmpty()) return names;
+		
+		String ex =  "\\[(.*?)\\]";
+		String ex2 = "[\\[\\]]";
+
+		Pattern p = Pattern.compile(ex,Pattern.DOTALL);
+		Matcher matcher = p.matcher(expr);
+		while(matcher.find())
+		{
+			int s = matcher.start();
+			int e = matcher.end();
+			String name = matcher.group();
+			List<Integer> entry = new ArrayList<Integer>();
+			entry.add(s);
+			entry.add(e);
+			names.add(entry);
+		}
+		
+		// If between two names there is only dot then combine them
+		List<List<Integer>> paths = new ArrayList<List<Integer>>();
+		for(int i = 0; i < names.size()-1; i++) {
+			int thisEnd = names.get(i).get(1);
+			int nextStart = names.get(i+1).get(0);
+			
+			if(expr.substring(thisEnd, nextStart).trim() == ".") { // There is continuation.
+				names.get(i+1).set(0, names.get(i).get(0)); // Attach this name to the next name as a prefix
+			}
+			else { // No continuation. Ready to copy as path.
+				paths.add(names.get(i));
+			}
+		}
+		
+		return paths;
+	}
+
 	private String descriptor;
 	public String getDescriptor() {
 		return descriptor;
