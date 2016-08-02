@@ -2,16 +2,23 @@ package org.conceptoriented.sc.core;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import com.google.common.base.Strings;
+
+import net.objecthunter.exp4j.Expression;
+import net.objecthunter.exp4j.ExpressionBuilder;
+import net.objecthunter.exp4j.ValidationResult;
 
 public class Column {
 	private Schema schema;
@@ -72,47 +79,95 @@ public class Column {
 	}
 
 	//
-	// Evaluate and formula
+	// Formula
 	//
 	
-	private List<List<Integer>> getPathEntries(String expr) { // Find all entries of column paths and return pairs start-end
-		List<List<Integer>> names = new ArrayList<List<Integer>>();
+	public String computeFormula;
+	public String transformedComputeFormula;
+	public List<ComputeFormulaDependency> computeDependencies;
+	public Expression computeExpression;
+
+	// Find all entries of column paths and return pairs start-end
+	public void buildComputeExpression(String exprString) {
 		
-		if(expr == null || expr.isEmpty()) return names;
+		if(exprString == null || exprString.isEmpty()) return;
 		
 		String ex =  "\\[(.*?)\\]";
-		String ex2 = "[\\[\\]]";
-
+		//String ex = "[\\[\\]]";
 		Pattern p = Pattern.compile(ex,Pattern.DOTALL);
-		Matcher matcher = p.matcher(expr);
+		Matcher matcher = p.matcher(exprString);
+
+		List<ComputeFormulaDependency> names = new ArrayList<ComputeFormulaDependency>();
 		while(matcher.find())
 		{
 			int s = matcher.start();
 			int e = matcher.end();
 			String name = matcher.group();
-			List<Integer> entry = new ArrayList<Integer>();
-			entry.add(s);
-			entry.add(e);
+			ComputeFormulaDependency entry = new ComputeFormulaDependency();
+			entry.start = s;
+			entry.end = e;
 			names.add(entry);
 		}
 		
+		//
 		// If between two names there is only dot then combine them
-		List<List<Integer>> paths = new ArrayList<List<Integer>>();
+		//
+		List<ComputeFormulaDependency> paths = new ArrayList<ComputeFormulaDependency>();
 		for(int i = 0; i < names.size()-1; i++) {
-			int thisEnd = names.get(i).get(1);
-			int nextStart = names.get(i+1).get(0);
+			int thisEnd = names.get(i).end;
+			int nextStart = names.get(i+1).start;
 			
-			if(expr.substring(thisEnd, nextStart).trim() == ".") { // There is continuation.
-				names.get(i+1).set(0, names.get(i).get(0)); // Attach this name to the next name as a prefix
+			if(exprString.substring(thisEnd, nextStart).trim() == ".") { // There is continuation.
+				names.get(i+1).start = names.get(i).start; // Attach this name to the next name as a prefix
 			}
 			else { // No continuation. Ready to copy as path.
 				paths.add(names.get(i));
 			}
 		}
 		
-		return paths;
+		//
+		// Parse each path, represent as a sequence of columns and resolve each column name into a column object
+		//
+
+
+		//
+		// Transform the expression by using new names and get an executable expression
+		//
+		StringBuffer buf = new StringBuffer(exprString);
+		for(int i = paths.size()-1; i >= 0; i++) {
+			ComputeFormulaDependency dep = paths.get(i);
+			dep.paramName = "__p__"+i;
+			buf.replace(dep.start, dep.end, dep.paramName);
+		}
+
+		//
+		// Create expression object with the transformed formula
+		//
+		ExpressionBuilder builder = new ExpressionBuilder(buf.toString());
+		Set vars = paths.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
+		builder.variables(vars);
+		Expression exp = builder.build();
+		
+		ValidationResult res = exp.validate(); // Boolean argument can be used to ignore unknown variables
+		res.isValid();
+		
+		computeExpression = exp;
 	}
 
+	public void evaluateComputeExpression() {
+		
+		// Organize a loop over all inputs 
+		// For each input, read all necessary column values
+		// Pass these values into the expression 
+		// Evaluate and get output value
+		// Store the output value for the current row
+
+	}
+
+	//
+	// Descriptor
+	//
+	
 	private String descriptor;
 	public String getDescriptor() {
 		return descriptor;
@@ -277,4 +332,13 @@ public class Column {
 		
 		values = new Object[1000];
 	}
+}
+
+class ComputeFormulaDependency {
+	public int start;
+	public int end;
+	public String pathName;
+	public String paramName;
+	public QName qname;
+	List<Column> columns;
 }

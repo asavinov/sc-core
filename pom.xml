@@ -127,6 +127,11 @@
 			<artifactId>json</artifactId>
 			<version>20160212</version>
 		</dependency>
+		<dependency>
+			<groupId>net.objecthunter</groupId>
+			<artifactId>exp4j</artifactId>
+			<version>0.4.7</version>
+		</dependency>
 
 		<!-- For tests -->
 		<dependency>

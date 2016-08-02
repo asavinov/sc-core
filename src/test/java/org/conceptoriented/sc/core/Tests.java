@@ -152,4 +152,20 @@ public class Tests {
     	
     	QName name = b.buildQName("[a1 1 1].b222");
     }
+
+    @Test
+    public void ExprTest() 
+    {
+    	schema = new Schema("My Schema");
+        Table table = schema.createTable("T");
+        Column columnA = schema.createColumn("A", "T", "Double");
+        Column columnB = schema.createColumn("B", "T", "Double");
+        
+        String exprString = "2 + 3";
+        columnB.computeFormula = exprString;
+        
+        columnB.buildComputeExpression(exprString);
+
+        double res = columnB.computeExpression.evaluate();
+    }
 }
