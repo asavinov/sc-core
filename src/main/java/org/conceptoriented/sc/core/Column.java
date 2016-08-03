@@ -76,6 +76,16 @@ public class Column {
 		// Currently, do not do anything. The deleted values are still there - they are not supposed to be accessed. The table knows about semantics of these intervals.
 	}
 
+	// Convenience method. The first element should be this column. 
+	protected Object getValue(List<Column> columns, long row) {
+		Object out = row;
+		for(Column col : columns) {
+			out = col.getValue((long)out);
+			if(out == null) break;
+		}
+		return out;
+	}
+
 	//
 	// Formula
 	//
@@ -92,12 +102,13 @@ public class Column {
 	// Compute formula
 	//
 
-	public String transformedComputeFormula;
 	public List<ComputeFormulaDependency> computeDependencies;
+	public String transformedComputeFormula;
 	public Expression computeExpression;
 
-	// Find all entries of column paths and return pairs start-end
-	public void buildComputeExpression(String exprString) {
+	// Find all entries of column paths 
+	public void extractComputeDependencies() {
+		String exprString = formula;
 		
 		if(exprString == null || exprString.isEmpty()) return;
 		
@@ -122,7 +133,12 @@ public class Column {
 		// If between two names there is only dot then combine them
 		//
 		List<ComputeFormulaDependency> paths = new ArrayList<ComputeFormulaDependency>();
-		for(int i = 0; i < names.size()-1; i++) {
+		for(int i = 0; i < names.size(); i++) {
+			if(i == names.size()-1) { // Last element does not have continuation
+				paths.add(names.get(i));
+				break;
+			}
+			
 			int thisEnd = names.get(i).end;
 			int nextStart = names.get(i+1).start;
 			
@@ -134,26 +150,42 @@ public class Column {
 			}
 		}
 		
-		//
-		// Parse each path, represent as a sequence of columns and resolve each column name into a column object
-		//
+		computeDependencies = paths;
+	}
+	
 
+	public void buildComputeExpression() {
+		String exprString = formula;
+
+		//
+		// Resolve each column name in the path
+		//
+		Table table = this.getInput();
+    	QNameBuilder parser = new QNameBuilder();
+    	
+		for(ComputeFormulaDependency dep : computeDependencies) {
+			dep.pathName = formula.substring(dep.start, dep.end);
+			dep.qname = parser.buildQName(dep.pathName);
+			dep.columns = dep.qname.resolveColumns(table);
+		}
 
 		//
 		// Transform the expression by using new names and get an executable expression
 		//
 		StringBuffer buf = new StringBuffer(exprString);
-		for(int i = paths.size()-1; i >= 0; i++) {
-			ComputeFormulaDependency dep = paths.get(i);
+		for(int i = computeDependencies.size()-1; i >= 0; i--) {
+			ComputeFormulaDependency dep = computeDependencies.get(i);
 			dep.paramName = "__p__"+i;
 			buf.replace(dep.start, dep.end, dep.paramName);
 		}
+		
+		transformedComputeFormula = buf.toString();
 
 		//
 		// Create expression object with the transformed formula
 		//
-		ExpressionBuilder builder = new ExpressionBuilder(buf.toString());
-		Set vars = paths.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
+		ExpressionBuilder builder = new ExpressionBuilder(transformedComputeFormula);
+		Set<String> vars = computeDependencies.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
 		builder.variables(vars);
 		Expression exp = builder.build();
 		
@@ -165,11 +197,22 @@ public class Column {
 
 	public void evaluateComputeExpression() {
 		
-		// Organize a loop over all inputs 
-		// For each input, read all necessary column values
-		// Pass these values into the expression 
-		// Evaluate and get output value
-		// Store the output value for the current row
+		// Evaluate for all rows in the (dirty, new) range
+		Range range = input.getNewRange();
+		for(long i=range.start; i<range.end; i++) {
+
+			// For each input, read all necessary column values
+			for(ComputeFormulaDependency dep : computeDependencies) {
+				Double value = (Double) this.getValue(dep.columns, i);
+				computeExpression.setVariable(dep.paramName, value); // Pass these values into the expression
+			}
+
+			// Evaluate and get output value
+			Double result = computeExpression.evaluate();
+
+			// Store the output value for the current row
+			this.setValue(i, result);
+		}
 
 	}
 
@@ -351,5 +394,5 @@ class ComputeFormulaDependency {
 	public String pathName;
 	public String paramName;
 	public QName qname;
-	List<Column> columns;
+	public List<Column> columns;
 }
