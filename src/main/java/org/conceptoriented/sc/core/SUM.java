@@ -21,13 +21,14 @@ public class SUM extends EvaluatorBase {
 
 	@Override
 	public void evaluate(long row) {
-		double value1 = ((Number)column1.getValue(row)).doubleValue();
-		double value2 = ((Number)column2.getValue(row)).doubleValue();
+		Object value1 = column1.getValue(row);
+		Object value2 = column2.getValue(row);
+		
+		if(value1 == null) value1 = Double.NaN;
+		if(value2 == null) value2 = Double.NaN;
 
 		double result = Double.NaN;
-		if(!Double.isNaN(value1) && !Double.isNaN(value2)) {
-			result = value1 + value2;
-		}
+		result = ((Number)value1).doubleValue() + ((Number)value2).doubleValue();
 		
 		thisColumn.setValue(row, result);
 	}

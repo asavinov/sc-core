@@ -267,7 +267,7 @@ public class Schema {
 
 	protected List<Column> getPassiveColumns() {
 		// Return all columns without definition (which need not be evaluated and always non-dirty)
-		List<Column> res = columns.stream().filter(x -> x.getDescriptor() == null).collect(Collectors.<Column>toList());
+		List<Column> res = columns.stream().filter(x -> x.getFormula() == null && x.getDescriptor() == null).collect(Collectors.<Column>toList());
 		return res;
 	}
 
@@ -308,7 +308,7 @@ public class Schema {
 		// Input evaluated columns are not returned. 
 		
  		// Start from input 0 (no evaluated columns)
-		// After some columns has been evaluted, it is added to the list of evaluated columns and can be again used for input
+		// After some columns has been evaluated, it is added to the list of evaluated columns and can be again used for input
 		// So after each addition of evaluated columns the return columns will decrease down to 0
 
 		List<Column> evaluated = getPassiveColumns(); // Already evaluated. Initially non-dirty columns without definition

@@ -161,7 +161,7 @@ public class Tests {
         Column columnA = schema.createColumn("A", "T", "Double");
         Column columnB = schema.createColumn("B", "T", "Double");
         
-        String exprString = "2 + 3 * [A]";
+        String exprString = "2 * [A] + 1";
         columnB.formula = exprString;
         
         columnB.extractComputeDependencies();
@@ -170,8 +170,12 @@ public class Tests {
         Record record = new Record();
         record.set("A", 5.0);
         table.write(record);
+        record.set("A", null);
+        table.write(record);
+        record.set("A", 6);
+        table.write(record);
         
-        columnB.evaluateComputeExpression();
+        columnB.evaluate();
 
         //double res = columnB.computeExpression.evaluate();
     }

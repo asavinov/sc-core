@@ -96,6 +96,24 @@ public class Column {
 	}
 	public void setFormula(String formula) {
 		this.formula = formula;
+
+		//
+		// Resolve all dependencies declared in the descriptor (the first column in the dependencies must be this/output column)
+		//
+		extractComputeDependencies();
+		List<Column> columns = new ArrayList<Column>();
+		
+		for(ComputeFormulaDependency dep : computeDependencies) { // Each dependency is a path which can included repeated segments
+			for(Column col : dep.columns) {
+				if(!columns.contains(col)) 
+					columns.add(col);
+			}
+		}
+
+		// Update dependency graph
+		schema.setDependency(this, columns);
+
+		// Here we might want to check the validity of the dependency graph (cycles, at least for this column)
 	}
 
 	//
@@ -150,24 +168,24 @@ public class Column {
 			}
 		}
 		
-		computeDependencies = paths;
-	}
-	
-
-	public void buildComputeExpression() {
-		String exprString = formula;
-
 		//
 		// Resolve each column name in the path
 		//
 		Table table = this.getInput();
     	QNameBuilder parser = new QNameBuilder();
     	
-		for(ComputeFormulaDependency dep : computeDependencies) {
+		for(ComputeFormulaDependency dep : paths) {
 			dep.pathName = formula.substring(dep.start, dep.end);
 			dep.qname = parser.buildQName(dep.pathName);
 			dep.columns = dep.qname.resolveColumns(table);
 		}
+
+		computeDependencies = paths;
+	}
+	
+
+	public void buildComputeExpression() {
+		String exprString = formula;
 
 		//
 		// Transform the expression by using new names and get an executable expression
@@ -203,8 +221,11 @@ public class Column {
 
 			// For each input, read all necessary column values
 			for(ComputeFormulaDependency dep : computeDependencies) {
-				Double value = (Double) this.getValue(dep.columns, i);
-				computeExpression.setVariable(dep.paramName, value); // Pass these values into the expression
+				Object value = this.getValue(dep.columns, i);
+				if(value == null) {
+					value = Double.NaN;
+				}
+				computeExpression.setVariable(dep.paramName, ((Number)value).doubleValue()); // Pass these values into the expression
 			}
 
 			// Evaluate and get output value
@@ -224,6 +245,24 @@ public class Column {
 	public String getDescriptor() {
 		return descriptor;
 	}
+	public void setDescriptor(String descriptor) {
+		this.descriptor = descriptor;
+
+		//
+		// Resolve all dependencies declared in the descriptor (the first column in the dependencies must be this/output column)
+		//
+		List<Column> columns = new ArrayList<Column>();
+		for(QName dep : this.getDependencies()) {
+			Column col = dep.resolveColumn(schema, this.getInput());
+			columns.add(col);
+		}
+		
+		// Update dependency graph
+		schema.setDependency(this, columns);
+
+		// Here we might want to check the validity of the dependency graph (cycles, at least for this column)
+	}
+
 	public String getEvaluatorClass() {
 		if(descriptor == null) return null;
 		JSONObject jdescr = new JSONObject(descriptor);
@@ -245,23 +284,6 @@ public class Column {
 		}
 
 		return deps;
-	}
-	public void setDescriptor(String descriptor) {
-		this.descriptor = descriptor;
-
-		//
-		// Resolve all dependencies declared in the descriptor (the first column in the dependencies must be this/output column)
-		//
-		List<Column> columns = new ArrayList<Column>();
-		for(QName dep : this.getDependencies()) {
-			Column col = dep.resolveColumn(schema, this.getInput());
-			columns.add(col);
-		}
-		
-		// Update dependency graph
-		schema.setDependency(this, columns);
-
-		// Here we might want to check the validity of the dependency graph (cycles, at least for this column)
 	}
 
 	protected ScEvaluator evaluator;
@@ -317,26 +339,34 @@ public class Column {
 		evaluator.beginEvaluate();
 	}
 
-	/**
-	 * Any column has to provide a method which knows how to produce an output value. 
-	 * The output is produced by using all other columns.  
-	 */
-	public void evaluate() {
-		this.begingEvaluate(); // Prepare (evaluator, computational resources etc.)
-		
-		if(evaluator == null) return;
-
-		// Evaluate for all rows in the (dirty, new) range
-		Range range = input.getNewRange();
-		for(long i=range.start; i<range.end; i++) {
-			evaluator.evaluate(i);
-		}
-
-		this.endEvaluate(); // De-initialize (evaluator, computational resources etc.)
-	}
-
 	protected void endEvaluate() {
 		evaluator.endEvaluate();
+	}
+
+	/**
+	 * Any column has to provide a method which knows how to produce an output value. 
+	 */
+	public void evaluate() {
+		
+		if(formula != null && !formula.isEmpty()) { // Use formula
+	        this.extractComputeDependencies();
+	        this.buildComputeExpression();
+	        this.evaluateComputeExpression();
+		}
+		else if(descriptor != null && !descriptor.isEmpty()) { // Use descriptor
+			
+			this.begingEvaluate(); // Prepare (evaluator, computational resources etc.)
+			
+			if(evaluator == null) return;
+
+			// Evaluate for all rows in the (dirty, new) range
+			Range range = input.getNewRange();
+			for(long i=range.start; i<range.end; i++) {
+				evaluator.evaluate(i);
+			}
+
+			this.endEvaluate(); // De-initialize (evaluator, computational resources etc.)
+		}
 	}
 
 	public String toJson() {
