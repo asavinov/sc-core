@@ -14,8 +14,6 @@ import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import com.google.common.base.Strings;
-
 import net.objecthunter.exp4j.Expression;
 import net.objecthunter.exp4j.ExpressionBuilder;
 import net.objecthunter.exp4j.ValidationResult;
@@ -82,7 +80,18 @@ public class Column {
 	// Formula
 	//
 	
-	public String computeFormula;
+	protected String formula;
+	public String getFormula() {
+		return formula;
+	}
+	public void setFormula(String formula) {
+		this.formula = formula;
+	}
+
+	//
+	// Compute formula
+	//
+
 	public String transformedComputeFormula;
 	public List<ComputeFormulaDependency> computeDependencies;
 	public Expression computeExpression;
@@ -298,10 +307,12 @@ public class Column {
 		String joutid = "`id`: `" + this.getOutput().getId() + "`";
 		String jout = "`output`: {" + joutid + "}";
 
+		String jfmla = "`formula`: " + JSONObject.valueToString(this.getFormula()) + "";
+
 		//String jdescr = "`descriptor`: " + (this.getDescriptor() != null ? "`"+this.getDescriptor()+"`" : "null");
 		String jdescr = "`descriptor`: " + JSONObject.valueToString(this.getDescriptor()) + "";
 
-		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jdescr;
+		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jfmla + ", " + jdescr;
 
 		return ("{" + json + "}").replace('`', '"');
 	}

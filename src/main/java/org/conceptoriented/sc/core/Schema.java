@@ -175,6 +175,8 @@ public class Schema {
 		JSONObject output_table = obj.getJSONObject("output");
 		String output_id = output_table.getString("id");
 		Table output = this.getTableById(output_id);
+		
+		String formula = (String)JSONObject.stringToValue(obj.getString("formula"));
 
 		// Descriptor is either JSON object or JSON string with an object but we want to store a string
 		String descr_string = "";
@@ -201,6 +203,7 @@ public class Schema {
 
 		if(isValid) {
 			Column column = this.createColumn(name, input.getName(), output.getName());
+			column.setFormula(formula);
 			column.setDescriptor(descr_string);
 			return column;
 		}
@@ -225,6 +228,8 @@ public class Schema {
 		String output_id = output_table.getString("id");
 		Table output = this.getTableById(output_id);
 
+		String formula = (String)JSONObject.stringToValue(obj.getString("formula"));
+
 		// Descriptor is either JSON object or JSON string with an object but we want to store a string
 		String descr_string = null;
 		Object jdescr = obj.get("descriptor");
@@ -240,6 +245,7 @@ public class Schema {
 		column.setName(name);
 		column.setInput(input);
 		column.setOutput(output);
+		column.setFormula(formula);
 		column.setDescriptor(descr_string);
 	}
 	public void deleteColumn(String id) {

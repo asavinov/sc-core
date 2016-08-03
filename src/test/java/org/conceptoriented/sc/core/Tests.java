@@ -162,7 +162,7 @@ public class Tests {
         Column columnB = schema.createColumn("B", "T", "Double");
         
         String exprString = "2 + 3";
-        columnB.computeFormula = exprString;
+        columnB.formula = exprString;
         
         columnB.buildComputeExpression(exprString);
 
