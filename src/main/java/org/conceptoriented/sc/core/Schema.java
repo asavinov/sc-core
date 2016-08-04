@@ -176,7 +176,7 @@ public class Schema {
 		String output_id = output_table.getString("id");
 		Table output = this.getTableById(output_id);
 		
-		String formula = (String)JSONObject.stringToValue(obj.getString("formula"));
+		String formula = (String)JSONObject.stringToValue(obj.has("formula") ? obj.getString("formula") : "");
 
 		// Descriptor is either JSON object or JSON string with an object but we want to store a string
 		String descr_string = "";
