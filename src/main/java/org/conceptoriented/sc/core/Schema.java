@@ -377,7 +377,6 @@ public class Schema {
 
 		// Create primitive tables
 		Table doubleType = createTable("Double");
-		Table integerType = createTable("Integer");
 		Table stringType = createTable("String");
 	}
 

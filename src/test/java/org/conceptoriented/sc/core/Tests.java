@@ -164,7 +164,7 @@ public class Tests {
         String exprString = "2 * [A] + 1";
         columnB.formula = exprString;
         
-        columnB.extractComputeDependencies();
+        columnB.getComputeDependencies();
         columnB.buildComputeExpression();
         
         Record record = new Record();

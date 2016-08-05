@@ -98,20 +98,17 @@ public class Column {
 		this.formula = formula;
 
 		//
-		// Resolve all dependencies declared in the descriptor (the first column in the dependencies must be this/output column)
+		// Resolve all dependencies
 		//
-		extractComputeDependencies();
 		List<Column> columns = new ArrayList<Column>();
-		
-		for(ComputeFormulaDependency dep : computeDependencies) { // Each dependency is a path which can included repeated segments
-			for(Column col : dep.columns) {
-				if(!columns.contains(col)) 
-					columns.add(col);
-			}
+		if(formula != null && !formula.isEmpty()) {
+			columns = getComputeDependencies();
+		}
+		else if(descriptor != null && !descriptor.isEmpty()) {
+			columns = getEvaluatorDependencies();
 		}
 
-		// Update dependency graph
-		schema.setDependency(this, columns);
+		schema.setDependency(this, columns); // Update dependency graph
 
 		// Here we might want to check the validity of the dependency graph (cycles, at least for this column)
 	}
@@ -120,15 +117,17 @@ public class Column {
 	// Compute formula
 	//
 
-	public List<ComputeFormulaDependency> computeDependencies;
-	public String transformedComputeFormula;
-	public Expression computeExpression;
+	protected List<ComputeFormulaDependency> computeDependencies = new ArrayList<ComputeFormulaDependency>();
+	// Find all entries of column paths. Store the result in the field and return only column list. 
+	public List<Column> getComputeDependencies() {
+		List<Column> columns = new ArrayList<Column>();
 
-	// Find all entries of column paths 
-	public void extractComputeDependencies() {
 		String exprString = formula;
 		
-		if(exprString == null || exprString.isEmpty()) return;
+		if(exprString == null || exprString.isEmpty()) {
+			computeDependencies = new ArrayList<ComputeFormulaDependency>();
+			return columns;
+		}
 		
 		String ex =  "\\[(.*?)\\]";
 		//String ex = "[\\[\\]]";
@@ -181,8 +180,23 @@ public class Column {
 		}
 
 		computeDependencies = paths;
+
+		//
+		// Prepare list of columns for return
+		//
+		for(ComputeFormulaDependency dep : computeDependencies) { // Each dependency is a path which can included repeated segments
+			for(Column col : dep.columns) {
+				if(!columns.contains(col)) 
+					columns.add(col);
+			}
+		}
+		
+		return columns;
 	}
 	
+
+	protected String transformedComputeFormula;
+	protected Expression computeExpression;
 
 	public void buildComputeExpression() {
 		String exprString = formula;
@@ -248,32 +262,26 @@ public class Column {
 	public void setDescriptor(String descriptor) {
 		this.descriptor = descriptor;
 
-		//
-		// Resolve all dependencies declared in the descriptor (the first column in the dependencies must be this/output column)
-		//
 		List<Column> columns = new ArrayList<Column>();
-		for(QName dep : this.getDependencies()) {
-			Column col = dep.resolveColumn(schema, this.getInput());
-			columns.add(col);
+		if(formula != null && !formula.isEmpty()) {
+			columns = getComputeDependencies();
 		}
-		
-		// Update dependency graph
-		schema.setDependency(this, columns);
+		else if(descriptor != null && !descriptor.isEmpty()) {
+			columns = getEvaluatorDependencies();
+		}
+
+		schema.setDependency(this, columns); // Update dependency graph
 
 		// Here we might want to check the validity of the dependency graph (cycles, at least for this column)
 	}
+	public List<Column> getEvaluatorDependencies() {
+		List<Column> columns = new ArrayList<Column>();
 
-	public String getEvaluatorClass() {
-		if(descriptor == null) return null;
-		JSONObject jdescr = new JSONObject(descriptor);
-		return jdescr.getString("class");
-	}
-	public List<QName> getDependencies() {
 		List<QName> deps = new ArrayList<QName>();
-		if(descriptor == null || descriptor.isEmpty()) return deps;
+		if(descriptor == null || descriptor.isEmpty()) return columns;
 
 		JSONObject jdescr = new JSONObject(descriptor);
-		if(jdescr == null || !jdescr.has("dependencies")) return deps;
+		if(jdescr == null || !jdescr.has("dependencies")) return columns;
 
 		JSONArray jdeps = jdescr.getJSONArray("dependencies");
 
@@ -283,7 +291,17 @@ public class Column {
 			deps.add(qn);
 		}
 
-		return deps;
+		for(QName dep : deps) {
+			Column col = dep.resolveColumn(schema, this.getInput());
+			columns.add(col);
+		}
+		
+		return columns;
+	}
+	public String getEvaluatorClass() {
+		if(descriptor == null) return null;
+		JSONObject jdescr = new JSONObject(descriptor);
+		return jdescr.getString("class");
 	}
 
 	protected ScEvaluator evaluator;
@@ -349,7 +367,7 @@ public class Column {
 	public void evaluate() {
 		
 		if(formula != null && !formula.isEmpty()) { // Use formula
-	        this.extractComputeDependencies();
+	        this.getComputeDependencies();
 	        this.buildComputeExpression();
 	        this.evaluateComputeExpression();
 		}
