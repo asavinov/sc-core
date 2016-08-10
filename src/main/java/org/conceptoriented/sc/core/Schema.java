@@ -82,7 +82,7 @@ public class Schema {
 		String id = obj.getString("id");
 		String name = obj.getString("name");
 
-		long maxLength = obj.has("maxLength") ? obj.getLong("maxLength") : -1;
+		long maxLength = obj.has("maxLength") && !obj.isNull("maxLength") ? obj.getLong("maxLength") : -1;
 
 		// Check validity
 
@@ -176,11 +176,11 @@ public class Schema {
 		String output_id = output_table.getString("id");
 		Table output = this.getTableById(output_id);
 		
-		String formula = (String)JSONObject.stringToValue(obj.has("formula") ? obj.getString("formula") : "");
+		String formula = (String)JSONObject.stringToValue(obj.has("formula") && !obj.isNull("formula") ? obj.getString("formula") : "");
 
 		// Descriptor is either JSON object or JSON string with an object but we want to store a string
 		String descr_string = "";
-		if(obj.has("descriptor")) {
+		if(obj.has("descriptor") && !obj.isNull("descriptor")) {
 			Object jdescr = obj.get("descriptor");
 			if(jdescr instanceof String) {
 				descr_string = (String)jdescr;
@@ -228,7 +228,7 @@ public class Schema {
 		String output_id = output_table.getString("id");
 		Table output = this.getTableById(output_id);
 
-		String formula = (String)JSONObject.stringToValue(obj.has("formula") ? obj.getString("formula") : "");
+		String formula = (String)JSONObject.stringToValue(obj.has("formula") && !obj.isNull("formula") ? obj.getString("formula") : "");
 		
 		// Descriptor is either JSON object or JSON string with an object but we want to store a string
 		String descr_string = null;
@@ -361,6 +361,23 @@ public class Schema {
 		
 		if(isValid) return new Schema(name);
 		else return null;
+	}
+	public void updateFromJson(String json) {
+		JSONObject obj = new JSONObject(json);
+
+		// Extract all necessary parameters
+		
+		String id = obj.getString("id");
+		String name = obj.getString("name");
+
+		// Check validity
+
+		boolean isValid = true;
+		if(name == null || name.isEmpty()) isValid = false;
+
+		// Update the properties
+
+		this.setName(name);
 	}
 	
 	@Override
