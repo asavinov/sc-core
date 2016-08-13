@@ -79,18 +79,18 @@ public class Table {
 		return new Range(newRange);
 	}
 	
-	public void write(Record record) {
+	public void append(Record record) {
 
 		// Get all outgoing columns
 		List<Column> columns = schema.getColumns(this.getName());
 
-		for(Column column : columns) { // We must push a new value to all columns even if it has not been provided (null)
+		for(Column column : columns) { // We must append a new value to all columns even if it has not been provided (null)
 
 			// Get value from the record
 			Object value = record.get(column.getName());
 			
 			// Append the value to the column (even if it is null)
-			column.push(value);
+			column.appendValue(value);
 		}
 		
 		//
@@ -120,7 +120,7 @@ public class Table {
 		// Get all outgoing columns
 		List<Column> columns = schema.getColumns(this.getName());
 
-		for(Column column : columns) { // We must push a new value to all columns even if it has not been provided (null)
+		for(Column column : columns) { // We must append a new value to all columns even if it has not been provided (null)
 			// Remove initial elements of the column
 			column.removeDelRange(delRange);
 		}

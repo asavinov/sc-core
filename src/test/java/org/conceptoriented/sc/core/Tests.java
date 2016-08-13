@@ -80,16 +80,16 @@ public class Tests {
         Record record = new Record();
 
         record.set("A", 5.0);
-        table.write(record); // The number of added/dirty records is incremented. Some records can be marked for deletion/old. 
+        table.append(record); // The number of added/dirty records is incremented. Some records can be marked for deletion/old. 
     	
         record.set("A", 10.0);
-        table.write(record); // The number of added/dirty records is incremented. Some records can be marked for deletion/old. 
+        table.append(record); // The number of added/dirty records is incremented. Some records can be marked for deletion/old. 
 
         // Evaluate schema by updating its schema. Mark new records as clean and finally remove records for deletion.
         schema.evaluate();
         
         record.set("A", 20.0);
-        table.write(record); 
+        table.append(record); 
 
         // Evaluate schema by updating its schema. Mark new records as clean and finally remove records for deletion.
         schema.evaluate();
@@ -169,11 +169,11 @@ public class Tests {
         
         Record record = new Record();
         record.set("A", 5.0);
-        table.write(record);
+        table.append(record);
         record.set("A", null);
-        table.write(record);
+        table.append(record);
         record.set("A", 6);
-        table.write(record);
+        table.append(record);
         
         columnB.evaluate();
 

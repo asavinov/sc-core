@@ -1,6 +1,9 @@
 package org.conceptoriented.sc.core;
 
+import java.text.NumberFormat;
+import java.text.ParseException;
 import java.util.List;
+import java.util.Locale;
 
 import org.conceptoriented.sc.core.Column;
 import org.conceptoriented.sc.core.EvaluatorBase;
@@ -22,7 +25,9 @@ public class SUM extends EvaluatorBase {
 	@Override
 	public void evaluate(long row) {
 		Object value1 = column1.getValue(row);
+		if(value1 instanceof String) try { value1 = NumberFormat.getInstance(Locale.US).parse((String)value1); } catch (ParseException e) { value1 = null; }
 		Object value2 = column2.getValue(row);
+		if(value2 instanceof String) try { value2 = NumberFormat.getInstance(Locale.US).parse((String)value2); } catch (ParseException e) { value2 = null; }
 		
 		if(value1 == null) value1 = Double.NaN;
 		if(value2 == null) value2 = Double.NaN;

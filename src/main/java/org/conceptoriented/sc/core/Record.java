@@ -1,18 +1,25 @@
 package org.conceptoriented.sc.core;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
+/**
+ *
+ */
 public class Record {
 	
-	Map<String, Object> recod = new HashMap<String, Object>();
+	// Alternative: Apache Commons CaseInsensitiveMap 
+	Map<String, Object> recod = new TreeMap<String, Object>(String.CASE_INSENSITIVE_ORDER);
 
 	public Object get(String name) {
 		return recod.get(name);
@@ -54,10 +61,10 @@ public class Record {
 		return record;
 	}
 
-	public static List<Record> fromJsonList(String json) {
+	public static List<Record> fromJsonList(String jsonString) {
 		List<Record> records = new ArrayList<Record>();
 
-		Object token = new JSONTokener(json).nextValue();
+		Object token = new JSONTokener(jsonString).nextValue();
 		JSONArray arr;
 		if (token instanceof JSONArray) { // Array of records
 			arr = (JSONArray) token;
@@ -93,6 +100,36 @@ public class Record {
 		return records;
 	}
 	
+	public static List<Record> fromCsvList(String csvString) {
+		List<Record> records = new ArrayList<Record>();
+		
+		List<String> lines = new ArrayList<String>(Arrays.asList(csvString.split("\\r?\\n")));
+
+		// Create a list of column names
+		String headerLine = lines.get(0);
+		List<String> columns = new ArrayList<String>(Arrays.asList(headerLine.split(",")));
+		for(int i=0; i < columns.size(); i++) { 
+			columns.set(i, columns.get(i).trim());
+		}
+
+		// Loop over all lines
+		for (int i=1; i < lines.size(); i++) {
+			String line = lines.get(i);
+			if(line == null || line.trim().isEmpty()) continue;
+			
+			Record record = new Record();
+
+			String[] fields = line.split(",");
+			for(int j=0; j<fields.length; j++) {
+				if(j >= columns.size()) break; // More field values than columns
+				record.set(columns.get(j), fields[j]);
+			}
+			records.add(record);
+		}
+
+		return records;
+	}
+
 	public Record() {
 	}
 

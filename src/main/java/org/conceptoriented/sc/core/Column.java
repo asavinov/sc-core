@@ -1,9 +1,12 @@
 package org.conceptoriented.sc.core;
 
+import java.text.NumberFormat;
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -66,7 +69,18 @@ public class Column {
 	public void setValue(long row, Object value) {
 		values[(int)row] = value;
 	}
-	public long push(Object value) {
+	public long appendValue(Object value) {
+		// Cast the value to type of this column
+		if(this.getOutput().getName().equalsIgnoreCase("String")) {
+			value = value.toString();
+		}
+		else if(this.getOutput().getName().equalsIgnoreCase("Double") || this.getOutput().getName().equalsIgnoreCase("Integer")) {
+			if(value instanceof String) {
+				try { value = NumberFormat.getInstance(Locale.US).parse((String)value); } 
+				catch (ParseException e) { value = Double.NaN; }
+			}
+		}
+		
 		long row = length++;
 		values[(int)row] = value;
 		return row;
