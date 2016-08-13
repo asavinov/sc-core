@@ -31,17 +31,31 @@ public class Record {
 	
 	public String toJson() {
 		// Loop over all keys
-		String json = "";
+		String data = "";
 		for (Map.Entry<String, Object> entry : recod.entrySet())
 		{
-			String jcol = "`" + entry.getKey() + "`:`" + entry.getValue() + "`, ";
-			json += jcol;
+			String data_elem = "`" + entry.getKey() + "`:`" + entry.getValue() + "`, ";
+			data += data_elem;
 		}		
-		if(json.length() > 2) {
-			json = json.substring(0, json.length()-2);
+		if(data.length() > 2) {
+			data = data.substring(0, data.length()-2);
 		}
 		
-		return ("{" + json + "}").replace('`', '"'); // Trick to avoid backslashing double quotes: use backticks and then replace it at the end
+		return ("{" + data + "}").replace('`', '"'); // Trick to avoid backslashing double quotes: use backticks and then replace it at the end
+	}
+	public String toCsv(List<String> columns) { // Comma separated
+		String data = "";
+		// Loop over all columns
+		for(String column : columns) {
+			Object value = this.get(column);
+			String data_elem = "`" + value.toString() + "`,";
+			data += data_elem;
+		}
+		if(data.length() > 1) {
+			data = data.substring(0, data.length()-1);
+		}
+		
+		return data.replace('`', '"'); // Trick to avoid backslashing double quotes: use backticks and then replace it at the end
 	}
 	
 	public static Record fromJson(String json) {
