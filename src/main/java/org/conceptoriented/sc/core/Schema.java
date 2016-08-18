@@ -329,7 +329,7 @@ public class Schema {
 
 		for(Table table : tables) {
 			if(table.isPrimitive()) continue;
-			table.addNewRange(); // Mark dirty as clean
+			table.markNewAsClean(); // Mark dirty as clean
 			table.removeDelRange(); // Really remove old records
 		}
 		

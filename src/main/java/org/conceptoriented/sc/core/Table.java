@@ -31,7 +31,7 @@ public class Table {
 
 	// 0,1,2,...,100,...,1000,...
 	// [del)[clean)[new)
-	// [rowRange) - all records that can be accessed
+	// [rowRange) - all records that physically exist and can be accessed
 	// |clean|+|new| <= maxLength
 	
 	// If more rows are added then then the oldest will be marked for deletion.  
@@ -67,9 +67,9 @@ public class Table {
 
 	// These records have been already evaluated (clean)
 	// We need to store start and end rows
-	protected Range rowRange = new Range();
-	public Range getRowRange() {
-		return new Range(rowRange);
+	protected Range cleanRange = new Range();
+	public Range getCleanRange() {
+		return new Range(cleanRange);
 	}
 
 	// Records added but not evaluated yet (dirty). They are supposed to be evaluated in the next iteration. 
@@ -99,23 +99,35 @@ public class Table {
 
 		// Mark this record as dirty by adding it to the range of new records
 		newRange.end++;
-		rowRange.end++;
 		
-		// If too many records then mark some of them for deletion
+		// If too many records then mark some of them (in the beginning) for deletion
 		if(maxLength >= 0) {
-			long excess = rowRange.getLength() - maxLength;
+			long excess = (cleanRange.getLength() + newRange.getLength()) - maxLength;
 			if(excess > 0) {
 				delRange.end += excess;
+				
+				cleanRange.start = delRange.end;
+				if(cleanRange.end < cleanRange.start) {
+					cleanRange.end = cleanRange.start;
+					newRange.start = cleanRange.end;
+				}
 			}
 		}
 	}
 
-	public void addNewRange() { // Mark dirty records as clean
-		// Empty the old records range
-		newRange.start = newRange.end;
+	public void markCleanAsNew() { // Mark clean records as dirty (new). Deleted range does not change.
+		// [del)[clean)[new)
+		cleanRange.end = cleanRange.start; // No clean records
+		newRange.start = cleanRange.start; // All new range
 	}
 
-	public void removeDelRange() { // Really removed records marked for deletion by freeing the resources
+	public void markNewAsClean() { // Mark dirty records as clean
+		// [del)[clean)[new)
+		cleanRange.end = newRange.end; // All clean records
+		newRange.start = newRange.end; // No new range
+	}
+
+	public void removeDelRange() { // Physically remove records marked for deletion by freeing the resources
 
 		// Get all outgoing columns
 		List<Column> columns = schema.getColumns(this.getName());
@@ -131,12 +143,12 @@ public class Table {
 
 		// Empty the old records range
 		delRange.start = delRange.end;
-		rowRange.start = delRange.end;
+		cleanRange.start = delRange.end;
 	}
 
 	public List<Record> read(Range range) {
 		if(range == null) {
-			range = this.getRowRange();
+			range = this.getCleanRange();
 		}
 
 		// Get all outgoing columns
