@@ -115,14 +115,24 @@ public class Column {
 		// Resolve all dependencies
 		//
 		List<Column> columns = new ArrayList<Column>();
+
 		if(formula != null && !formula.isEmpty()) {
+
 			columns = getComputeDependencies();
+
+			schema.setDependency(this, columns); // Update dependency graph
+			return;
 		}
 		else if(descriptor != null && !descriptor.isEmpty()) {
-			columns = getEvaluatorDependencies();
-		}
 
-		schema.setDependency(this, columns); // Update dependency graph
+			columns = getEvaluatorDependencies();
+
+			schema.setDependency(this, columns); // Update dependency graph
+			return;
+		}
+		else {
+			schema.setDependency(this, null); // Non-evaluatable column for any reason
+		}
 
 		// Here we might want to check the validity of the dependency graph (cycles, at least for this column)
 	}
@@ -233,7 +243,8 @@ public class Column {
 		ExpressionBuilder builder = new ExpressionBuilder(transformedComputeFormula);
 		Set<String> vars = computeDependencies.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
 		builder.variables(vars);
-		Expression exp = builder.build();
+
+		Expression exp = builder.build(); // Here we get parsing exceptions which might need be caught and processed
 		
 		ValidationResult res = exp.validate(); // Boolean argument can be used to ignore unknown variables
 		res.isValid();

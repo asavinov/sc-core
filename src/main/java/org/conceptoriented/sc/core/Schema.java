@@ -271,14 +271,15 @@ public class Schema {
 		return res;
 	}
 
+	// Output is a list of columns which are ready to be evaluated because all their dependencies are evaluated or do not need evaluation
 	// The parameter is a list of already evaluated (non-dirty) columns
-	// Output is a list of columns which are ready to be evaluated because all their dependencies are evaluated
 	protected List<Column> getCanEvaluate(List<Column> evaluated) {
 		List<Column> res = new ArrayList<Column>();
 		
 		for(Map.Entry<Column, List<Column>> entry : dependencies.entrySet()) {
 			Column col = entry.getKey();
 			List<Column> deps = entry.getValue();
+			if(deps == null) continue; // Non-evaluatable (no formula or error)
 			if(evaluated.contains(col)) continue; // Skip already evaluated columns
 			if(evaluated.containsAll(deps)) { // All deps have to be evaluated (non-dirty)
 				res.add(col); 
@@ -288,31 +289,11 @@ public class Schema {
 		return res;
 	}
 
+	// Evaluate the schema. Make again consistent (non-dirty). Only new (dirty) rows will be evaluated.
 	public void evaluate() {
-		
-		//
-		// Evaluate the schema. Make again consistent (non-dirty).
-		// Bring the state back to consistent state by re-computing the values which are known to be dirty.
-		//
 
-		// Build a list/graph of columns to be evaluated. Either in the sequence of creation, or using dependencies.
-		// Evaluate each column individually from this structure. 
-		// Any column has to provide an evaluation function which knows how to compute the output value.
-
-		// A column graph includes all columns that can be (and hence have to be) evaluated. Non-evaluabable columns are not included.
-		// A graph has a list of origin columns which can be evaluated independently. 
-
-		// We need a function which takes two inputs: a graph of dependencies, and a list of already evaluated columns.
-		// It returns a column if all its direct dependencies are evaluated (which are supposed to be evaluated only if their direct deps are evaluated)
-		// If no evaluated columns are provided, then only columns with empty deps are returned. 
-		// Input evaluated columns are not returned. 
-		
- 		// Start from input 0 (no evaluated columns)
-		// After some columns has been evaluated, it is added to the list of evaluated columns and can be again used for input
-		// So after each addition of evaluated columns the return columns will decrease down to 0
-
-		List<Column> evaluated = getPassiveColumns(); // Already evaluated. Initially non-dirty columns without definition
-		List<Column> toBeEvaluated = getCanEvaluate(evaluated);
+		List<Column> evaluated = getPassiveColumns(); // Start from non-evaluatable columns (no definition)
+		List<Column> toBeEvaluated = getCanEvaluate(evaluated); // First iteration
 		while(toBeEvaluated.size() > 0) {
 			// Evaluate all columns that can be evaluated
 			for(Column col : toBeEvaluated) {
