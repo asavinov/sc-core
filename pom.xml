@@ -7,7 +7,7 @@
   <packaging>jar</packaging>
   <version>0.1.0</version>
 
-  <name>StreamCommander Engine</name>
+  <name>DataCommander Engine</name>
   <url>http://conceptoriented.org</url>
 
 	<properties>
@@ -116,6 +116,11 @@
 			<groupId>com.google.guava</groupId>
 			<artifactId>guava</artifactId>
 			<version>18.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-lang3</artifactId>
+			<version>3.4</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.commons</groupId>

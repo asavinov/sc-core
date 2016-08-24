@@ -16,6 +16,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.StringUtils;
 import org.json.JSONObject;
 
 /**
@@ -58,10 +59,9 @@ public class Schema {
 		return tables;
 	}
 	public Table getTable(String table) {
-		for(Table tab : tables) {
-			if(tab.getName() == table) return tab;
-		}
-		return null;
+        Optional<Table> ret = tables.stream().filter(x -> x.getName().equalsIgnoreCase(table)).findAny();
+        if(ret.isPresent()) return ret.get();
+        else return null;
 	}
 	public Table getTableById(String id) {
         Optional<Table> ret = tables.stream().filter(x -> x.getId().toString().equals(id)).findAny();
@@ -74,40 +74,64 @@ public class Schema {
 		tables.add(table);
 		return table;
 	}
-	public Table createTableFromJson(String json) {
+	public Table createTableFromJson(String json) throws DcError {
 		JSONObject obj = new JSONObject(json);
 
-		// Extract all necessary parameters
-		
+		//
+		// Validate properties
+		//
 		String id = obj.getString("id");
+
 		String name = obj.getString("name");
+		Table tab = getTable(name);
+		if(tab != null) {
+			throw new DcError(DcErrorCode.CREATE_ELEMENT, "Error creating table. ", "Name already exists. ");
+		}
+		if(!StringUtils.isAlphanumericSpace(name)) {
+			throw new DcError(DcErrorCode.CREATE_ELEMENT, "Error creating table. ", "Name contains invalid characters. ");
+		}
 
 		long maxLength = obj.has("maxLength") && !obj.isNull("maxLength") ? obj.getLong("maxLength") : -1;
 
-		// Check validity
-
-		boolean isValid = true;
-		if(name == null || name.isEmpty()) isValid = false;
-		
-		if(!isValid) return null;
-
+		//
 		// Create
+		//
 		
 		Table table = this.createTable(name);
 		table.setMaxLength(maxLength);
 		
 		return table;
 	}
-	public void updateTableFromJson(String json) {
+	public void updateTableFromJson(String json) throws DcError {
 		JSONObject obj = new JSONObject(json);
 
 		// Find table
 		
 		String id = obj.getString("id");
 		Table table = getTableById(id);
-		if(table == null) return;
+		if(table == null) {
+			throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating table. ", "Table not found. ");
+		}
 		
+		//
+		// Validate properties
+		//
+		if(obj.has("name")) {
+			String name = obj.getString("name");
+			Table tab = getTable(name);
+			if(tab != null && tab != table) {
+				throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating table. ", "Name already exists. ");
+			}
+			if(!StringUtils.isAlphanumericSpace(name)) {
+				throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating table. ", "Name contains invalid characters. ");
+			}
+		}
+
+		long maxLength = obj.has("maxLength") ? obj.getLong("maxLength") : 0;
+
+		//
 		// Update only properties which are present
+		//
 
 		if(obj.has("name")) table.setName(obj.getString("name"));
 		if(obj.has("maxLength")) table.setMaxLength(obj.getLong("maxLength"));
@@ -136,16 +160,11 @@ public class Schema {
 		return columns;
 	}
 	public List<Column> getColumns(String table) {
-		List<Column> res = new ArrayList<Column>();
-		for(Column col : columns) {
-			if(col.getInput().getName() == table) {
-				res.add(col);
-			}
-		}
+		List<Column> res = columns.stream().filter(x -> x.getInput().getName().equalsIgnoreCase(table)).collect(Collectors.<Column>toList());
 		return res;
 	}
 	public Column getColumn(String table, String column) {
-        Optional<Column> ret = columns.stream().filter(x -> x.getInput().getName().equals(table) && x.getName().equals(column)).findAny();
+        Optional<Column> ret = columns.stream().filter(x -> x.getInput().getName().equalsIgnoreCase(table) && x.getName().equalsIgnoreCase(column)).findAny();
         if(ret.isPresent()) return ret.get();
         else return null;
 	}
@@ -160,13 +179,12 @@ public class Schema {
 		columns.add(column);
 		return column;
 	}
-	public Column createColumnFromJson(String json) {
+	public Column createColumnFromJson(String json) throws DcError {
 		JSONObject obj = new JSONObject(json);
 
 		// Extract all necessary parameters
 		
 		String id = obj.getString("id");
-		String name = obj.getString("name");
 
 		JSONObject input_table = obj.getJSONObject("input");
 		String input_id = input_table.getString("id");
@@ -176,6 +194,15 @@ public class Schema {
 		String output_id = output_table.getString("id");
 		Table output = this.getTableById(output_id);
 		
+		String name = obj.getString("name");
+		Column col = this.getColumn(input.getName(), name);
+		if(col != null) {
+			throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating column. ", "Name already exists. ");
+		}
+		if(!StringUtils.isAlphanumericSpace(name)) {
+			throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating column. ", "Name contains invalid characters. ");
+		}
+
 		String formula = (String)JSONObject.stringToValue(obj.has("formula") && !obj.isNull("formula") ? obj.getString("formula") : "");
 
 		// Descriptor is either JSON object or JSON string with an object but we want to store a string
@@ -211,13 +238,12 @@ public class Schema {
 			return null;
 		}
 	}
-	public void updateColumnFromJson(String json) {
+	public void updateColumnFromJson(String json) throws DcError {
 		JSONObject obj = new JSONObject(json);
 
 		// Extract all necessary parameters
 		
 		String id = obj.getString("id");
-		String name = obj.getString("name");
 		Column column = getColumnById(id);
 
 		JSONObject input_table = obj.getJSONObject("input");
@@ -227,6 +253,17 @@ public class Schema {
 		JSONObject output_table = obj.getJSONObject("output");
 		String output_id = output_table.getString("id");
 		Table output = this.getTableById(output_id);
+
+		if(obj.has("name")) {
+			String name = obj.getString("name");
+			Column col = this.getColumn(column.getInput().getName(), name);
+			if(col != null && col != column) {
+				throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating column. ", "Name already exists. ");
+			}
+			if(!StringUtils.isAlphanumericSpace(name)) {
+				throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating column. ", "Name contains invalid characters. ");
+			}
+		}
 
 		String formula = (String)JSONObject.stringToValue(obj.has("formula") && !obj.isNull("formula") ? obj.getString("formula") : "");
 		
@@ -240,13 +277,15 @@ public class Schema {
 			descr_string = ((JSONObject) jdescr).toString();
 		}
 
-		// Update the properties
+		//
+		// Update only the properties which have been provided
+		//
 
-		column.setName(name);
-		column.setInput(input);
-		column.setOutput(output);
-		column.setFormula(formula);
-		column.setDescriptor(descr_string);
+		if(obj.has("input")) column.setInput(input);
+		if(obj.has("output")) column.setOutput(output);
+		if(obj.has("name")) column.setName(obj.getString("name"));
+		if(obj.has("formula")) column.setFormula(formula);
+		if(obj.has("descriptor")) column.setDescriptor(descr_string);
 	}
 	public void deleteColumn(String id) {
 		Column column = getColumnById(id);
@@ -325,40 +364,45 @@ public class Schema {
 
 		return ("{" + json + "}").replace('`', '"');
 	}
-	public static Schema fromJson(String json) {
+	public static Schema fromJson(String json) throws DcError {
 		JSONObject obj = new JSONObject(json);
 
 		// Extract all necessary parameters
 		
 		String id = obj.getString("id");
+
 		String name = obj.getString("name");
+		if(!StringUtils.isAlphanumericSpace(name)) {
+			throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating schema. ", "Name contains invalid characters. ");
+		}
 
-		// Check validity
-
-		boolean isValid = true;
-		if(name == null || name.isEmpty()) isValid = false;
-
+		//
 		// Create
+		//
 		
-		if(isValid) return new Schema(name);
-		else return null;
+		Schema schema = new Schema(name);
+		return schema;
 	}
-	public void updateFromJson(String json) {
+	public void updateFromJson(String json) throws DcError {
 		JSONObject obj = new JSONObject(json);
 
-		// Extract all necessary parameters
+		//
+		// Extract parameters and check validity
+		//
 		
 		String id = obj.getString("id");
-		String name = obj.getString("name");
 
-		// Check validity
+		if(obj.has("name")) {
+			if(!StringUtils.isAlphanumericSpace(name)) {
+				throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating column. ", "Name contains invalid characters. ");
+			}
+		}
 
-		boolean isValid = true;
-		if(name == null || name.isEmpty()) isValid = false;
-
+		//
 		// Update the properties
+		//
 
-		this.setName(name);
+		if(obj.has("name")) this.setName(obj.getString("name"));
 	}
 	
 	@Override
