@@ -115,6 +115,11 @@ public class Table {
 		}
 	}
 
+	public void remove() {
+		markAllAsDel();
+		removeDelRange();
+	}
+
 	public void markCleanAsNew() { // Mark clean records as dirty (new). Deleted range does not change.
 		// [del)[clean)[new)
 		cleanRange.end = cleanRange.start; // No clean records
@@ -125,6 +130,18 @@ public class Table {
 		// [del)[clean)[new)
 		cleanRange.end = newRange.end; // All clean records
 		newRange.start = newRange.end; // No new range
+	}
+
+	public void markAllAsDel() { // Mark all records as deleted
+		// [del)[clean)[new)
+
+		delRange.end = newRange.end;
+		
+		cleanRange.start = newRange.end;
+		cleanRange.end = newRange.end;
+		
+		newRange.start = newRange.end;
+		newRange.end = newRange.end;
 	}
 
 	public void removeDelRange() { // Physically remove records marked for deletion by freeing the resources
