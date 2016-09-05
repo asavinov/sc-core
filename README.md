@@ -15,3 +15,7 @@ StreamCommandr relates to conventional stream processing system like column-orie
 The column-oriented approach to in-stream analytics is especially efficient where very high performance is needed, e.g., in IoT application. 
 Operations with data are performed by defining new columns in terms of already existing columns. 
 StreamCommandr relies on the concept-oriented model as its theoretical foundation. 
+
+# History
+
+* 2016-09-05, v0.1.0. First working version with simple arithmetic formulas.
