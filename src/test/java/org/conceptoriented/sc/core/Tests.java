@@ -148,9 +148,14 @@ public class Tests {
     @Test
     public void ParserTest() 
     {
-    	QNameBuilder b = new QNameBuilder();
-    	
-    	QName name = b.buildQName("[a1 1 1].b222");
+    	QNameBuilder nb = new QNameBuilder();
+    	QName name = nb.buildQName("[a1 1 1].b222");
+
+    	// Tuple grammar does not work - we need island grammar (internal expression is almost arbitrary text)
+    	TupleBuilder tb = new TupleBuilder();
+    	//Tuple tuple = tb.buildTuple("{ aaa = (v11 1 bla, bla ); bbb = ( (v22.2) ) ; }");
+    	String tstr = " aaa = { bbb = v11 + 1 * sin(bla) / bla ; [ccc]=22,2 }";
+    	Tuple t = Tuple.parseAssignment(tstr);
     }
 
     @Test
