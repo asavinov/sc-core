@@ -156,6 +156,10 @@ public class Tests {
     	//Tuple tuple = tb.buildTuple("{ aaa = (v11 1 bla, bla ); bbb = ( (v22.2) ) ; }");
     	String tstr = " aaa = { bbb = v11 + 1 * sin(bla) / bla ; [ccc]=22,2 }";
     	Tuple t = Tuple.parseAssignment(tstr);
+
+    	tstr = " aaa = { bbb = v11 + 1 * sin(bla) ; [ccc]= {ddd=22,2} }";
+    	t = Tuple.parseAssignment(tstr);
+    	t = null;
     }
 
     @Test

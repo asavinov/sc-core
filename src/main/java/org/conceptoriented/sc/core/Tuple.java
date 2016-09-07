@@ -47,10 +47,36 @@ public class Tuple {
 			return t;
 		}
 		else if(open >= 0 && close >= 0 && open < close) { // Tuple - combination of assignments
-			String sequence = value.substring(open+1, close-1);
-			String[] members = sequence.split(";");
+			String sequence = value.substring(open+1, close).trim();
+
+			List<String> members = new ArrayList<String>();
+			int previousSeparator = -1;
+			int level = 0; // Work only on level 0
+			for(int i=0; i<sequence.length(); i++) {
+				if(sequence.charAt(i) == '{') {
+					level++;
+				}
+				else if(sequence.charAt(i) == '}') {
+					level--;
+				}
+				
+				if(level > 0) { // We are in a nested block. More closing parentheses are expected to exit from this block.
+					continue;
+				}
+				else if(level < 0) {
+					return null; // Syntax error: too many closing parentheses
+				}
+				
+				// Check if it is a member separator
+				if(sequence.charAt(i) == ';') {
+					members.add(sequence.substring(previousSeparator+1, i));
+					previousSeparator = i;
+				}
+			}
+			members.add(sequence.substring(previousSeparator+1, sequence.length()));
+
 			for(String member : members) {
-				Tuple memberAssignment = parseAssignment(member);
+				Tuple memberAssignment = parseAssignment(member.trim());
 				t.members.add(memberAssignment);
 			}
 			return t;
