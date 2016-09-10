@@ -118,15 +118,10 @@ public class Column {
 
 		if(formula != null && !formula.isEmpty()) {
 
-			columns = getComputeDependencies();
+			FunctionExpr expr = new FunctionExpr();
+			expr.parse("[" + this.name + "] = " + this.formula);
 
-			schema.setDependency(this, columns); // Update dependency graph
-			return;
-		}
-		else if(descriptor != null && !descriptor.isEmpty()) {
-
-			columns = getEvaluatorDependencies();
-
+			columns = expr.getPrimExprColumnDependencies();
 			schema.setDependency(this, columns); // Update dependency graph
 			return;
 		}
@@ -138,142 +133,34 @@ public class Column {
 	}
 
 	//
-	// Compute formula
+	// Evaluate
 	//
 
-	protected List<ComputeFormulaDependency> computeDependencies = new ArrayList<ComputeFormulaDependency>();
-	// Find all entries of column paths. Store the result in the field and return only column list. 
-	public List<Column> getComputeDependencies() {
-		List<Column> columns = new ArrayList<Column>();
-
-		String exprString = formula;
+	public void evaluate() {
 		
-		if(exprString == null || exprString.isEmpty()) {
-			computeDependencies = new ArrayList<ComputeFormulaDependency>();
-			return columns;
-		}
-		
-		String ex =  "\\[(.*?)\\]";
-		//String ex = "[\\[\\]]";
-		Pattern p = Pattern.compile(ex,Pattern.DOTALL);
-		Matcher matcher = p.matcher(exprString);
-
-		List<ComputeFormulaDependency> names = new ArrayList<ComputeFormulaDependency>();
-		while(matcher.find())
-		{
-			int s = matcher.start();
-			int e = matcher.end();
-			String name = matcher.group();
-			ComputeFormulaDependency entry = new ComputeFormulaDependency();
-			entry.start = s;
-			entry.end = e;
-			names.add(entry);
-		}
+		if(formula == null || formula.isEmpty()) return;
 		
 		//
-		// If between two names there is only dot then combine them
+		// Parse
 		//
-		List<ComputeFormulaDependency> paths = new ArrayList<ComputeFormulaDependency>();
-		for(int i = 0; i < names.size(); i++) {
-			if(i == names.size()-1) { // Last element does not have continuation
-				paths.add(names.get(i));
-				break;
-			}
-			
-			int thisEnd = names.get(i).end;
-			int nextStart = names.get(i+1).start;
-			
-			if(exprString.substring(thisEnd, nextStart).trim() == ".") { // There is continuation.
-				names.get(i+1).start = names.get(i).start; // Attach this name to the next name as a prefix
-			}
-			else { // No continuation. Ready to copy as path.
-				paths.add(names.get(i));
-			}
-		}
+		FunctionExpr expr = new FunctionExpr();
+		expr.parse("[" + this.name + "] = " + this.formula);
+		//expr.parsePrimExpr();
 		
 		//
-		// Resolve each column name in the path
+		// Bind
 		//
-		Table table = this.getInput();
-    	QNameBuilder parser = new QNameBuilder();
-    	
-		for(ComputeFormulaDependency dep : paths) {
-			dep.pathName = formula.substring(dep.start, dep.end);
-			dep.qname = parser.buildQName(dep.pathName);
-			dep.columns = dep.qname.resolveColumns(table);
-		}
-
-		computeDependencies = paths;
+		expr.bind(this);
 
 		//
-		// Prepare list of columns for return
+		// Evaluate
 		//
-		for(ComputeFormulaDependency dep : computeDependencies) { // Each dependency is a path which can included repeated segments
-			for(Column col : dep.columns) {
-				if(!columns.contains(col)) 
-					columns.add(col);
-			}
-		}
-		
-		return columns;
-	}
-	
-
-	protected String transformedComputeFormula;
-	protected Expression computeExpression;
-
-	public void buildComputeExpression() {
-		String exprString = formula;
-
-		//
-		// Transform the expression by using new names and get an executable expression
-		//
-		StringBuffer buf = new StringBuffer(exprString);
-		for(int i = computeDependencies.size()-1; i >= 0; i--) {
-			ComputeFormulaDependency dep = computeDependencies.get(i);
-			dep.paramName = "__p__"+i;
-			buf.replace(dep.start, dep.end, dep.paramName);
-		}
-		
-		transformedComputeFormula = buf.toString();
-
-		//
-		// Create expression object with the transformed formula
-		//
-		ExpressionBuilder builder = new ExpressionBuilder(transformedComputeFormula);
-		Set<String> vars = computeDependencies.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
-		builder.variables(vars);
-
-		Expression exp = builder.build(); // Here we get parsing exceptions which might need be caught and processed
-		
-		ValidationResult res = exp.validate(); // Boolean argument can be used to ignore unknown variables
-		res.isValid();
-		
-		computeExpression = exp;
-	}
-
-	public void evaluateComputeExpression() {
-		
-		// Evaluate for all rows in the (dirty, new) range
-		Range range = input.getNewRange();
+		Table input = this.getInput();
+		Range range = input.getNewRange(); // All dirty/new rows
 		for(long i=range.start; i<range.end; i++) {
-
-			// For each input, read all necessary column values
-			for(ComputeFormulaDependency dep : computeDependencies) {
-				Object value = this.getValue(dep.columns, i);
-				if(value == null) {
-					value = Double.NaN;
-				}
-				computeExpression.setVariable(dep.paramName, ((Number)value).doubleValue()); // Pass these values into the expression
-			}
-
-			// Evaluate and get output value
-			Double result = computeExpression.evaluate();
-
-			// Store the output value for the current row
-			this.setValue(i, result);
+			expr.evaluate(i);
+			this.setValue(i, expr.result); // Store the output value for the current row
 		}
-
 	}
 
 	//
@@ -287,18 +174,25 @@ public class Column {
 	public void setDescriptor(String descriptor) {
 		this.descriptor = descriptor;
 
+		//
+		// Resolve all dependencies
+		//
 		List<Column> columns = new ArrayList<Column>();
-		if(formula != null && !formula.isEmpty()) {
-			columns = getComputeDependencies();
-		}
-		else if(descriptor != null && !descriptor.isEmpty()) {
-			columns = getEvaluatorDependencies();
-		}
 
-		schema.setDependency(this, columns); // Update dependency graph
+		if(descriptor != null && !descriptor.isEmpty()) {
+
+			columns = getEvaluatorDependencies();
+
+			schema.setDependency(this, columns); // Update dependency graph
+			return;
+		}
+		else {
+			schema.setDependency(this, null); // Non-evaluatable column for any reason
+		}
 
 		// Here we might want to check the validity of the dependency graph (cycles, at least for this column)
 	}
+
 	public List<Column> getEvaluatorDependencies() {
 		List<Column> columns = new ArrayList<Column>();
 
@@ -387,29 +281,23 @@ public class Column {
 	}
 
 	/**
-	 * Any column has to provide a method which knows how to produce an output value. 
+	 * Evaluate class. 
 	 */
-	public void evaluate() {
+	public void evaluateDescriptor() {
 		
-		if(formula != null && !formula.isEmpty()) { // Use formula
-	        this.getComputeDependencies();
-	        this.buildComputeExpression();
-	        this.evaluateComputeExpression();
-		}
-		else if(descriptor != null && !descriptor.isEmpty()) { // Use descriptor
+		if(descriptor == null || descriptor.isEmpty()) return; 
 			
-			this.begingEvaluate(); // Prepare (evaluator, computational resources etc.)
-			
-			if(evaluator == null) return;
+		this.begingEvaluate(); // Prepare (evaluator, computational resources etc.)
+		
+		if(evaluator == null) return;
 
-			// Evaluate for all rows in the (dirty, new) range
-			Range range = input.getNewRange();
-			for(long i=range.start; i<range.end; i++) {
-				evaluator.evaluate(i);
-			}
-
-			this.endEvaluate(); // De-initialize (evaluator, computational resources etc.)
+		// Evaluate for all rows in the (dirty, new) range
+		Range range = input.getNewRange();
+		for(long i=range.start; i<range.end; i++) {
+			evaluator.evaluate(i);
 		}
+
+		this.endEvaluate(); // De-initialize (evaluator, computational resources etc.)
 	}
 
 	public String toJson() {
@@ -459,13 +347,4 @@ public class Column {
 		
 		values = new Object[1000];
 	}
-}
-
-class ComputeFormulaDependency {
-	public int start;
-	public int end;
-	public String pathName;
-	public String paramName;
-	public QName qname;
-	public List<Column> columns;
 }

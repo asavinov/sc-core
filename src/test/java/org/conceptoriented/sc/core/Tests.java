@@ -98,7 +98,6 @@ public class Tests {
 
     }
     
-    
     @Test
     public void ClassLoaderTest() 
     {
@@ -151,30 +150,23 @@ public class Tests {
     	QNameBuilder nb = new QNameBuilder();
     	QName name = nb.buildQName("[a1 1 1].b222");
 
-    	// Tuple grammar does not work - we need island grammar (internal expression is almost arbitrary text)
-    	TupleBuilder tb = new TupleBuilder();
-    	//Tuple tuple = tb.buildTuple("{ aaa = (v11 1 bla, bla ); bbb = ( (v22.2) ) ; }");
+    	FunctionExpr t = new FunctionExpr(); 
+
     	String tstr = " aaa = { bbb = v11 + 1 * sin(bla) / bla ; [ccc]=22,2 }";
-    	Tuple t = Tuple.parseAssignment(tstr);
+    	t.parse(tstr);
 
     	tstr = " aaa = { bbb = v11 + 1 * sin(bla) ; [ccc]= {ddd=22,2} }";
-    	t = Tuple.parseAssignment(tstr);
+    	t.parse(tstr);
     	t = null;
     }
 
     @Test
-    public void ExprTest() 
+    public void primExprTest() 
     {
     	schema = new Schema("My Schema");
         Table table = schema.createTable("T");
         Column columnA = schema.createColumn("A", "T", "Double");
         Column columnB = schema.createColumn("B", "T", "Double");
-        
-        String exprString = "2 * [A] + 1";
-        columnB.formula = exprString;
-        
-        columnB.getComputeDependencies();
-        columnB.buildComputeExpression();
         
         Record record = new Record();
         record.set("A", 5.0);
@@ -184,8 +176,58 @@ public class Tests {
         record.set("A", 6);
         table.append(record);
         
+        columnB.formula = "2 * [A] + 1";
         columnB.evaluate();
 
-        //double res = columnB.computeExpression.evaluate();
+        assertEquals(11.0, (Double)columnB.getValue(0), 0.00001);
+        assertEquals(Double.NaN, columnB.getValue(1));
+        assertEquals(13.0, (Double)columnB.getValue(2), 0.00001);
     }
+
+    @Test
+    public void tupleExprTest()
+    {
+    	// Create and configure: schema, tables, columns
+        schema = new Schema("My Schema");
+
+        //
+        // Table 1 (type table)
+        //
+        Table t1 = schema.createTable("T");
+
+        Column c1 = schema.createColumn("A", "T", "Double");
+        Column c2 = schema.createColumn("B", "T", "Double");
+
+        // Add one or more records to the table
+        Record r = new Record();
+
+        r.set("A", 5.0);
+        r.set("B", 10.0);
+        t1.append(r); 
+
+        //
+        // Table 2
+        //
+        Table t2 = schema.createTable("T2");
+
+        Column c3 = schema.createColumn("A", "T2", "Double");
+        Column c4 = schema.createColumn("B", "T2", "Double");
+
+        Column c5 = schema.createColumn("C", "T2", "T");
+        c5.setFormula(" { [A] = [A]; [B] = [B] } ");
+
+        // Add one or more records to the table
+        r = new Record();
+
+        r.set("A", 5.0);
+        r.set("B", 10.0);
+        t2.append(r); 
+    	
+        r.set("A", 10.0);
+        r.set("B", 5.0);
+        t2.append(r); 
+
+        schema.evaluate();
+    }
+    
 }
