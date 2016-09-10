@@ -118,7 +118,7 @@ public class Column {
 
 		if(formula != null && !formula.isEmpty()) {
 
-			FunctionExpr expr = new FunctionExpr();
+			ExprNode expr = new ExprNode();
 			expr.parse("[" + this.name + "] = " + this.formula);
 
 			columns = expr.getPrimExprColumnDependencies();
@@ -143,19 +143,21 @@ public class Column {
 		//
 		// Parse
 		//
-		FunctionExpr expr = new FunctionExpr();
+		ExprNode expr = new ExprNode();
 		expr.parse("[" + this.name + "] = " + this.formula);
 		//expr.parsePrimExpr();
 		
 		//
 		// Bind
 		//
-		expr.bind(this);
+		Table input = this.getInput();
+		expr.thisTable = input; // It will be passed recursively to all child expressions
+		expr.column = this;
+		expr.bind();
 
 		//
 		// Evaluate
 		//
-		Table input = this.getInput();
 		Range range = input.getNewRange(); // All dirty/new rows
 		for(long i=range.start; i<range.end; i++) {
 			expr.evaluate(i);

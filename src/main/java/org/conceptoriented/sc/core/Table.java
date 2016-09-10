@@ -3,6 +3,7 @@ package org.conceptoriented.sc.core;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 public class Table {
 	private Schema schema;
@@ -113,6 +114,37 @@ public class Table {
 				}
 			}
 		}
+	}
+
+	public long find(Record record, boolean append) {
+
+		List<String> names = record.getNames();
+		List<Object> values = names.stream().map(x -> record.get(x)).collect(Collectors.<Object>toList());
+		List<Column> columns = names.stream().map(x -> this.getSchema().getColumn(this.getName(), x)).collect(Collectors.<Column>toList());
+		
+		Range range = new Range(getCleanRange().start, getNewRange().end);
+		long index = -1;
+		for(long i=range.start; i<range.end; i++) { // Scan all records and compare
+
+			boolean found = true;
+			for(int j=0; j<names.size(); j++) {
+				Object recordValue = values.get(j);
+				Object columnValue = columns.get(j).getValue(i);
+				if(!recordValue.equals(columnValue)) { found = false; break; }
+			}
+			
+			if(found) {
+				index = i;
+				break;
+			}
+		}
+		
+		if(append && index < 0) {
+			append(record);
+			index = getNewRange().end - 1;
+		}
+
+		return index;
 	}
 
 	public void remove() {

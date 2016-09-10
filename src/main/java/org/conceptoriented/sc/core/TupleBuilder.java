@@ -6,24 +6,24 @@ import org.antlr.v4.runtime.ANTLRInputStream;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 
-public class TupleBuilder extends TupleBaseVisitor<FunctionExpr> {
+public class TupleBuilder extends TupleBaseVisitor<ExprNode> {
 
 	@Override 
-	public FunctionExpr visitTuple(TupleParser.TupleContext ctx) 
+	public ExprNode visitTuple(TupleParser.TupleContext ctx) 
 	{
 		// It is called if we meet {}
 		// We need to loop over all members and return a list of tuples without name
 		
-        FunctionExpr n = new FunctionExpr();
+        ExprNode n = new ExprNode();
 
         // Find all members and store them in the tuple node
         int mmbrCount = ctx.member().size();
         for (int i = 0; i < mmbrCount; i++)
         {
-            FunctionExpr mmbr = visit(ctx.member(i));
+            ExprNode mmbr = visit(ctx.member(i));
             if (mmbr != null)
             {
-                n.tuple.add(mmbr);
+                n.children.add(mmbr);
             }
         }
 
@@ -31,7 +31,7 @@ public class TupleBuilder extends TupleBaseVisitor<FunctionExpr> {
 	}
 
 	@Override 
-	public FunctionExpr visitMember(TupleParser.MemberContext ctx) 
+	public ExprNode visitMember(TupleParser.MemberContext ctx) 
 	{ 
 		// It is called if we meet assignment within a tuple
 		// We need to create a new tuple object from this assignment
@@ -41,15 +41,15 @@ public class TupleBuilder extends TupleBaseVisitor<FunctionExpr> {
         String name = ctx.getText();
         //String name = GetName(ctx.name());
         
-        FunctionExpr n;
+        ExprNode n;
         if(ctx.getChild(2) instanceof TupleParser.TupleContext) { // Value is a tuple
         	// Get the tuple
-            n = new FunctionExpr();
+            n = new ExprNode();
         	// Assign name to id
             n.name = name;
         }
         else { // Value is a (terminal) expression
-            n = new FunctionExpr();
+            n = new ExprNode();
             n.name = name;
             //n.expression = ctx.expr().getText();
         }
@@ -78,7 +78,7 @@ public class TupleBuilder extends TupleBaseVisitor<FunctionExpr> {
 	/**
 	 * Convenience method for parsing strings.
 	 */
-	public FunctionExpr buildTuple(String str)
+	public ExprNode buildTuple(String str)
     {
         TupleBuilder builder = this;
 
@@ -86,7 +86,7 @@ public class TupleBuilder extends TupleBaseVisitor<FunctionExpr> {
         TupleParser parser;
         ParseTree tree;
         String tree_str;
-        FunctionExpr ast;
+        ExprNode ast;
 
         lexer = new TupleLexer(new ANTLRInputStream(str));
         parser = new TupleParser(new CommonTokenStream(lexer));

@@ -58,7 +58,7 @@ public class Tests {
 
 
     @Test
-    public void SchemaTest()
+    public void schemaTest()
     {
     	// Create and configure: schema, tables, columns
         schema = new Schema("My Schema");
@@ -99,7 +99,7 @@ public class Tests {
     }
     
     @Test
-    public void ClassLoaderTest() 
+    public void classLoaderTest() 
     {
     	// Create class loader for the schema
     	// UDF class have to be always in nested folders corresponding to their package: either directly in file system or in jar
@@ -145,12 +145,12 @@ public class Tests {
     }
 
     @Test
-    public void ParserTest() 
+    public void tupleParserTest() 
     {
     	QNameBuilder nb = new QNameBuilder();
     	QName name = nb.buildQName("[a1 1 1].b222");
 
-    	FunctionExpr t = new FunctionExpr(); 
+    	ExprNode t = new ExprNode(); 
 
     	String tstr = " aaa = { bbb = v11 + 1 * sin(bla) / bla ; [ccc]=22,2 }";
     	t.parse(tstr);
@@ -214,7 +214,6 @@ public class Tests {
         Column c4 = schema.createColumn("B", "T2", "Double");
 
         Column c5 = schema.createColumn("C", "T2", "T");
-        c5.setFormula(" { [A] = [A]; [B] = [B] } ");
 
         // Add one or more records to the table
         r = new Record();
@@ -227,7 +226,11 @@ public class Tests {
         r.set("B", 5.0);
         t2.append(r); 
 
-        schema.evaluate();
+        c5.setFormula(" { [A] = [A]; [B] = [B] } ");
+        c5.evaluate();
+
+        assertEquals(0L, c5.getValue(0));
+        assertEquals(1L, c5.getValue(1));
     }
     
 }

@@ -19,20 +19,24 @@ import org.json.JSONTokener;
 public class Record {
 	
 	// Alternative: Apache Commons CaseInsensitiveMap 
-	Map<String, Object> recod = new TreeMap<String, Object>(String.CASE_INSENSITIVE_ORDER);
+	Map<String, Object> fields = new TreeMap<String, Object>(String.CASE_INSENSITIVE_ORDER);
+
+	public List<String> getNames() {
+		return new ArrayList<String>(fields.keySet());
+	}
 
 	public Object get(String name) {
-		return recod.get(name);
+		return fields.get(name);
 	}
 
 	public void set(String name, Object value) {
-		recod.put(name, value);
+		fields.put(name, value);
 	}
 	
 	public String toJson() {
 		// Loop over all keys
 		String data = "";
-		for (Map.Entry<String, Object> entry : recod.entrySet())
+		for (Map.Entry<String, Object> entry : fields.entrySet())
 		{
 			String data_elem = "`" + entry.getKey() + "`:`" + entry.getValue() + "`, ";
 			data += data_elem;

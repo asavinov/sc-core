@@ -17,7 +17,7 @@ import net.objecthunter.exp4j.ValidationResult;
  * It is a function definition with function name, function type and function formula. 
  * The formula can be a primitive expression or a tuple which is a combination of function formulas. 
  */
-public class FunctionExpr {
+public class ExprNode {
 	
 	//
 	// Syntax and parsing
@@ -26,15 +26,16 @@ public class FunctionExpr {
 	public String name;
 	public String type;
 
-	public String formula; // If the function returns a primitive value then it is computed using this formula
+	public String formula; // Syntactic representation of the function (without name and equality - only the body)
 
-	public List<FunctionExpr> tuple = new ArrayList<FunctionExpr>(); // If the function is non-primitive, then its value is a combination
+	public List<ExprNode> children = new ArrayList<ExprNode>(); // If the function is non-primitive, then its value is a combination
 	public boolean isTerminal() { // Whether we can continue expression tree, that is, this node can be expanded
-		if(tuple == null || tuple.size() == 0) return true;
+		if(children == null || children.size() == 0) return true;
 		else return false;
 	}
 	
 	public Column column;
+	public Table thisTable; // Primitive expressions in the definition (body) belong to this type (corresponds to 'this' variable)
 
 	//
 	// Parse
@@ -108,7 +109,7 @@ public class FunctionExpr {
 		
 		this.name = "";
 		this.formula = "";
-		this.tuple.clear();
+		this.children.clear();
 
 		//
 		// Find equality
@@ -171,9 +172,9 @@ public class FunctionExpr {
 
 			// Create a tuple for each member and parse it
 			for(String member : members) {
-				FunctionExpr childTuple = new FunctionExpr();
+				ExprNode childTuple = new ExprNode();
 				childTuple.parse(member.trim());
-				this.tuple.add(childTuple);
+				this.children.add(childTuple);
 			}
 			return;
 		}
@@ -186,21 +187,31 @@ public class FunctionExpr {
 	// Bind
 	//
 
-	public void bind(Column column) {
-		this.column = column;
+	public void bind() {
 		
 		if(this.isTerminal()) {
 			this.bindPrimExpr();
 			this.buildPrimExpr();
 		}
 		else {
-			; // TODO: Resolve tuple and then recursion
+			Table output = column.getOutput();
+
+			for(ExprNode expr : children) {
+				Column col = output.getSchema().getColumn(output.getName(), expr.name); // Really resolve name as a column in our type table
+				if(col != null) {
+					expr.column = col;
+				}
+				else {
+					; // TODO: Binding error
+				}
+				
+				expr.thisTable = this.thisTable; // Parent 'this' will be used by all child expressions
+				expr.bind(); // Recursion
+			}
 		}
 	}
 
 	public void bindPrimExpr() { // Resolve column names used in the primitive expression (must be parsed)
-
-		Table input = column.getInput();
 
 		if(primExprDependencies == null) {
 			return;
@@ -214,7 +225,8 @@ public class FunctionExpr {
 		for(PrimExprDependency dep : primExprDependencies) {
 			dep.pathName = formula.substring(dep.start, dep.end);
 			dep.qname = parser.buildQName(dep.pathName);
-			dep.columns = dep.qname.resolveColumns(input); // Really resolve symbol
+			dep.columns = dep.qname.resolveColumns(thisTable); // Really resolve symbol
+			// TODO: Binding errors
 		}
 	}
 	
@@ -267,43 +279,32 @@ public class FunctionExpr {
 	}
 
 	public void evaluate(long i) {
-		if(this.isTerminal()) {
+		if(this.isTerminal()) { // Primitive expression
 			setPrimExprVariables(i); // For each input, read all necessary column values
 			result = computeExpression.evaluate();
 		}
-		else {
-			; // TODO:
-		}
-	}
-
-	protected void evaluatePrimExpr() {
-		
-		Table input = column.getInput();
-		
-		// Evaluate for all rows in the (dirty, new) range
-		Range range = input.getNewRange();
-		for(long i=range.start; i<range.end; i++) {
-
-			// For each input, read all necessary column values
-			for(PrimExprDependency dep : primExprDependencies) {
-				Object value = column.getValue(dep.columns, i);
-				if(value == null) {
-					value = Double.NaN;
-				}
-				computeExpression.setVariable(dep.paramName, ((Number)value).doubleValue()); // Pass these values into the expression
+		else { // Tuple
+			// Evaluation recursion down to primitive expressions which compute primitive values
+			for(ExprNode expr : children) {
+				expr.evaluate(i);
 			}
-
-			// Evaluate and get output value
-			Double result = computeExpression.evaluate();
-
-			// Store the output value for the current row
-			column.setValue(i, result);
+			// After recursion, members are supposed to store result values
+			
+			Table output = column.getOutput();
+			Record r = this.getRecord(); // Output value is this record
+			long row = output.find(r, true); // But we store a record reference so find it
+			result = row; // We store id of the record - not the record itself
 		}
-
 	}
 
-
-	public FunctionExpr() {
+	
+	public Record getRecord() {
+		Record r = new Record();
+		children.forEach(x -> r.set(x.name, x.result));
+		return r;
+	}
+	
+	public ExprNode() {
 	}
 }
 
