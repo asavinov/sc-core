@@ -207,6 +207,7 @@ public class Table {
 		for(long row = range.start; row < range.end; row++) {
 			
 			Record record = new Record();
+			record.set("_id", row);
 
 			for(Column column : columns) {
 				// Get value from the record

@@ -121,7 +121,11 @@ public class Column {
 			ExprNode expr = new ExprNode();
 			expr.parse("[" + this.name + "] = " + this.formula);
 
-			columns = expr.getPrimExprColumnDependencies();
+			expr.thisTable = this.getInput(); // It will be passed recursively to all child expressions
+			expr.column = this;
+			expr.bind();
+
+			columns = expr.getDependencies();
 			schema.setDependency(this, columns); // Update dependency graph
 			return;
 		}
@@ -158,6 +162,7 @@ public class Column {
 		//
 		// Evaluate
 		//
+		expr.beginEvaluate();
 		Range range = input.getNewRange(); // All dirty/new rows
 		for(long i=range.start; i<range.end; i++) {
 			expr.evaluate(i);
@@ -175,6 +180,10 @@ public class Column {
 	}
 	public void setDescriptor(String descriptor) {
 		this.descriptor = descriptor;
+		
+		if(this.formula != null && !this.formula.isEmpty()) {
+			return; // If there is formula then descriptor is not used for dependencies
+		}
 
 		//
 		// Resolve all dependencies

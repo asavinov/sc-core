@@ -42,16 +42,23 @@ public class ExprNode {
 	//
 
 	protected List<PrimExprDependency> primExprDependencies = new ArrayList<PrimExprDependency>();
-	protected List<Column> getPrimExprColumnDependencies() { // Extract column objects (must be bound)
+	public List<Column> getDependencies() { // Extract all unique column objects used (must be bound)
 		List<Column> columns = new ArrayList<Column>();
-
-		for(PrimExprDependency dep : primExprDependencies) {
-			for(Column col : dep.columns) {
-				if(!columns.contains(col)) // Each dependency is a path and different paths can included same segments
-					columns.add(col);
+		if(this.isTerminal()) {
+			for(PrimExprDependency dep : primExprDependencies) {
+				if(dep.columns == null) continue; // Probably not yet resolved
+				dep.columns.forEach(x -> { if(!columns.contains(x)) columns.add(x); }); // Each dependency is a path and different paths can included same segments
 			}
 		}
-		
+		else {
+			// Collect from all children
+			for(ExprNode expr : children) {
+				List<Column> childDeps = expr.getDependencies();
+				if(childDeps == null) continue;
+				childDeps.forEach(x -> { if(!columns.contains(x)) columns.add(x); } );
+			}
+			// Are member names also dependencies? Does this function depend on its tuple member names?
+		}
 		return columns;
 	}
 
@@ -191,7 +198,6 @@ public class ExprNode {
 		
 		if(this.isTerminal()) {
 			this.bindPrimExpr();
-			this.buildPrimExpr();
 		}
 		else {
 			Table output = column.getOutput();
@@ -230,6 +236,12 @@ public class ExprNode {
 		}
 	}
 	
+	//
+	// Values and evaluation
+	//
+
+	public Object result; // Result of evaluation: either primitive value or record id
+
 	// It will be used during evaluation but we build it once
 	protected String transformedComputeFormula;
 	protected Expression computeExpression;
@@ -262,11 +274,16 @@ public class ExprNode {
 		computeExpression = exp;
 	}
 
-	//
-	// Values and evaluation
-	//
-
-	public Object result; // Result of evaluation: either primitive value or record id
+	public void beginEvaluate() {
+		if(this.isTerminal()) {
+			this.buildPrimExpr();
+		}
+		else {
+			for(ExprNode expr : children) {
+				expr.beginEvaluate(); // Recursion
+			}
+		}
+	}
 
 	protected void setPrimExprVariables(long i) {
 		for(PrimExprDependency dep : primExprDependencies) {
