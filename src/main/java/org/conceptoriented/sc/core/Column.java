@@ -110,32 +110,67 @@ public class Column {
 	}
 	public void setFormula(String formula) {
 		this.formula = formula;
+		translate(); // Do it after each assignment in order to get status
+	}
+	
+	public DcError getStatus() {
+		if(expression == null) {
+			return new DcError(DcErrorCode.NONE, "", "");
+		}
+		else {
+			ExprNode errorNode = expression.getErrorNode();
+			if(errorNode == null) {
+				return new DcError(DcErrorCode.NONE, "", "");
+			}
+			else {
+				return errorNode.status;
+			}
+		}
+	}
 
-		//
-		// Resolve all dependencies
-		//
-		List<Column> columns = new ArrayList<Column>();
+	// It is computed dynamically and depends on this column formula, other column properties/status as well as from the column structure (schema, dependencies etc.)
+	// There is own column status and propagated status.
 
-		if(formula != null && !formula.isEmpty()) {
+	// Column own status depends on its own formula like parse status, bind status and evaluate status.
+	// Column own status is determined by what is returned by the parse, bind and evaluate procedures.
+	// These return values can be stored as some more specific exceptions describing the result or error.
 
-			ExprNode expr = new ExprNode();
-			expr.parse("[" + this.name + "] = " + this.formula);
+	// Status propagation rules are defined on the dependency graph of columns and its shows how column status depends on other column statuses in this graph (and its own status)
+	// For example, if the previous column has parse or bind errors then this rule inherits this error even if its own formula can be parsed and bound.
+	
 
-			expr.thisTable = this.getInput(); // It will be passed recursively to all child expressions
-			expr.column = this;
-			expr.bind();
 
-			columns = expr.getDependencies();
-			schema.setDependency(this, columns); // Update dependency graph
+	
+	//
+	// Translate
+	//
+	
+	public ExprNode expression;
+	
+	public void translate() {
+		if(formula == null || formula.isEmpty()) {
+			this.expression = null;
+			schema.setDependency(this, null); // Non-evaluatable column for any reason
 			return;
 		}
 		else {
-			schema.setDependency(this, null); // Non-evaluatable column for any reason
+			List<Column> columns = new ArrayList<Column>();
+
+			expression = new ExprNode();
+
+			// Parse
+			expression.parse("[" + this.name + "] = " + this.formula);
+
+			// Bind
+			expression.thisTable = this.getInput(); // It will be passed recursively to all child expressions
+			expression.column = this;
+			expression.bind();
+
+			columns = expression.getDependencies();
+			schema.setDependency(this, columns); // Update dependency graph
 		}
-
-		// Here we might want to check the validity of the dependency graph (cycles, at least for this column)
 	}
-
+		
 	//
 	// Evaluate
 	//
@@ -145,28 +180,18 @@ public class Column {
 		if(formula == null || formula.isEmpty()) return;
 		
 		//
-		// Parse
+		// Translate
 		//
-		ExprNode expr = new ExprNode();
-		expr.parse("[" + this.name + "] = " + this.formula);
-		//expr.parsePrimExpr();
-		
-		//
-		// Bind
-		//
-		Table input = this.getInput();
-		expr.thisTable = input; // It will be passed recursively to all child expressions
-		expr.column = this;
-		expr.bind();
+		translate();
 
 		//
 		// Evaluate
 		//
-		expr.beginEvaluate();
+		expression.beginEvaluate();
 		Range range = input.getNewRange(); // All dirty/new rows
 		for(long i=range.start; i<range.end; i++) {
-			expr.evaluate(i);
-			this.setValue(i, expr.result); // Store the output value for the current row
+			expression.evaluate(i);
+			this.setValue(i, expression.result); // Store the output value for the current row
 		}
 	}
 

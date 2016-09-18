@@ -33,15 +33,32 @@ public class ExprNode {
 		if(children == null || children.size() == 0) return true;
 		else return false;
 	}
+	public Record childrenToRecord() {
+		Record r = new Record();
+		children.forEach(x -> r.set(x.name, x.result));
+		return r;
+	}
 	
 	public Column column;
 	public Table thisTable; // Primitive expressions in the definition (body) belong to this type (corresponds to 'this' variable)
 
 	//
-	// Parse
+	// Status of the previous operation performed
 	//
+	public DcError status;
+	public ExprNode getErrorNode() { // Find first node with an error and return it. Otherwise, null
+		if(this.status != null && this.status.code != DcErrorCode.NONE) {
+			return this;
+		}
+		for(ExprNode node : children) {
+			ExprNode result = getErrorNode();
+			if(result != null) return result;
+		}
+		return null;
+	}
 
-	protected List<PrimExprDependency> primExprDependencies = new ArrayList<PrimExprDependency>();
+	protected List<PrimExprDependency> primExprDependencies = new ArrayList<PrimExprDependency>(); // Will be filled by parser and then augmented by binder
+	
 	public List<Column> getDependencies() { // Extract all unique column objects used (must be bound)
 		List<Column> columns = new ArrayList<Column>();
 		if(this.isTerminal()) {
@@ -60,6 +77,99 @@ public class ExprNode {
 			// Are member names also dependencies? Does this function depend on its tuple member names?
 		}
 		return columns;
+	}
+
+	//
+	// Parse
+	//
+
+	/**
+	 * Parse formula by possibly building a tree of expressions with primitive expressions in the leaves.
+	 * Any assignment has well defined structure QName=( {sequence of assignments} | expression)
+	 */
+	public void parse(String exprString) {
+		if(exprString == null || exprString.isEmpty()) return;
+		
+		this.name = "";
+		this.formula = "";
+		this.children.clear();
+
+		//
+		// Find equality
+		//
+		int eq = exprString.indexOf("=");
+		
+		if(eq < 0) {
+			this.status = new DcError(DcErrorCode.PARSE_ERROR, "No equality sign.", "Tuple expression is a list of assignments using equality sign.");
+			return;
+		}
+
+		//
+		// Extract name
+		//
+		String name = exprString.substring(0, eq).trim();
+		if(name.startsWith("[")) name = name.substring(1);
+		if(name.endsWith("]")) name = name.substring(0,name.length()-1);
+		
+		this.name = name;
+
+		//
+		// Extract value (function formula)
+		//
+		String value = exprString.substring(eq+1).trim();
+
+		int open = value.indexOf("{");
+		int close = value.lastIndexOf("}");
+		
+		this.formula = value;
+
+		if(open < 0 && close < 0) { // Primitive expression
+			this.parsePrimExpr();
+			return;
+		}
+		else if(open >= 0 && close >= 0 && open < close) { // Tuple - combination of assignments
+			String sequence = value.substring(open+1, close).trim();
+
+			List<String> members = new ArrayList<String>();
+			int previousSeparator = -1;
+			int level = 0; // Work only on level 0
+			for(int i=0; i<sequence.length(); i++) {
+				if(sequence.charAt(i) == '{') {
+					level++;
+				}
+				else if(sequence.charAt(i) == '}') {
+					level--;
+				}
+				
+				if(level > 0) { // We are in a nested block. More closing parentheses are expected to exit from this block.
+					continue;
+				}
+				else if(level < 0) {
+					this.status = new DcError(DcErrorCode.PARSE_ERROR, "Problem with curly braces.", "Opening and closing curly braces must match each other.");
+					return;
+				}
+				
+				// Check if it is a member separator
+				if(sequence.charAt(i) == ';') {
+					members.add(sequence.substring(previousSeparator+1, i));
+					previousSeparator = i;
+				}
+			}
+			members.add(sequence.substring(previousSeparator+1, sequence.length()));
+
+			// Create a tuple for each member and parse it
+			for(String member : members) {
+				ExprNode childTuple = new ExprNode();
+				childTuple.parse(member.trim());
+				this.children.add(childTuple);
+			}
+
+			this.status = new DcError(DcErrorCode.NONE, "Parsed successfully.", "");
+		}
+		else {
+			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Problem with curly braces.", "Tuple expression is a list of assignments in curly braces.");
+			return;
+		}
 	}
 
 	public void parsePrimExpr() { // Find all occurrences of column paths in the primitive expression
@@ -105,143 +215,10 @@ public class ExprNode {
 				primExprDependencies.add(names.get(i));
 			}
 		}
+
+		this.status = new DcError(DcErrorCode.NONE, "Parsed successfully.", "");
 	}
 	
-	/**
-	 * Parse formula by possibly building a tree of expressions with primitive expressions in the leaves.
-	 * Any assignment has well defined structure QName=( {sequence of assignments} | expression)
-	 */
-	public void parse(String exprString) {
-		if(exprString == null || exprString.isEmpty()) return;
-		
-		this.name = "";
-		this.formula = "";
-		this.children.clear();
-
-		//
-		// Find equality
-		//
-		int eq = exprString.indexOf("=");
-		
-		if(eq < 0) return; // Syntax error
-
-		//
-		// Extract name
-		//
-		String name = exprString.substring(0, eq).trim();
-		if(name.startsWith("[")) name = name.substring(1);
-		if(name.endsWith("]")) name = name.substring(0,name.length()-1);
-		
-		this.name = name;
-
-		//
-		// Extract value (function formula)
-		//
-		String value = exprString.substring(eq+1).trim();
-
-		int open = value.indexOf("{");
-		int close = value.lastIndexOf("}");
-		
-		this.formula = value;
-
-		if(open < 0 && close < 0) { // Primitive expression
-			this.parsePrimExpr();
-			return;
-		}
-		else if(open >= 0 && close >= 0 && open < close) { // Tuple - combination of assignments
-			String sequence = value.substring(open+1, close).trim();
-
-			List<String> members = new ArrayList<String>();
-			int previousSeparator = -1;
-			int level = 0; // Work only on level 0
-			for(int i=0; i<sequence.length(); i++) {
-				if(sequence.charAt(i) == '{') {
-					level++;
-				}
-				else if(sequence.charAt(i) == '}') {
-					level--;
-				}
-				
-				if(level > 0) { // We are in a nested block. More closing parentheses are expected to exit from this block.
-					continue;
-				}
-				else if(level < 0) {
-					return; // Syntax error: too many closing parentheses
-				}
-				
-				// Check if it is a member separator
-				if(sequence.charAt(i) == ';') {
-					members.add(sequence.substring(previousSeparator+1, i));
-					previousSeparator = i;
-				}
-			}
-			members.add(sequence.substring(previousSeparator+1, sequence.length()));
-
-			// Create a tuple for each member and parse it
-			for(String member : members) {
-				ExprNode childTuple = new ExprNode();
-				childTuple.parse(member.trim());
-				this.children.add(childTuple);
-			}
-			return;
-		}
-		else {
-			return; // Syntax error
-		}
-	}
-
-	//
-	// Bind
-	//
-
-	public void bind() {
-		
-		if(this.isTerminal()) {
-			this.bindPrimExpr();
-		}
-		else {
-			Table output = column.getOutput();
-
-			for(ExprNode expr : children) {
-				Column col = output.getSchema().getColumn(output.getName(), expr.name); // Really resolve name as a column in our type table
-				if(col != null) {
-					expr.column = col;
-				}
-				else {
-					; // TODO: Binding error
-				}
-				
-				expr.thisTable = this.thisTable; // Parent 'this' will be used by all child expressions
-				expr.bind(); // Recursion
-			}
-		}
-	}
-
-	public void bindPrimExpr() { // Resolve column names used in the primitive expression (must be parsed)
-
-		if(primExprDependencies == null) {
-			return;
-		}
-		
-		//
-		// Resolve each column name in the path
-		//
-    	QNameBuilder parser = new QNameBuilder();
-    	
-		for(PrimExprDependency dep : primExprDependencies) {
-			dep.pathName = formula.substring(dep.start, dep.end);
-			dep.qname = parser.buildQName(dep.pathName);
-			dep.columns = dep.qname.resolveColumns(thisTable); // Really resolve symbol
-			// TODO: Binding errors
-		}
-	}
-	
-	//
-	// Values and evaluation
-	//
-
-	public Object result; // Result of evaluation: either primitive value or record id
-
 	// It will be used during evaluation but we build it once
 	protected String transformedComputeFormula;
 	protected Expression computeExpression;
@@ -273,6 +250,64 @@ public class ExprNode {
 		
 		computeExpression = exp;
 	}
+
+	//
+	// Bind
+	//
+
+	public void bind() {
+		
+		if(this.isTerminal()) {
+			this.bindPrimExpr();
+		}
+		else {
+			Table output = column.getOutput();
+
+			for(ExprNode expr : children) {
+				Column col = output.getSchema().getColumn(output.getName(), expr.name); // Really resolve name as a column in our type table
+				if(col != null) {
+					expr.column = col;
+				}
+				else {
+					this.status = new DcError(DcErrorCode.BIND_ERROR, "Column name not found.", "Error finding column with the name [" + expr.name + "]");
+					return;
+				}
+				
+				expr.thisTable = this.thisTable; // Parent 'this' will be used by all child expressions
+				expr.bind(); // Recursion
+			}
+			this.status = new DcError(DcErrorCode.NONE, "Resolved successfully.", "");
+		}
+	}
+
+	public void bindPrimExpr() { // Resolve column names used in the primitive expression (must be parsed)
+
+		if(primExprDependencies == null) {
+			return;
+		}
+		
+		//
+		// Resolve each column name in the path
+		//
+    	QNameBuilder parser = new QNameBuilder();
+    	
+		for(PrimExprDependency dep : primExprDependencies) {
+			dep.pathName = formula.substring(dep.start, dep.end);
+			dep.qname = parser.buildQName(dep.pathName);
+			dep.columns = dep.qname.resolveColumns(thisTable); // Really resolve symbol
+			if(dep.columns == null) {
+				this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve columns.", "Error resolving columns " + dep.pathName);
+				return;
+			}
+		}
+		this.status = new DcError(DcErrorCode.NONE, "Resolved successfully.", "");
+	}
+	
+	//
+	// Evaluate
+	//
+
+	public Object result; // Result of evaluation: either primitive value or record id
 
 	public void beginEvaluate() {
 		if(this.isTerminal()) {
@@ -308,18 +343,12 @@ public class ExprNode {
 			// After recursion, members are supposed to store result values
 			
 			Table output = column.getOutput();
-			Record r = this.getRecord(); // Output value is this record
+			Record r = this.childrenToRecord(); // Output value is this record
 			long row = output.find(r, true); // But we store a record reference so find it
 			result = row; // We store id of the record - not the record itself
 		}
 	}
 
-	
-	public Record getRecord() {
-		Record r = new Record();
-		children.forEach(x -> r.set(x.name, x.result));
-		return r;
-	}
 	
 	public ExprNode() {
 	}

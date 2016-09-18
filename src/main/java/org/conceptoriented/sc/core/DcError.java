@@ -3,13 +3,13 @@ package org.conceptoriented.sc.core;
 public class DcError extends Exception {
 	public DcErrorCode code;
 	public String message;
-	public String message2;
+	public String description;
 	
 	public String toJson() {
 		String jcode = "`code`:" + code.getValue() + "";
 		String jmessage = "`message`:`" + message + "`";
-		String jmessage2 = "`message2`:`" + message2 + "`";
-		String json = "{`error`: {" + jcode + ", " + jmessage + ", " + jmessage2 + "}}";
+		String jdescription = "`description`:`" + description + "`";
+		String json = "{`error`: {" + jcode + ", " + jmessage + ", " + jdescription + "}}";
 		return json.replace('`', '"');
 	}
 
@@ -46,9 +46,9 @@ public class DcError extends Exception {
 		return (new DcError(code, message, message2)).toJson();
 	}
 
-	public DcError(DcErrorCode code, String message, String message2) {
+	public DcError(DcErrorCode code, String message, String description) {
 		this.code = code;
 		this.message = message;
-		this.message2 = message2;
+		this.description = description;
 	}
 }
