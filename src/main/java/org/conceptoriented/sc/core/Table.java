@@ -65,6 +65,9 @@ public class Table {
 	public Range getDelRange() {
 		return new Range(delRange);
 	}
+	public Range getNonDelRange() {
+		return new Range(getCleanRange().start, getNewRange().end);
+	}
 
 	// These records have been already evaluated (clean)
 	// We need to store start and end rows
@@ -122,7 +125,7 @@ public class Table {
 		List<Object> values = names.stream().map(x -> record.get(x)).collect(Collectors.<Object>toList());
 		List<Column> columns = names.stream().map(x -> this.getSchema().getColumn(this.getName(), x)).collect(Collectors.<Column>toList());
 		
-		Range range = new Range(getCleanRange().start, getNewRange().end);
+		Range range = getNonDelRange();
 		long index = -1;
 		for(long i=range.start; i<range.end; i++) { // Scan all records and compare
 
@@ -197,7 +200,7 @@ public class Table {
 
 	public List<Record> read(Range range) {
 		if(range == null) {
-			range = this.getCleanRange();
+			range = getNonDelRange();
 		}
 
 		// Get all outgoing columns
