@@ -9,8 +9,10 @@ public class DcError extends Exception {
 		String jcode = "`code`:" + code.getValue() + "";
 		String jmessage = "`message`:`" + message + "`";
 		String jdescription = "`description`:`" + description + "`";
-		String json = "{`error`: {" + jcode + ", " + jmessage + ", " + jdescription + "}}";
-		return json.replace('`', '"');
+
+		String json = jcode + ", " + jmessage + ", " + jdescription;
+
+		return ("{" + json + "}").replace('`', '"');
 	}
 
 	public static String error(DcErrorCode code, String message2) {
@@ -39,13 +41,19 @@ public class DcError extends Exception {
 		
 		DcError error = new DcError(code, message, message2);
 
-		return error.toJson();
+		return "{\"error\": " + error.toJson() + "}";
 	}
 
 	public static String error(DcErrorCode code, String message, String message2) {
-		return (new DcError(code, message, message2)).toJson();
+		DcError error = new DcError(code, message, message2);
+		return "{\"error\": " + error.toJson() + "}";
 	}
 
+	@Override
+	public String toString() {
+		return "[" + this.code + "]: " + this.message;
+	}
+	
 	public DcError(DcErrorCode code, String message, String description) {
 		this.code = code;
 		this.message = message;

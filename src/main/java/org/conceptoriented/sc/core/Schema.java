@@ -299,9 +299,12 @@ public class Schema {
 	}
 
 	//
-	// Data (state)
+	// Dependencies
 	//
 	
+	/**
+	 * For each column, we store all other columns it directly depends on, that is, columns that it directly uses in its formula
+	 */
 	protected Map<Column,List<Column>> dependencies = new HashMap<Column,List<Column>>();
 	public List<Column> getDependency(Column column) {
 		return dependencies.get(column);
@@ -310,23 +313,25 @@ public class Schema {
 		dependencies.put(column, deps);
 	}
 
-	protected List<Column> getPassiveColumns() {
-		// Return all columns without definition (which need not be evaluated and always non-dirty)
+	// Return all columns with no definition which therefore are supposed to be always clean and do not need evaluation
+	protected List<Column> getStartingColumns() {
 		List<Column> res = columns.stream().filter(x -> x.getFormula() == null && x.getDescriptor() == null).collect(Collectors.<Column>toList());
 		return res;
 	}
 
-	// Output is a list of columns which are ready to be evaluated because all their dependencies are evaluated or do not need evaluation
-	// The parameter is a list of already evaluated (non-dirty) columns
-	protected List<Column> getCanEvaluate(List<Column> evaluated) {
+	// Get all column which have all their dependencies covered by the specified columns in the parameter list.
+	// We get all columns that directly depend on the specified columns.
+	// If the parameter includes all already evaluated columns then the output has columns that are ready to be evaluated on the next step.
+	// Essentially, we follow the dependency graph by generating next layer of columns in the output based on the previous layer of columns in the parameter.
+	protected List<Column> getNextColumns(List<Column> previousColumns) {
 		List<Column> res = new ArrayList<Column>();
 		
 		for(Map.Entry<Column, List<Column>> entry : dependencies.entrySet()) {
 			Column col = entry.getKey();
 			List<Column> deps = entry.getValue();
 			if(deps == null) continue; // Non-evaluatable (no formula or error)
-			if(evaluated.contains(col)) continue; // Skip already evaluated columns
-			if(evaluated.containsAll(deps)) { // All deps have to be evaluated (non-dirty)
+			if(previousColumns.contains(col)) continue; // Skip already evaluated columns
+			if(previousColumns.containsAll(deps)) { // All deps have to be evaluated (non-dirty)
 				res.add(col); 
 			}
 		}
@@ -334,19 +339,74 @@ public class Schema {
 		return res;
 	}
 
-	// Evaluate the schema. Make again consistent (non-dirty). Only new (dirty) rows will be evaluated.
+
+	/**
+	 * Parse and bind all column formulas in the schema. The result is stored in the state property of each column.
+	 */
+	public void translate() {
+		
+		// Translate all columns individually by filling in their own dependencies and their own status
+		// Propagate translation status through the graph
+		
+		// Result deps are up-to-date
+		// Translation own status is up-to-date
+		// Translation dependency status is up-to-date
+		
+		// How does it influence data status
+		
+
+		
+		
+		
+		// Complete translation means: parse all individual column formulas and bind all individual column formulas
+		// Dependencies are reset, that is, empty and we start from having no dependencies
+		// Results: 
+		// - dependencies are generated (even if some formulas have errors), 
+		// - all column statuses are set (with errors if any or success or anything that can be shown as status)
+		// - 
+		// What if a column has not been changed? 
+		// What happens with data status? For example, does it mean that all column data are marked dirty (even if the column has not changed)?
+
+		// One option is to translate only columns marked as 'formula changed' or 'name changed' (name can influence other columns). 
+		// In other words, in addition to data status (new, deleted, clean) we need a kind of schema/formula status which is important for translation phase.
+		// Note that changing formula makes automatically data dirty. However, it also makes this column formula dirty. What is the difference?
+		
+		// Track status of: column status, e.g., color and message, column evaluate status (dirty, errors), table status (new rows)
+		// Update (dirty) status: column name changed, column formula changed (expr, fact, path), rows added (data status)
+		// What we want to display? Status for each column: ...
+		
+		// Display translate status with explicit action, that is, 
+		// we need to update Translate status of all columns (and other elements) after any change automatically.
+		// Changes: name and property changes, formula and properties changes 
+		// Formula/translation Status: no-formula (not evaluable, no deps), valid/invalid own formula + valid/invalid dependant formulas -> readiness to evaluate
+		// After every column edit, we update - deps, own formulas, deps erro propagation - and store the new statuses so that they can be requested
+		// Alternatively, we can simply store all changes, while the complete status is computed by means of explicit call of Translate function.
+		
+		// What about dirty status of data? 
+		// If it is separate, then it is clean after (successfull) evaluation of this column
+		// If no formula, then no status (non-evaluable, e.g., always green or gray). Determined by property like HasFormula() 
+		// If formula is changed then it and all its followers are marked dirty. It is done directly in the data.
+		// If rows are added then all column of this table are marked dirty (which can be determined by dirty status of table/column data)
+		
+		
+	}
+
+	/**
+	 * Evaluate all columns of the schema. The result is stored in the state property of each column.
+	 * Only new (dirty) rows will be evaluated and made clean (non-dirty). 
+	 */
 	public void evaluate() {
 
-		List<Column> evaluated = getPassiveColumns(); // Start from non-evaluatable columns (no definition)
-		List<Column> toBeEvaluated = getCanEvaluate(evaluated); // First iteration
-		while(toBeEvaluated.size() > 0) {
+		List<Column> readyColumns = getStartingColumns(); // Start from non-evaluatable columns (no definition)
+		List<Column> nextColumns = getNextColumns(readyColumns); // First iteration
+		while(nextColumns.size() > 0) {
 			// Evaluate all columns that can be evaluated
-			for(Column col : toBeEvaluated) {
+			for(Column col : nextColumns) {
 				col.evaluate();
-				evaluated.add(col);
+				readyColumns.add(col);
 			}
 			// Next iteration
-			toBeEvaluated = getCanEvaluate(evaluated);
+			nextColumns = getNextColumns(readyColumns);
 		}
 
 		//

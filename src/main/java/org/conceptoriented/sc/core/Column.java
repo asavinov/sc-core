@@ -166,7 +166,7 @@ public class Column {
 	public void translate() {
 		if(formula == null || formula.isEmpty()) {
 			this.expression = null;
-			schema.setDependency(this, null); // Non-evaluatable column for any reason
+			schema.setDependency(this, null); // Non-evaluatable column independent of the reason
 			return;
 		}
 		else {
@@ -370,7 +370,9 @@ public class Column {
 		//String jdescr = "`descriptor`: " + (this.getDescriptor() != null ? "`"+this.getDescriptor()+"`" : "null");
 		String jdescr = "`descriptor`: " + JSONObject.valueToString(this.getDescriptor()) + "";
 
-		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jfmla + ", " + jftbl + ", " + jgrp + ", " + jdescr;
+		String jstatus = "`status`: " + (this.getStatus() != null ? this.getStatus().toJson() : "undefined");
+
+		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jfmla + ", " + jftbl + ", " + jgrp + ", " + jdescr + ", " + jstatus;
 
 		return ("{" + json + "}").replace('`', '"');
 	}
