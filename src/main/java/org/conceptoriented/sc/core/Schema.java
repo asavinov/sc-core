@@ -267,6 +267,10 @@ public class Schema {
 
 		String formula = (String)JSONObject.stringToValue(obj.has("formula") && !obj.isNull("formula") ? obj.getString("formula") : "");
 		
+		String facttable = (String)JSONObject.stringToValue(obj.has("facttable") && !obj.isNull("facttable") ? obj.getString("facttable") : "");
+
+		String grouppath = (String)JSONObject.stringToValue(obj.has("grouppath") && !obj.isNull("grouppath") ? obj.getString("grouppath") : "");
+
 		// Descriptor is either JSON object or JSON string with an object but we want to store a string
 		String descr_string = null;
 		Object jdescr = obj.get("descriptor");
@@ -285,6 +289,8 @@ public class Schema {
 		if(obj.has("output")) column.setOutput(output);
 		if(obj.has("name")) column.setName(obj.getString("name"));
 		if(obj.has("formula")) column.setFormula(formula);
+		if(obj.has("facttable")) column.setFacttable(facttable);
+		if(obj.has("grouppath")) column.setGrouppath(grouppath);
 		if(obj.has("descriptor")) column.setDescriptor(descr_string);
 	}
 	public void deleteColumn(String id) {

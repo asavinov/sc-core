@@ -113,6 +113,22 @@ public class Column {
 		translate(); // Do it after each assignment in order to get status
 	}
 	
+	protected String facttable;
+	public String getFacttable() {
+		return facttable;
+	}
+	public void setFacttable(String facttable) {
+		this.facttable = facttable;
+	}
+	
+	protected String grouppath;
+	public String getGrouppath() {
+		return grouppath;
+	}
+	public void setGrouppath(String grouppath) {
+		this.grouppath = grouppath;
+	}
+	
 	public DcError getStatus() {
 		if(expression == null) {
 			return new DcError(DcErrorCode.NONE, "", "");
@@ -348,11 +364,13 @@ public class Column {
 		String jout = "`output`: {" + joutid + "}";
 
 		String jfmla = "`formula`: " + JSONObject.valueToString(this.getFormula()) + "";
+		String jftbl = "`facttable`: " + JSONObject.valueToString(this.getFacttable()) + "";
+		String jgrp = "`grouppath`: " + JSONObject.valueToString(this.getGrouppath()) + "";
 
 		//String jdescr = "`descriptor`: " + (this.getDescriptor() != null ? "`"+this.getDescriptor()+"`" : "null");
 		String jdescr = "`descriptor`: " + JSONObject.valueToString(this.getDescriptor()) + "";
 
-		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jfmla + ", " + jdescr;
+		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jfmla + ", " + jftbl + ", " + jgrp + ", " + jdescr;
 
 		return ("{" + json + "}").replace('`', '"');
 	}
