@@ -59,14 +59,12 @@ public class Schema {
 		return tables;
 	}
 	public Table getTable(String table) {
-        Optional<Table> ret = tables.stream().filter(x -> x.getName().equalsIgnoreCase(table)).findAny();
-        if(ret.isPresent()) return ret.get();
-        else return null;
+        Table ret = tables.stream().filter(x -> x.getName().equalsIgnoreCase(table)).findAny().orElse(null);
+        return ret;
 	}
 	public Table getTableById(String id) {
-        Optional<Table> ret = tables.stream().filter(x -> x.getId().toString().equals(id)).findAny();
-        if(ret.isPresent()) return ret.get();
-        else return null;
+        Table ret = tables.stream().filter(x -> x.getId().toString().equals(id)).findAny().orElse(null);
+        return ret;
 	}
 
 	public Table createTable(String name) {
@@ -164,14 +162,12 @@ public class Schema {
 		return res;
 	}
 	public Column getColumn(String table, String column) {
-        Optional<Column> ret = columns.stream().filter(x -> x.getInput().getName().equalsIgnoreCase(table) && x.getName().equalsIgnoreCase(column)).findAny();
-        if(ret.isPresent()) return ret.get();
-        else return null;
+        Column ret = columns.stream().filter(x -> x.getInput().getName().equalsIgnoreCase(table) && x.getName().equalsIgnoreCase(column)).findAny().orElse(null);
+        return ret;
 	}
 	public Column getColumnById(String id) {
-        Optional<Column> ret = columns.stream().filter(x -> x.getId().toString().equals(id)).findAny();
-        if(ret.isPresent()) return ret.get();
-        else return null;
+        Column ret = columns.stream().filter(x -> x.getId().toString().equals(id)).findAny().orElse(null);
+        return ret;
 	}
 
 	public Column createColumn(String name, String input, String output) {
@@ -331,6 +327,11 @@ public class Schema {
 			List<Column> deps = entry.getValue();
 			if(deps == null) continue; // Non-evaluatable (no formula or error)
 			if(previousColumns.contains(col)) continue; // Skip already evaluated columns
+
+			// Find at least one column with errors which are not suitable for propagation
+			Column errCol = deps.stream().filter(x -> x.getStatus() != null && x.getStatus().code != DcErrorCode.NONE).findAny().orElse(null);
+			if(errCol != null) continue;
+			
 			if(previousColumns.containsAll(deps)) { // All deps have to be evaluated (non-dirty)
 				res.add(col); 
 			}
@@ -402,8 +403,10 @@ public class Schema {
 		while(nextColumns.size() > 0) {
 			// Evaluate all columns that can be evaluated
 			for(Column col : nextColumns) {
-				col.evaluate();
-				readyColumns.add(col);
+				if(col.getStatus() == null || col.getStatus().code == DcErrorCode.NONE) {
+					col.evaluate();
+					readyColumns.add(col);
+				}
 			}
 			// Next iteration
 			nextColumns = getNextColumns(readyColumns);
