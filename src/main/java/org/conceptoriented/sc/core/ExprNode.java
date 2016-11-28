@@ -2,8 +2,10 @@ package org.conceptoriented.sc.core;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -62,7 +64,7 @@ public class ExprNode {
 	public List<Column> getDependencies() { // Extract all unique column objects used (must be bound)
 		List<Column> columns = new ArrayList<Column>();
 		if(this.isTerminal()) {
-			for(PrimExprDependency dep : primExprDependencies) {
+			for(PrimExprDependency dep : this.primExprDependencies) {
 				if(dep.columns == null) continue; // Probably not yet resolved
 				dep.columns.forEach(x -> { if(!columns.contains(x)) columns.add(x); }); // Each dependency is a path and different paths can included same segments
 			}
@@ -173,7 +175,7 @@ public class ExprNode {
 	}
 
 	public void parsePrimExpr() { // Find all occurrences of column paths in the primitive expression
-		primExprDependencies = new ArrayList<PrimExprDependency>();
+		this.primExprDependencies = new ArrayList<PrimExprDependency>();
 
 		if(formula == null || formula.isEmpty()) {
 			return;
@@ -201,7 +203,7 @@ public class ExprNode {
 		//
 		for(int i = 0; i < names.size(); i++) {
 			if(i == names.size()-1) { // Last element does not have continuation
-				primExprDependencies.add(names.get(i));
+				this.primExprDependencies.add(names.get(i));
 				break;
 			}
 			
@@ -212,45 +214,13 @@ public class ExprNode {
 				names.get(i+1).start = names.get(i).start; // Attach this name to the next name as a prefix
 			}
 			else { // No continuation. Ready to copy as path.
-				primExprDependencies.add(names.get(i));
+				this.primExprDependencies.add(names.get(i));
 			}
 		}
 
 		this.status = new DcError(DcErrorCode.NONE, "Parsed successfully.", "");
 	}
 	
-	// It will be used during evaluation but we build it once
-	protected String transformedComputeFormula;
-	protected Expression computeExpression;
-
-	public void buildPrimExpr() {
-		//
-		// Transform the expression by using new names and get an executable expression
-		//
-		StringBuffer buf = new StringBuffer(formula);
-		for(int i = primExprDependencies.size()-1; i >= 0; i--) {
-			PrimExprDependency dep = primExprDependencies.get(i);
-			dep.paramName = "__p__"+i;
-			buf.replace(dep.start, dep.end, dep.paramName);
-		}
-		
-		transformedComputeFormula = buf.toString();
-
-		//
-		// Create expression object with the transformed formula
-		//
-		ExpressionBuilder builder = new ExpressionBuilder(transformedComputeFormula);
-		Set<String> vars = primExprDependencies.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
-		builder.variables(vars);
-
-		Expression exp = builder.build(); // Here we get parsing exceptions which might need be caught and processed
-		
-		ValidationResult res = exp.validate(); // Boolean argument can be used to ignore unknown variables
-		res.isValid();
-		
-		computeExpression = exp;
-	}
-
 	//
 	// Bind
 	//
@@ -282,7 +252,7 @@ public class ExprNode {
 
 	public void bindPrimExpr() { // Resolve column names used in the primitive expression (must be parsed)
 
-		if(primExprDependencies == null) {
+		if(this.primExprDependencies == null) {
 			return;
 		}
 		
@@ -291,21 +261,77 @@ public class ExprNode {
 		//
     	QNameBuilder parser = new QNameBuilder();
     	
-		for(PrimExprDependency dep : primExprDependencies) {
+		for(PrimExprDependency dep : this.primExprDependencies) {
 			dep.pathName = formula.substring(dep.start, dep.end);
 			dep.qname = parser.buildQName(dep.pathName);
-			dep.columns = dep.qname.resolveColumns(thisTable); // Really resolve symbol
-			if(dep.columns == null) {
+			dep.columns = dep.qname.resolveColumns(thisTable); // Try to really resolve symbol
+			if(dep.columns == null || dep.columns.size() < dep.qname.names.size()) {
 				this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve columns.", "Error resolving columns " + dep.pathName);
 				return;
 			}
 		}
-		this.status = new DcError(DcErrorCode.NONE, "Resolved successfully.", "");
+		
+		//
+		// Parse and bind the final expression
+		//
+		buildPrimExpr();
 	}
 	
 	//
 	// Evaluate
 	//
+
+	// It will be used during evaluation but we build it once
+	protected String transformedComputeFormula;
+	protected Expression computeExpression;
+
+	public void buildPrimExpr() {
+		//
+		// Transform the expression by using new names and get an executable expression
+		//
+		StringBuffer buf = new StringBuffer(formula);
+		for(int i = this.primExprDependencies.size()-1; i >= 0; i--) {
+			PrimExprDependency dep = this.primExprDependencies.get(i);
+			dep.paramName = "__p__"+i;
+			buf.replace(dep.start, dep.end, dep.paramName);
+		}
+		
+		Set<String> vars = new HashSet<String>();
+		Map<String, Double> vals = new HashMap<String, Double>();
+		for(PrimExprDependency dep : this.primExprDependencies) {
+			vars.add(dep.paramName);
+			vals.put(dep.paramName, 0.0);
+		}
+		// Set<String> vars = this.primExprDependencies.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
+
+		this.transformedComputeFormula = buf.toString();
+
+		//
+		// Create expression object with the transformed formula
+		//
+		ExpressionBuilder builder = new ExpressionBuilder(this.transformedComputeFormula);
+		builder.variables(vars);
+
+		Expression exp = null;
+		try {
+			exp = builder.build(); // Here we get parsing exceptions which might need be caught and processed
+		}
+		catch(Exception e) {
+			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Expression error.", e.getMessage());
+			this.computeExpression = null;
+			return;
+		}
+		exp.setVariables(vals);
+		
+		ValidationResult res = exp.validate(); // Boolean argument can be used to ignore unknown variables
+		if(!res.isValid()) {
+			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Expression error.", res.getErrors() != null && res.getErrors().size() > 0 ? res.getErrors().get(0) : "");
+			this.computeExpression = null;
+		}
+		{
+			this.computeExpression = exp;
+		}
+	}
 
 	public Object result; // Result of evaluation: either primitive value or record id
 
@@ -321,19 +347,19 @@ public class ExprNode {
 	}
 
 	protected void setPrimExprVariables(long i) {
-		for(PrimExprDependency dep : primExprDependencies) {
+		for(PrimExprDependency dep : this.primExprDependencies) {
 			Object value = column.getValue(dep.columns, i);
 			if(value == null) {
 				value = Double.NaN;
 			}
-			computeExpression.setVariable(dep.paramName, ((Number)value).doubleValue()); // Pass these values into the expression
+			this.computeExpression.setVariable(dep.paramName, ((Number)value).doubleValue()); // Pass these values into the expression
 		}
 	}
 
 	public void evaluate(long i) {
 		if(this.isTerminal()) { // Primitive expression
 			setPrimExprVariables(i); // For each input, read all necessary column values
-			result = computeExpression.evaluate();
+			result = this.computeExpression.evaluate();
 		}
 		else { // Tuple
 			// Evaluation recursion down to primitive expressions which compute primitive values

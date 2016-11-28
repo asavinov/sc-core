@@ -22,6 +22,9 @@ public class QName {
 		
 		for(String name : names) {
 			Column column = schema.getColumn(table.getName(), name);
+			if(column == null) { // Cannot resolve
+				break;
+			}
 			result.add(column);
 			table = column.getOutput();
 		}
