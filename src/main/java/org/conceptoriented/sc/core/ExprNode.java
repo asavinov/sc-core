@@ -22,14 +22,39 @@ import net.objecthunter.exp4j.ValidationResult;
 public class ExprNode {
 	
 	//
-	// Syntax and parsing
+	// Formula belongs to either group table or fact table if it exists (in the case of aggregation)
 	//
-
-	public String name;
-	public String type;
-
 	public String formula; // Syntactic representation of the function (without name and equality - only the body)
 
+	//
+	// Mandatory parameters (main or group table)
+	//
+	public String tableName; // Table where we define a new (aggregated) column
+	public Table table;
+	public String name; // (Aggregated) column name that is being defined
+	public Column column;
+
+	//
+	// Optional parameters only for aggregated columns (fact or loop table)
+	//
+	public String facttableName; // It is table we loop through (this table)
+	public Table facttable; // Primitive expressions in the definition (body) belong to this type (corresponds to 'this' variable). It is resolved from the corresponding table name.
+	public String grouppathName; // It is a path from the fact table to the group table
+	public List<Column> grouppath; // Path from fact table to group table (or empty). It is resolved from the syntactic path.
+
+	// In future, we could introduce an explicit flag
+	private boolean isCalculated() {
+		if(facttableName == null || facttableName.trim().isEmpty()) return true;
+		if(facttableName.equalsIgnoreCase(tableName)) return true;
+		return false;
+	}
+	private boolean isAggregated() {
+		return ! isCalculated();
+	}
+
+	//
+	// Tuple expression
+	//
 	public List<ExprNode> children = new ArrayList<ExprNode>(); // If the function is non-primitive, then its value is a combination
 	public boolean isTerminal() { // Whether we can continue expression tree, that is, this node can be expanded
 		if(children == null || children.size() == 0) return true;
@@ -41,9 +66,6 @@ public class ExprNode {
 		return r;
 	}
 	
-	public Column column;
-	public Table thisTable; // Primitive expressions in the definition (body) belong to this type (corresponds to 'this' variable)
-
 	//
 	// Status of the previous operation performed
 	//
@@ -89,48 +111,18 @@ public class ExprNode {
 	 * Parse formula by possibly building a tree of expressions with primitive expressions in the leaves.
 	 * Any assignment has well defined structure QName=( {sequence of assignments} | expression)
 	 */
-	public void parse(String exprString) {
-		if(exprString == null || exprString.isEmpty()) return;
+	public void parse() {
+		if(this.formula == null || this.formula.isEmpty()) return;
+
+		int open = this.formula.indexOf("{");
+		int close = this.formula.lastIndexOf("}");
 		
-		this.name = "";
-		this.formula = "";
-		this.children.clear();
-
-		//
-		// Find equality
-		//
-		int eq = exprString.indexOf("=");
-		
-		if(eq < 0) {
-			this.status = new DcError(DcErrorCode.PARSE_ERROR, "No equality sign.", "Tuple expression is a list of assignments using equality sign.");
-			return;
-		}
-
-		//
-		// Extract name
-		//
-		String name = exprString.substring(0, eq).trim();
-		if(name.startsWith("[")) name = name.substring(1);
-		if(name.endsWith("]")) name = name.substring(0,name.length()-1);
-		
-		this.name = name;
-
-		//
-		// Extract value (function formula)
-		//
-		String value = exprString.substring(eq+1).trim();
-
-		int open = value.indexOf("{");
-		int close = value.lastIndexOf("}");
-		
-		this.formula = value;
-
 		if(open < 0 && close < 0) { // Primitive expression
 			this.parsePrimExpr();
 			return;
 		}
 		else if(open >= 0 && close >= 0 && open < close) { // Tuple - combination of assignments
-			String sequence = value.substring(open+1, close).trim();
+			String sequence = this.formula.substring(open+1, close).trim();
 
 			List<String> members = new ArrayList<String>();
 			int previousSeparator = -1;
@@ -161,8 +153,20 @@ public class ExprNode {
 
 			// Create a tuple for each member and parse it
 			for(String member : members) {
+				int eq = member.indexOf("=");
+				if(eq < 0) {
+					this.status = new DcError(DcErrorCode.PARSE_ERROR, "No equality sign.", "Tuple expression is a list of assignments using equality sign.");
+					return;
+				}
+				String left = member.substring(0, eq).trim();
+				if(left.startsWith("[")) left = left.substring(1);
+				if(left.endsWith("]")) left = left.substring(0,left.length()-1);
+				String rigth = member.substring(eq+1).trim();
+
 				ExprNode childTuple = new ExprNode();
-				childTuple.parse(member.trim());
+				childTuple.formula = rigth;
+				childTuple.name = left;
+				childTuple.parse();
 				this.children.add(childTuple);
 			}
 
@@ -177,9 +181,7 @@ public class ExprNode {
 	public void parsePrimExpr() { // Find all occurrences of column paths in the primitive expression
 		this.primExprDependencies = new ArrayList<PrimExprDependency>();
 
-		if(formula == null || formula.isEmpty()) {
-			return;
-		}
+		if(this.formula == null || this.formula.isEmpty()) return;
 		
 		String ex =  "\\[(.*?)\\]";
 		//String ex = "[\\[\\]]";
@@ -218,6 +220,20 @@ public class ExprNode {
 			}
 		}
 
+		//
+		// If aggregation then check additional parameters
+		//
+		if(isAggregated()) {
+			// this.facttableName has to be correct table name
+			// this.grouppathName has to be correct column path
+	    	QNameBuilder parser = new QNameBuilder();
+			QName qn = parser.buildQName(this.grouppathName);
+			if(qn == null || qn.names.size() == 0) {
+				this.status = new DcError(DcErrorCode.PARSE_ERROR, "Syntax error in group path.", "Error group path: '" + this.grouppathName + "'");
+				return;
+			}
+		}
+
 		this.status = new DcError(DcErrorCode.NONE, "Parsed successfully.", "");
 	}
 	
@@ -243,7 +259,7 @@ public class ExprNode {
 					return;
 				}
 				
-				expr.thisTable = this.thisTable; // Parent 'this' will be used by all child expressions
+				expr.facttable = this.facttable; // Parent 'this' will be used by all child expressions
 				expr.bind(); // Recursion
 			}
 			this.status = new DcError(DcErrorCode.NONE, "Resolved successfully.", "");
@@ -264,7 +280,7 @@ public class ExprNode {
 		for(PrimExprDependency dep : this.primExprDependencies) {
 			dep.pathName = formula.substring(dep.start, dep.end);
 			dep.qname = parser.buildQName(dep.pathName);
-			dep.columns = dep.qname.resolveColumns(thisTable); // Try to really resolve symbol
+			dep.columns = dep.qname.resolveColumns(facttable); // Try to really resolve symbol
 			if(dep.columns == null || dep.columns.size() < dep.qname.names.size()) {
 				this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve columns.", "Error resolving columns " + dep.pathName);
 				return;
@@ -296,6 +312,11 @@ public class ExprNode {
 			buf.replace(dep.start, dep.end, dep.paramName);
 		}
 		
+		this.transformedComputeFormula = buf.toString();
+
+		//
+		// Create a list of variables used in the expression
+		//
 		Set<String> vars = new HashSet<String>();
 		Map<String, Double> vals = new HashMap<String, Double>();
 		for(PrimExprDependency dep : this.primExprDependencies) {
@@ -303,17 +324,18 @@ public class ExprNode {
 			vals.put(dep.paramName, 0.0);
 		}
 		// Set<String> vars = this.primExprDependencies.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
-
-		this.transformedComputeFormula = buf.toString();
+		
+		// Add the current output value as a special (reserved) variable
+		vars.add("output");
+		vals.put("output", 0.0);
 
 		//
 		// Create expression object with the transformed formula
 		//
-		ExpressionBuilder builder = new ExpressionBuilder(this.transformedComputeFormula);
-		builder.variables(vars);
-
 		Expression exp = null;
 		try {
+			ExpressionBuilder builder = new ExpressionBuilder(this.transformedComputeFormula);
+			builder.variables(vars);
 			exp = builder.build(); // Here we get parsing exceptions which might need be caught and processed
 		}
 		catch(Exception e) {
@@ -346,19 +368,25 @@ public class ExprNode {
 		}
 	}
 
-	protected void setPrimExprVariables(long i) {
+	protected void setPrimExprVariables(long i) { // Pass all variable values for the specified input to the compute expression
 		for(PrimExprDependency dep : this.primExprDependencies) {
+			// TODO: The values are read from the fact table which is different from this column input table - it is group column input table.
 			Object value = column.getValue(dep.columns, i);
 			if(value == null) {
 				value = Double.NaN;
 			}
-			this.computeExpression.setVariable(dep.paramName, ((Number)value).doubleValue()); // Pass these values into the expression
+			this.computeExpression.setVariable(dep.paramName, ((Number)value).doubleValue());
 		}
+		
+		// Set current output value as a special variable. 
+		// TODO: The value is read from this (group) table, that is, where the new output will be written to
+		Object outputValue = column.getValue(i);
+		this.computeExpression.setVariable("output", ((Number)outputValue).doubleValue());
 	}
 
 	public void evaluate(long i) {
 		if(this.isTerminal()) { // Primitive expression
-			setPrimExprVariables(i); // For each input, read all necessary column values
+			setPrimExprVariables(i); // For each input, read all necessary column values from fact table and the current output from the group table
 			result = this.computeExpression.evaluate();
 		}
 		else { // Tuple

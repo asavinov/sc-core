@@ -152,11 +152,13 @@ public class Tests {
 
     	ExprNode t = new ExprNode(); 
 
-    	String tstr = " aaa = { bbb = v11 + 1 * sin(bla) / bla ; [ccc]=22,2 }";
-    	t.parse(tstr);
+    	t.formula = "{ bbb = v11 + 1 * sin(bla) / bla ; [ccc]=22,2 }";
+    	t.name = "aaa";
+    	t.parse();
 
-    	tstr = " aaa = { bbb = v11 + 1 * sin(bla) ; [ccc]= {ddd=22,2} }";
-    	t.parse(tstr);
+    	t.formula = "{ bbb = v11 + 1 * sin(bla) ; [ccc]= {ddd=22,2} }";
+    	t.name = "aaa";
+    	t.parse();
     	t = null;
     }
 

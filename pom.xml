@@ -5,7 +5,7 @@
   <groupId>org.conceptoriented</groupId>
   <artifactId>sc-core</artifactId>
   <packaging>jar</packaging>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
 
   <name>DataCommander Engine</name>
   <url>http://conceptoriented.org</url>

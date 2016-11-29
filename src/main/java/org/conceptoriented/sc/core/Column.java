@@ -129,6 +129,9 @@ public class Column {
 		this.grouppath = grouppath;
 	}
 	
+	/**
+	 * Status of the column. Currently, it is own status of the formula (no propagation) and it is only translation (parse and bind) status (not evaluation).
+	 */
 	public DcError getStatus() {
 		if(expression == null) {
 			return new DcError(DcErrorCode.NONE, "", "");
@@ -144,19 +147,6 @@ public class Column {
 		}
 	}
 
-	// It is computed dynamically and depends on this column formula, other column properties/status as well as from the column structure (schema, dependencies etc.)
-	// There is own column status and propagated status.
-
-	// Column own status depends on its own formula like parse status, bind status and evaluate status.
-	// Column own status is determined by what is returned by the parse, bind and evaluate procedures.
-	// These return values can be stored as some more specific exceptions describing the result or error.
-
-	// Status propagation rules are defined on the dependency graph of columns and its shows how column status depends on other column statuses in this graph (and its own status)
-	// For example, if the previous column has parse or bind errors then this rule inherits this error even if its own formula can be parsed and bound.
-	
-
-
-	
 	//
 	// Translate
 	//
@@ -172,16 +162,25 @@ public class Column {
 		else {
 			List<Column> columns = new ArrayList<Column>();
 
+			// Parse (check correct syntax of strings only)
 			expression = new ExprNode();
+			expression.formula = this.formula;
+			expression.name = this.name;
+			expression.facttableName = this.facttable;
+			expression.grouppathName = this.grouppath;
+			
+			expression.parse();
 
-			// Parse
-			expression.parse("[" + this.name + "] = " + this.formula);
+			// TODO: Update binder to work correctly with facttable and grouppath correctly (two modes unified)
 
-			// Bind
-			expression.thisTable = this.getInput(); // It will be passed recursively to all child expressions
+			// Bind (check if all the symbols can be resolved)
+			expression.facttable = this.getInput(); // It will be passed recursively to all child expressions
 			expression.column = this;
+
 			expression.bind();
 
+			// TODO: What are dependencies in the case of aggregation?
+			
 			columns = expression.getDependencies();
 			schema.setDependency(this, columns); // Update dependency graph
 		}
@@ -204,9 +203,11 @@ public class Column {
 		// Evaluate
 		//
 		expression.beginEvaluate();
+		// TODO: We need to loop through the fact table
 		Range range = input.getNewRange(); // All dirty/new rows
 		for(long i=range.start; i<range.end; i++) {
 			expression.evaluate(i);
+			// TODO: We need to store in the group table
 			this.setValue(i, expression.result); // Store the output value for the current row
 		}
 	}
