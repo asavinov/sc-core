@@ -171,15 +171,13 @@ public class Column {
 			
 			expression.parse();
 
-			// TODO: Update binder to work correctly with facttable and grouppath correctly (two modes unified)
-
 			// Bind (check if all the symbols can be resolved)
-			expression.facttable = this.getInput(); // It will be passed recursively to all child expressions
+			expression.table = this.getInput(); // It will be passed recursively to all child expressions
 			expression.column = this;
 
 			expression.bind();
 
-			// TODO: What are dependencies in the case of aggregation?
+			// TODO: What kind of dependencies we need in the case of aggregation?
 			
 			columns = expression.getDependencies();
 			schema.setDependency(this, columns); // Update dependency graph

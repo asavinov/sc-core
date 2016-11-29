@@ -56,10 +56,15 @@ public class ExprNode {
 	// Tuple expression
 	//
 	public List<ExprNode> children = new ArrayList<ExprNode>(); // If the function is non-primitive, then its value is a combination
+
 	public boolean isTerminal() { // Whether we can continue expression tree, that is, this node can be expanded
 		if(children == null || children.size() == 0) return true;
 		else return false;
 	}
+	public boolean isTuple() {
+		return ! isTerminal();
+	}
+
 	public Record childrenToRecord() {
 		Record r = new Record();
 		children.forEach(x -> r.set(x.name, x.result));
@@ -85,7 +90,7 @@ public class ExprNode {
 	
 	public List<Column> getDependencies() { // Extract all unique column objects used (must be bound)
 		List<Column> columns = new ArrayList<Column>();
-		if(this.isTerminal()) {
+		if(!this.isTuple()) {
 			for(PrimExprDependency dep : this.primExprDependencies) {
 				if(dep.columns == null) continue; // Probably not yet resolved
 				dep.columns.forEach(x -> { if(!columns.contains(x)) columns.add(x); }); // Each dependency is a path and different paths can included same segments
@@ -243,7 +248,7 @@ public class ExprNode {
 
 	public void bind() {
 		
-		if(this.isTerminal()) {
+		if(!this.isTuple()) {
 			this.bindPrimExpr();
 		}
 		else {
@@ -259,7 +264,7 @@ public class ExprNode {
 					return;
 				}
 				
-				expr.facttable = this.facttable; // Parent 'this' will be used by all child expressions
+				expr.table = this.table; // Parent 'this' will be used by all child expressions
 				expr.bind(); // Recursion
 			}
 			this.status = new DcError(DcErrorCode.NONE, "Resolved successfully.", "");
@@ -273,14 +278,26 @@ public class ExprNode {
 		}
 		
 		//
-		// Resolve each column name in the path
+		// Resolve table names
+		//
+		
+		
+		//
+		// Choose which of two tables will be a looping table the formula will be applied to and resolved from
+		//
+		Table looptable = this.table;
+
+		//
+		// Resolve each column name in the path starting from the looping table
 		//
     	QNameBuilder parser = new QNameBuilder();
     	
 		for(PrimExprDependency dep : this.primExprDependencies) {
 			dep.pathName = formula.substring(dep.start, dep.end);
 			dep.qname = parser.buildQName(dep.pathName);
-			dep.columns = dep.qname.resolveColumns(facttable); // Try to really resolve symbol
+
+			dep.columns = dep.qname.resolveColumns(looptable); // Try to really resolve symbol
+
 			if(dep.columns == null || dep.columns.size() < dep.qname.names.size()) {
 				this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve columns.", "Error resolving columns " + dep.pathName);
 				return;
@@ -358,7 +375,7 @@ public class ExprNode {
 	public Object result; // Result of evaluation: either primitive value or record id
 
 	public void beginEvaluate() {
-		if(this.isTerminal()) {
+		if(!this.isTuple()) {
 			this.buildPrimExpr();
 		}
 		else {
@@ -372,20 +389,19 @@ public class ExprNode {
 		for(PrimExprDependency dep : this.primExprDependencies) {
 			// TODO: The values are read from the fact table which is different from this column input table - it is group column input table.
 			Object value = column.getValue(dep.columns, i);
-			if(value == null) {
-				value = Double.NaN;
-			}
+			if(value == null) value = Double.NaN;
 			this.computeExpression.setVariable(dep.paramName, ((Number)value).doubleValue());
 		}
 		
 		// Set current output value as a special variable. 
 		// TODO: The value is read from this (group) table, that is, where the new output will be written to
 		Object outputValue = column.getValue(i);
+		if(outputValue == null) outputValue = Double.NaN;
 		this.computeExpression.setVariable("output", ((Number)outputValue).doubleValue());
 	}
 
 	public void evaluate(long i) {
-		if(this.isTerminal()) { // Primitive expression
+		if(!this.isTuple()) { // Primitive expression
 			setPrimExprVariables(i); // For each input, read all necessary column values from fact table and the current output from the group table
 			result = this.computeExpression.evaluate();
 		}
