@@ -179,6 +179,12 @@ public class Column {
 
 			// TODO: What kind of dependencies we need in the case of aggregation?
 			
+			// Reset column data before evaluation. 0.0 for numeric. In future, additional param in formula can be used (for grouping) as well as postprocessing value like normal formula. So formula can be always thought of as initializor. In addition, we can add a collecotr formula for aggregation. And finally, we can add a finalizer executed after aggregation as a normal formula.
+			// Check that evaluation should not be called for formula/column updates (only explicitly).
+			// TODO: visualize none/group/tuple/calc columns differently (method getFormulaType similar to getStatus). It could be an icon.
+			// Check consistency of formula types: primitive -> only group and calc, non-primitive -> only tuple. Initially, as error message. Later, hiding irrelevant UI controls.
+			// Maybe introduce an explicit selector "formula type"=none_or_external/calc/tuple/group. It will be stored in a user provided property (what the user wants).
+			
 			columns = expression.getDependencies();
 			schema.setDependency(this, columns); // Update dependency graph
 		}
@@ -200,14 +206,34 @@ public class Column {
 		//
 		// Evaluate
 		//
+
+		// TODO: Reset current column (important for grouping)
 		expression.beginEvaluate();
-		// TODO: We need to loop through the fact table
-		Range range = input.getNewRange(); // All dirty/new rows
-		for(long i=range.start; i<range.end; i++) {
-			expression.evaluate(i);
-			// TODO: We need to store in the group table
-			this.setValue(i, expression.result); // Store the output value for the current row
+
+		if(!expression.isAggregated()) {
+			Table looptable = input;
+			Range range = looptable.getNewRange(); // All dirty/new rows
+			for(long i=range.start; i<range.end; i++) {
+
+				expression.evaluate(i);
+
+				this.setValue(i, expression.result); // Store the output value for the current row
+			}
 		}
+		else {
+			Table looptable = expression.facttable;
+			Range range = looptable.getNewRange(); // All dirty/new rows
+
+			for(long i=range.start; i<range.end; i++) {
+				long g = (Long) expression.grouppath.get(0).getValue(expression.grouppath, i); // Find group element
+				//Object output = this.getValue(g); // Read current output
+
+				expression.evaluate(i);
+
+				this.setValue(g, expression.result); // Store the output value for the current row
+			}
+		}
+
 	}
 
 	//
