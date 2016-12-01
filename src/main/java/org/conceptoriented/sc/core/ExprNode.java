@@ -427,15 +427,20 @@ public class ExprNode {
 
 	protected void setPrimExprVariables(long i) { // Pass all variable values for the specified input to the compute expression
 		for(PrimExprDependency dep : this.primExprDependencies) {
-			// TODO: The values are read from the fact table which is different from this column input table - it is group column input table.
-			Object value = column.getValue(dep.columns, i);
+			Object value = dep.columns.get(0).getValue(dep.columns, i);
 			if(value == null) value = Double.NaN;
 			this.computeExpression.setVariable(dep.paramName, ((Number)value).doubleValue());
 		}
 		
-		// Set current output value as a special variable. 
-		// TODO: The value is read from this (group) table, that is, where the new output will be written to
-		Object outputValue = column.getValue(i);
+		// Set current output value as a special variable.
+		Object outputValue;
+		if(!this.isAggregated()) {
+			outputValue = column.getValue(i);
+		}
+		else {
+			long g = (Long) this.grouppath.get(0).getValue(this.grouppath, i); // Find group element
+			outputValue = column.getValue(g);
+		}
 		if(outputValue == null) outputValue = Double.NaN;
 		this.computeExpression.setVariable("output", ((Number)outputValue).doubleValue());
 	}

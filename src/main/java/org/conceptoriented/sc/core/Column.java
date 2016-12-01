@@ -159,35 +159,32 @@ public class Column {
 			schema.setDependency(this, null); // Non-evaluatable column independent of the reason
 			return;
 		}
-		else {
-			List<Column> columns = new ArrayList<Column>();
 
-			// Parse (check correct syntax of strings only)
-			expression = new ExprNode();
-			expression.formula = this.formula;
-			expression.name = this.name;
-			expression.facttableName = this.facttable;
-			expression.grouppathName = this.grouppath;
-			
-			expression.parse();
+		// Parse (check correct syntax of strings only)
+		expression = new ExprNode();
+		expression.formula = this.formula;
+		expression.name = this.name;
+		expression.facttableName = this.facttable;
+		expression.grouppathName = this.grouppath;
+		
+		expression.parse();
 
-			// Bind (check if all the symbols can be resolved)
-			expression.table = this.getInput(); // It will be passed recursively to all child expressions
-			expression.column = this;
+		// Bind (check if all the symbols can be resolved)
+		expression.table = this.getInput(); // It will be passed recursively to all child expressions
+		expression.column = this;
 
-			expression.bind();
+		expression.bind();
 
-			// TODO: What kind of dependencies we need in the case of aggregation?
-			
-			// Reset column data before evaluation. 0.0 for numeric. In future, additional param in formula can be used (for grouping) as well as postprocessing value like normal formula. So formula can be always thought of as initializor. In addition, we can add a collecotr formula for aggregation. And finally, we can add a finalizer executed after aggregation as a normal formula.
-			// Check that evaluation should not be called for formula/column updates (only explicitly).
-			// TODO: visualize none/group/tuple/calc columns differently (method getFormulaType similar to getStatus). It could be an icon.
-			// Check consistency of formula types: primitive -> only group and calc, non-primitive -> only tuple. Initially, as error message. Later, hiding irrelevant UI controls.
-			// Maybe introduce an explicit selector "formula type"=none_or_external/calc/tuple/group. It will be stored in a user provided property (what the user wants).
-			
-			columns = expression.getDependencies();
-			schema.setDependency(this, columns); // Update dependency graph
-		}
+		// TODO: What kind of dependencies we need in the case of aggregation?
+		
+		// Reset column data before evaluation. 0.0 for numeric. In future, additional param in formula can be used (for grouping) as well as postprocessing value like normal formula. So formula can be always thought of as initializor. In addition, we can add a collecotr formula for aggregation. And finally, we can add a finalizer executed after aggregation as a normal formula.
+		// Check that evaluation should not be called for formula/column updates (only explicitly).
+		// TODO: visualize none/group/tuple/calc columns differently (method getFormulaType similar to getStatus). It could be an icon.
+		// Check consistency of formula types: primitive -> only group and calc, non-primitive -> only tuple. Initially, as error message. Later, hiding irrelevant UI controls.
+		// Maybe introduce an explicit selector "formula type"=none_or_external/calc/tuple/group. It will be stored in a user provided property (what the user wants).
+		
+		List<Column> columns = expression.getDependencies();
+		schema.setDependency(this, columns); // Update dependency graph
 	}
 		
 	//
@@ -210,9 +207,22 @@ public class Column {
 		// TODO: Reset current column (important for grouping)
 		expression.beginEvaluate();
 
+		// Initialize values of the column (some default value or a formula). The default value can depend on the output type (complex, double, string etc.)
+		Object defaultValue;
+		if(this.expression.isTuple()) {
+			defaultValue = null;
+		}
+		else {
+			defaultValue = 0.0;
+		}
+		Range range = this.getInput().getNewRange(); // All dirty/new rows
+		for(long i=range.start; i<range.end; i++) {
+			this.setValue(i, defaultValue);
+		}
+
 		if(!expression.isAggregated()) {
 			Table looptable = input;
-			Range range = looptable.getNewRange(); // All dirty/new rows
+			range = looptable.getNewRange(); // All dirty/new rows
 			for(long i=range.start; i<range.end; i++) {
 
 				expression.evaluate(i);
@@ -222,7 +232,7 @@ public class Column {
 		}
 		else {
 			Table looptable = expression.facttable;
-			Range range = looptable.getNewRange(); // All dirty/new rows
+			range = looptable.getNewRange(); // All dirty/new rows
 
 			for(long i=range.start; i<range.end; i++) {
 				long g = (Long) expression.grouppath.get(0).getValue(expression.grouppath, i); // Find group element
