@@ -106,27 +106,38 @@ public class Column {
 	
 	protected String formula;
 	public String getFormula() {
-		return formula;
+		return this.formula;
 	}
 	public void setFormula(String formula) {
 		this.formula = formula;
-		translate(); // Do it after each assignment in order to get status
 	}
 	
-	protected String facttable;
-	public String getFacttable() {
-		return facttable;
+	//
+	// Accumulation formula
+	//
+	
+	protected String accuformula; // It is applied to accutable
+	public String getAccuformula() {
+		return this.accuformula;
 	}
-	public void setFacttable(String facttable) {
-		this.facttable = facttable;
+	public void setAccuformula(String accuformula) {
+		this.accuformula = accuformula;
 	}
 	
-	protected String grouppath;
-	public String getGrouppath() {
-		return grouppath;
+	protected String accutable;
+	public String getAccutable() {
+		return this.accutable;
 	}
-	public void setGrouppath(String grouppath) {
-		this.grouppath = grouppath;
+	public void setAccutable(String accutable) {
+		this.accutable = accutable;
+	}
+	
+	protected String accupath; // It leads from accutable to the input table of the column
+	public String getAccupath() {
+		return this.accupath;
+	}
+	public void setAccupath(String accupath) {
+		this.accupath = accupath;
 	}
 	
 	/**
@@ -160,16 +171,21 @@ public class Column {
 			return;
 		}
 
+		//
 		// Parse (check correct syntax of strings only)
+		//
 		expression = new ExprNode();
-		expression.formula = this.formula;
 		expression.name = this.name;
-		expression.facttableName = this.facttable;
-		expression.grouppathName = this.grouppath;
+		expression.formula = this.formula;
+		expression.accuformula = this.accuformula;
+		expression.accutableName = this.accutable;
+		expression.accupathName = this.accupath;
 		
 		expression.parse();
 
+		//
 		// Bind (check if all the symbols can be resolved)
+		//
 		expression.table = this.getInput(); // It will be passed recursively to all child expressions
 		expression.column = this;
 
@@ -183,6 +199,9 @@ public class Column {
 		// Check consistency of formula types: primitive -> only group and calc, non-primitive -> only tuple. Initially, as error message. Later, hiding irrelevant UI controls.
 		// Maybe introduce an explicit selector "formula type"=none_or_external/calc/tuple/group. It will be stored in a user provided property (what the user wants).
 		
+		//
+		// Store dependencies
+		//
 		List<Column> columns = expression.getDependencies();
 		schema.setDependency(this, columns); // Update dependency graph
 	}
@@ -220,7 +239,7 @@ public class Column {
 			this.setValue(i, defaultValue);
 		}
 
-		if(!expression.isAggregated()) {
+		if(!this.expression.isAccumulation()) {
 			Table looptable = input;
 			range = looptable.getNewRange(); // All dirty/new rows
 			for(long i=range.start; i<range.end; i++) {
@@ -231,11 +250,11 @@ public class Column {
 			}
 		}
 		else {
-			Table looptable = expression.facttable;
+			Table looptable = expression.accutable;
 			range = looptable.getNewRange(); // All dirty/new rows
 
 			for(long i=range.start; i<range.end; i++) {
-				long g = (Long) expression.grouppath.get(0).getValue(expression.grouppath, i); // Find group element
+				long g = (Long) expression.accupath.get(0).getValue(expression.accupath, i); // Find group element
 				//Object output = this.getValue(g); // Read current output
 
 				expression.evaluate(i);
@@ -399,15 +418,17 @@ public class Column {
 		String jout = "`output`: {" + joutid + "}";
 
 		String jfmla = "`formula`: " + JSONObject.valueToString(this.getFormula()) + "";
-		String jftbl = "`facttable`: " + JSONObject.valueToString(this.getFacttable()) + "";
-		String jgrp = "`grouppath`: " + JSONObject.valueToString(this.getGrouppath()) + "";
+
+		String jafor = "`accuformula`: " + JSONObject.valueToString(this.getAccuformula()) + "";
+		String jatbl = "`accutable`: " + JSONObject.valueToString(this.getAccutable()) + "";
+		String japath = "`accupath`: " + JSONObject.valueToString(this.getAccupath()) + "";
 
 		//String jdescr = "`descriptor`: " + (this.getDescriptor() != null ? "`"+this.getDescriptor()+"`" : "null");
 		String jdescr = "`descriptor`: " + JSONObject.valueToString(this.getDescriptor()) + "";
 
 		String jstatus = "`status`: " + (this.getStatus() != null ? this.getStatus().toJson() : "undefined");
 
-		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jfmla + ", " + jftbl + ", " + jgrp + ", " + jdescr + ", " + jstatus;
+		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jfmla + ", " + jafor + ", " + jatbl + ", " + japath + ", " + jdescr + ", " + jstatus;
 
 		return ("{" + json + "}").replace('`', '"');
 	}

@@ -27,7 +27,7 @@ public class ExprNode {
 	public String formula; // Syntactic representation of the function (without name and equality - only the body)
 
 	//
-	// Mandatory parameters
+	// Parameters for any column
 	//
 	public String tableName; // Table where we define a new (aggregated) column
 	public Table table;
@@ -35,22 +35,25 @@ public class ExprNode {
 	public Column column;
 
 	//
-	// Optional parameters only for aggregated columns
+	// Parameters for accumulated column
 	//
-	public String facttableName; // It is table we loop through (this table)
-	public Table facttable; // Primitive expressions in the definition (body) belong to this type (corresponds to 'this' variable). It is resolved from the corresponding table name.
-	public String grouppathName; // It is a path from the fact table to the group table
-	public QName grouppathQName;
-	public List<Column> grouppath; // Path from fact table to group table (or empty). It is resolved from the syntactic path.
+	public String accuformula;
+	public String accutableName; // It is table we loop through (this table)
+	public Table accutable; // Primitive expressions in the definition (body) belong to this type (corresponds to 'this' variable). It is resolved from the corresponding table name.
+	public String accupathName; // It is a path from the fact table to the group table
+	public QName accupathQName;
+	public List<Column> accupath; // Path from fact table to group table (or empty). It is resolved from the syntactic path.
 
-	// In future, we could introduce an explicit flag
-	public boolean isCalculated() {
-		if(facttableName == null || facttableName.trim().isEmpty()) return true;
-		if(facttableName.equalsIgnoreCase(tableName)) return true;
-		return false;
-	}
-	public boolean isAggregated() {
-		return ! isCalculated();
+	// Determine if it is syntactically accumulation, that is, it seems to be intended for accumulation.
+	// In fact, it can be viewed as a syntactic check of validity and can be called isValidAccumulation
+	public boolean isAccumulation() {
+		if(this.accuformula == null || this.accuformula.trim().isEmpty()) return false;
+		if(this.accutableName == null || this.accutableName.trim().isEmpty()) return false;
+		if(this.accupathName == null || this.accupathName.trim().isEmpty()) return false;
+
+		if(this.accutableName.equalsIgnoreCase(this.tableName)) return false;
+
+		return true;
 	}
 
 	//
@@ -58,24 +61,25 @@ public class ExprNode {
 	//
 	public List<ExprNode> children = new ArrayList<ExprNode>(); // If the function is non-primitive, then its value is a combination
 
-	// Type of formula - tuple or primitive. In future, we might have an explicit flag or determine it using the output type (if complex output then only tuple)
-	public boolean isTerminal() {
-		int open = this.formula.indexOf("{");
-		int close = this.formula.lastIndexOf("}");
-		
-		if(open < 0 && close < 0) return true;
-		return false; // Everything that is enclosed in curly brackets is considered a tuple. Otherwise it is a normal formula
-	}
-	public boolean isTuple() {
-		return ! isTerminal();
-	}
-
 	public Record childrenToRecord() {
 		Record r = new Record();
 		children.forEach(x -> r.set(x.name, x.result));
 		return r;
 	}
 	
+	// Determine if it is a tuple syntactically (it seems to be intended to be a tuple), that is, something enclosed in curly brackets
+	// In fact, it can be viewed as a syntactic check of validity and can be called isValidTuple
+	public boolean isTuple() {
+		if(this.formula == null) return false;
+
+		int open = this.formula.indexOf("{");
+		int close = this.formula.lastIndexOf("}");
+		
+		if(open < 0 || close < 0) return false;
+
+		return true;
+	}
+
 	//
 	// Status of the previous operation performed
 	//
@@ -118,14 +122,23 @@ public class ExprNode {
 	//
 
 	/**
-	 * Parse formula by possibly building a tree of expressions with primitive expressions in the leaves.
+	 * Parse formulas by possibly building a tree of expressions with primitive expressions in the leaves.
 	 * Any assignment has well defined structure QName=( {sequence of assignments} | expression)
+	 * The result of parsing is a list of symbols.
 	 */
 	public void parse() {
 		if(this.formula == null || this.formula.isEmpty()) return;
 
 		if(!this.isTuple()) { // Non-tuple: either calculated or aggregated
-			this.parsePrimExpr();
+			this.primExprDependencies = new ArrayList<PrimExprDependency>();
+
+			this.parsePrimExpr(this.formula); // Parse main formula relative to main table
+
+			if(this.isAccumulation()) { // Parse accu formula relative to accu table
+				this.parsePrimExpr(this.accuformula);
+				this.parseAccupath();
+			}
+
 			return;
 		}
 		else { // Tuple - combination of assignments
@@ -205,15 +218,14 @@ public class ExprNode {
 		}
 	}
 
-	public void parsePrimExpr() { // Find all occurrences of column paths in the primitive expression
-		this.primExprDependencies = new ArrayList<PrimExprDependency>();
-
-		if(this.formula == null || this.formula.isEmpty()) return;
+	// Find all occurrences of column paths in the primitive expression
+	public void parsePrimExpr(String frml) {
+		if(frml == null || frml.isEmpty()) return;
 		
 		String ex =  "\\[(.*?)\\]";
 		//String ex = "[\\[\\]]";
 		Pattern p = Pattern.compile(ex,Pattern.DOTALL);
-		Matcher matcher = p.matcher(formula);
+		Matcher matcher = p.matcher(frml);
 
 		List<PrimExprDependency> names = new ArrayList<PrimExprDependency>();
 		while(matcher.find())
@@ -239,7 +251,7 @@ public class ExprNode {
 			int thisEnd = names.get(i).end;
 			int nextStart = names.get(i+1).start;
 			
-			if(formula.substring(thisEnd, nextStart).trim() == ".") { // There is continuation.
+			if(frml.substring(thisEnd, nextStart).trim() == ".") { // There is continuation.
 				names.get(i+1).start = names.get(i).start; // Attach this name to the next name as a prefix
 			}
 			else { // No continuation. Ready to copy as path.
@@ -253,26 +265,27 @@ public class ExprNode {
 		QNameBuilder parser = new QNameBuilder();
 
 		for(PrimExprDependency dep : this.primExprDependencies) {
-			dep.pathName = formula.substring(dep.start, dep.end);
+			dep.pathName = frml.substring(dep.start, dep.end);
 			dep.qname = parser.buildQName(dep.pathName);
 		}
 		
-		//
-		// If aggregation then check additional parameters
-		//
-		if(isAggregated()) {
-			// this.facttableName has to be correct table name
-			// this.grouppathName has to be correct column path
-			this.grouppathQName = parser.buildQName(this.grouppathName);
-			if(this.grouppathQName == null || this.grouppathQName.names.size() == 0) {
-				this.status = new DcError(DcErrorCode.PARSE_ERROR, "Syntax error in group path.", "Error group path: '" + this.grouppathName + "'");
-				return;
-			}
-		}
-
 		this.status = new DcError(DcErrorCode.NONE, "Parsed successfully.", "");
 	}
 	
+	public void parseAccupath() {
+		QNameBuilder parser = new QNameBuilder();
+
+		// this.accutableName has to be correct table name
+		// this.accupathName has to be correct column path
+		this.accupathQName = parser.buildQName(this.accupathName);
+		if(this.accupathQName == null || this.accupathQName.names.size() == 0) {
+			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Syntax error in group path.", "Error group path: '" + this.accupathName + "'");
+			return;
+		}
+
+		// TODO: We need to add these dependencies into dependence graph along with accu measures
+	}
+
 	//
 	// Bind
 	//
@@ -280,7 +293,15 @@ public class ExprNode {
 	public void bind() {
 		
 		if(!this.isTuple()) { // Non-tuple: either calculated or aggregated
-			this.bindPrimExpr();
+
+			this.bindPrimExpr(); // Bind main formula relative to main table
+
+			if(this.isAccumulation()) { // Bind accu formula relative to accu table
+				//this.parsePrimExpr(this.accuformula);
+				//this.parseAccupath();
+			}
+
+			return;
 		}
 		else { // Tuple - combination of assignments
 			Table output = column.getOutput();
@@ -315,18 +336,18 @@ public class ExprNode {
 		// Choose which of two tables will be a looping table the formula will be applied to and resolved from
 		//
 		Table looptable = this.table;
-		if(isAggregated()) {
+		if(this.isAccumulation()) {
 
-			this.facttable = schema.getTable(facttableName); // Resolve fact table name
-			if(this.facttable == null) {
-				this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve table.", "Error resolving table " + facttableName);
+			this.accutable = schema.getTable(accutableName); // Resolve fact table name
+			if(this.accutable == null) {
+				this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve table.", "Error resolving table " + accutableName);
 				return;
 			}
-			looptable = this.facttable;
+			looptable = this.accutable;
 
-			this.grouppath = this.grouppathQName.resolveColumns(this.facttable); // Try to really resolve symbol
-			if(this.grouppath == null || this.grouppath.size() < this.grouppathQName.names.size()) {
-				this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve columns.", "Error resolving column " + this.grouppathName);
+			this.accupath = this.accupathQName.resolveColumns(this.accutable); // Try to really resolve symbol
+			if(this.accupath == null || this.accupath.size() < this.accupathQName.names.size()) {
+				this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve columns.", "Error resolving column " + this.accupathName);
 				return;
 			}
 		}
@@ -434,11 +455,11 @@ public class ExprNode {
 		
 		// Set current output value as a special variable.
 		Object outputValue;
-		if(!this.isAggregated()) {
+		if(!this.isAccumulation()) {
 			outputValue = column.getValue(i);
 		}
 		else {
-			long g = (Long) this.grouppath.get(0).getValue(this.grouppath, i); // Find group element
+			long g = (Long) this.accupath.get(0).getValue(this.accupath, i); // Find group element
 			outputValue = column.getValue(g);
 		}
 		if(outputValue == null) outputValue = Double.NaN;

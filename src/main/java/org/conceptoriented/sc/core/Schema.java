@@ -201,6 +201,10 @@ public class Schema {
 
 		String formula = (String)JSONObject.stringToValue(obj.has("formula") && !obj.isNull("formula") ? obj.getString("formula") : "");
 
+		String accuformula = (String)JSONObject.stringToValue(obj.has("accuformula") && !obj.isNull("accuformula") ? obj.getString("accuformula") : "");
+		String accutable = (String)JSONObject.stringToValue(obj.has("accutable") && !obj.isNull("accutable") ? obj.getString("accutable") : "");
+		String accupath = (String)JSONObject.stringToValue(obj.has("accupath") && !obj.isNull("accupath") ? obj.getString("accupath") : "");
+
 		// Descriptor is either JSON object or JSON string with an object but we want to store a string
 		String descr_string = "";
 		if(obj.has("descriptor") && !obj.isNull("descriptor")) {
@@ -226,8 +230,15 @@ public class Schema {
 
 		if(isValid) {
 			Column column = this.createColumn(name, input.getName(), output.getName());
+
 			column.setFormula(formula);
+
+			column.setAccuformula(accuformula);
+			column.setAccutable(accutable);
+			column.setAccupath(accupath);
+
 			column.setDescriptor(descr_string);
+
 			return column;
 		}
 		else {
@@ -263,9 +274,9 @@ public class Schema {
 
 		String formula = (String)JSONObject.stringToValue(obj.has("formula") && !obj.isNull("formula") ? obj.getString("formula") : "");
 		
-		String facttable = (String)JSONObject.stringToValue(obj.has("facttable") && !obj.isNull("facttable") ? obj.getString("facttable") : "");
-
-		String grouppath = (String)JSONObject.stringToValue(obj.has("grouppath") && !obj.isNull("grouppath") ? obj.getString("grouppath") : "");
+		String accuformula = (String)JSONObject.stringToValue(obj.has("accuformula") && !obj.isNull("accuformula") ? obj.getString("accuformula") : "");
+		String accutable = (String)JSONObject.stringToValue(obj.has("accutable") && !obj.isNull("accutable") ? obj.getString("accutable") : "");
+		String accupath = (String)JSONObject.stringToValue(obj.has("accupath") && !obj.isNull("accupath") ? obj.getString("accupath") : "");
 
 		// Descriptor is either JSON object or JSON string with an object but we want to store a string
 		String descr_string = null;
@@ -284,9 +295,13 @@ public class Schema {
 		if(obj.has("input")) column.setInput(input);
 		if(obj.has("output")) column.setOutput(output);
 		if(obj.has("name")) column.setName(obj.getString("name"));
+
 		if(obj.has("formula")) column.setFormula(formula);
-		if(obj.has("facttable")) column.setFacttable(facttable);
-		if(obj.has("grouppath")) column.setGrouppath(grouppath);
+
+		if(obj.has("accuformula")) column.setAccuformula(accuformula);
+		if(obj.has("accutable")) column.setAccutable(accutable);
+		if(obj.has("accupath")) column.setAccupath(accupath);
+
 		if(obj.has("descriptor")) column.setDescriptor(descr_string);
 	}
 	public void deleteColumn(String id) {
