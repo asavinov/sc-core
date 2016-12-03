@@ -277,7 +277,7 @@ public class ExprNode {
 			this.bindPrimExpr(); // Bind main formula relative to main table
 		}
 		else { // Tuple - combination of assignments
-			Table output = column.getOutput();
+			Table output = this.column.getOutput();
 
 			for(ExprNode expr : children) {
 				Column col = output.getSchema().getColumn(output.getName(), expr.name); // Really resolve name as a column in our type table
@@ -289,6 +289,7 @@ public class ExprNode {
 					return;
 				}
 				
+				expr.table = this.table; // Same for all children
 				expr.bind(); // Recursion
 
 				if(expr.status != null && expr.status.code != DcErrorCode.NONE) {

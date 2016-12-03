@@ -179,6 +179,8 @@ public class Tests {
         table.append(record);
         
         columnB.setFormula("2 * [A] + 1");
+
+        columnB.translate();
         columnB.evaluate();
 
         assertEquals(11.0, (Double)columnB.getValue(0), 0.00001);
@@ -229,6 +231,8 @@ public class Tests {
         t2.append(r); 
 
         c5.setFormula(" { [A] = [A]; [B] = [B] } ");
+
+        c5.translate();
         c5.evaluate();
 
         assertEquals(0L, c5.getValue(0));

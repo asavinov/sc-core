@@ -152,6 +152,28 @@ public class Column {
 		return true;
 	}
 
+	// Try to auto determine what is the formula type and hence how it has to be translated and evaluated
+	public DcFormulaType determineAutoFormulaType() {
+
+		if((this.formula == null || this.formula.trim().isEmpty()) && (this.accuformula == null || this.accuformula.trim().isEmpty())) {
+			return DcFormulaType.NONE;
+		}
+		
+		if(this.getOutput().isPrimitive()) { // Either calc or accu
+			
+			if(this.accuformula == null || this.accuformula.trim().isEmpty()) {
+				return DcFormulaType.CALC;
+			}
+			else {
+				return DcFormulaType.ACCU;
+			}
+
+		}
+		else { // Only tuple
+			return DcFormulaType.TUPLE;
+		}
+	}
+
 	//
 	// Translate
 	//
@@ -221,6 +243,7 @@ public class Column {
 		//
 		// Bind (check if all the symbols can be resolved)
 		//
+		expr.table = this.getInput();
 		expr.column = this;
 
 		expr.bind();
@@ -261,100 +284,51 @@ public class Column {
 
 	public void evaluate() {
 		
-		if(formula == null || formula.isEmpty()) return;
+		if(determineAutoFormulaType() == DcFormulaType.NONE) return;
 		
 		//
-		// Translate
+		// Step 1: Evaluate main formula to initialize the column. If it is empty then we need to init it with default values
 		//
-		translate();
+
+		Range range = mainExpr.table.getNewRange(); // All dirty/new rows
+		if(this.formula == null || this.formula.trim().isEmpty()) { // Initialize to default constant
+			Object defaultValue; // Depends on the column type
+			if(this.getOutput().isPrimitive()) {
+				defaultValue = 0.0;
+			}
+			else {
+				defaultValue = null;
+			}
+			for(long i=range.start; i<range.end; i++) {
+				this.setValue(i, defaultValue);
+			}
+		}
+		else { // Evaluate formula
+			for(long i=range.start; i<range.end; i++) {
+				mainExpr.evaluate(i);
+				this.setValue(i, mainExpr.result);
+			}
+		}
 
 		//
-		// Evaluate
+		// Step 2: Evaluate accu formula to update the column values (in the case of accu formula)
 		//
 		
-		// Step 1: Evaluate main formula to initialize the column. If it is empty but accu is given then use default initial values.
-
-		// Step 1: Evaluate accu formula to update the column values (in the case of accu formula)
-		
-		// Inputs:
-		// - user type of formula: none (do not want to evaluate), auto (determine itself), calculation (only if prim type), tuple (only if complex type), accu (only if prim type)
-		// - main formula (prim or complex), accu formula (what main column type is -> only prim)
-		// In the evaluation loop we give the following input:
-		// - current record id which is used to retrieve all column path values and use them to set expression variables
-		// - for accu, we provide also current record id but for another table, but in addition, the expr evaluator will rertrive current value using accu path and column name
-		// We could generalize it by either providing the current value from outside (for both calc and accu formula) or providing column path for retrieving this value (column name for calc and accupath+column name for accu)
-		// This parameter could be called outputpath and it will always have column name at the end and be prefixed by accu path.
-		// In this case, we can use the same ExprNode for both calc and accu (primitive) expressions
-		// So the idea is that one ExprNode is used for one expr only. However:
-		// - it has to know its table all column paths start from
-		// - it has to know either current value, or path to current value: col name for calc, and accupath+col name for accu
-		// - it can evaluate tuples by evaluating children, combining the results and finding the new output value
-		
-		// Algorithm:
-		// if none then do nothing
-		// if auto try to guess the type of formula using parsing and column type etc.
-		// if calc then parse-bind-eval main formula in calc mode: parseCalc, bindCalc, evalCalc
-		// if tuple parse-bind-eval main formula in tuple mode: parseTuple, bindTuple, evalTuple
-		// if accu then do calc as init and then additionally accu formula in accu mode: parseAccu, bindAccu, evalAccu.
-		
-		// Introduce 2 ExprNode types inheriting from one parent which has some common methods, say, for native expressions
-		// Each of them knows only how to deal with certain expressions: tuple and primitive
-		// Goal is to remove two formulas - main and accu - from one class. Rather, we create two ExprNodes - main and accu. They are linked to different tables and also accu uses group path.
-		// Then we use these ExprNodes from column evaluation rather than from expr evaluation - expr evaluation is simplified and knows only about one formula.
-
-		// Dependency graph currently does not store tables for resolving paths. In order to resolve, we need to provide a table. 
-		// Solution 1: store table name as the first segment in QName: [Table 1].[Column 1].[Column 2] etc.
-		// Solution 2: store table name for each entry as a separate field.
-
-		// We always evaluate main formula by initializing the column values.
-		// If it is empty and it is accu column then we use default initialization (0 for primitive columns, null for complex, "" for strings etc.)
-		
-		// If there is an accumulation addition then we also execute it. Normally for primitive columns only.
-		
+		if(this.determineAutoFormulaType() == DcFormulaType.ACCU) {
+			range = accuExpr.table.getNewRange(); // All dirty/new rows
+			for(long i=range.start; i<range.end; i++) {
+				long g = (Long) accuExpr.path.get(0).getValue(accuExpr.path, i); // Find group element
+				accuExpr.evaluate(i);
+				this.setValue(g, accuExpr.result);
+			}
+		}
 
 		// TODO: What kind of dependencies we need in the case of aggregation?
-		// TODO: visualize none/group/tuple/calc columns differently (method getFormulaType similar to getStatus). It could be an icon.
+		// TODO: What kind of dependencies in the case of tuples?
+		// TODO: visualize none/group/tuple/calc columns differently It could be an icon.
 		// Check consistency of formula types: primitive -> only group and calc, non-primitive -> only tuple. Initially, as error message. Later, hiding irrelevant UI controls.
 		// Maybe introduce an explicit selector "formula type"=none_or_external/calc/tuple/group. It will be stored in a user provided property (what the user wants).
-		
-
-		// Initialize values of the column (some default value or a formula). The default value can depend on the output type (complex, double, string etc.)
-		Object defaultValue;
-		if(this.mainExpr.isTuple()) {
-			defaultValue = null;
-		}
-		else {
-			defaultValue = 0.0;
-		}
-		Range range = this.getInput().getNewRange(); // All dirty/new rows
-		for(long i=range.start; i<range.end; i++) {
-			this.setValue(i, defaultValue);
-		}
-
-		if(!this.isAccumulation()) {
-			Table looptable = input;
-			range = looptable.getNewRange(); // All dirty/new rows
-			for(long i=range.start; i<range.end; i++) {
-
-				mainExpr.evaluate(i);
-
-				this.setValue(i, mainExpr.result); // Store the output value for the current row
-			}
-		}
-		else {
-			Table looptable = mainExpr.table;
-			range = looptable.getNewRange(); // All dirty/new rows
-
-			for(long i=range.start; i<range.end; i++) {
-				long g = (Long) mainExpr.path.get(0).getValue(mainExpr.path, i); // Find group element
-				//Object output = this.getValue(g); // Read current output
-
-				mainExpr.evaluate(i);
-
-				this.setValue(g, mainExpr.result); // Store the output value for the current row
-			}
-		}
-
+		// TODO: Always do complete translation/evaluate before we introduce dirty propagation mechanism.
 	}
 
 	//
@@ -550,5 +524,26 @@ public class Column {
 		this.output = schema.getTable(output);
 		
 		values = new Object[1000];
+	}
+}
+
+
+enum DcFormulaType {
+	NONE(0), // No formula
+	AUTO(10), // Auto. Needs to be determined.
+	UNKNOWN(20), // Cannot determine
+	CALC(30), // Calculated (row-based, no accumulation, non-complex)
+	TUPLE(40), // Tuple (complex)
+	ACCU(50), // Accumulation
+	;
+
+	private int value;
+
+	public int getValue() {
+		return value;
+	}
+
+	private DcFormulaType(int value) {
+		this.value = value;
 	}
 }
