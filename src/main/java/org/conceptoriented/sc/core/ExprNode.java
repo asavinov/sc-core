@@ -22,39 +22,19 @@ import net.objecthunter.exp4j.ValidationResult;
 public class ExprNode {
 	
 	//
-	// Formula belongs to either group table or fact table if it exists (in the case of aggregation)
+	// Formula and its parameters
 	//
-	public String formula; // Syntactic representation of the function (without name and equality - only the body)
+	public String formula; // Function with column path always relative to the table
 
-	//
-	// Parameters for any column
-	//
 	public String tableName; // Table where we define a new (aggregated) column
 	public Table table;
-	public String name; // (Aggregated) column name that is being defined
+
+	public String pathName; // table-path-column-output (can be empty)
+	public QName pathQName;
+	public List<Column> path;
+
+	public String name; // Column name for which the result is computed (not necessarily starts from the table)
 	public Column column;
-
-	//
-	// Parameters for accumulated column
-	//
-	public String accuformula;
-	public String accutableName; // It is table we loop through (this table)
-	public Table accutable; // Primitive expressions in the definition (body) belong to this type (corresponds to 'this' variable). It is resolved from the corresponding table name.
-	public String accupathName; // It is a path from the fact table to the group table
-	public QName accupathQName;
-	public List<Column> accupath; // Path from fact table to group table (or empty). It is resolved from the syntactic path.
-
-	// Determine if it is syntactically accumulation, that is, it seems to be intended for accumulation.
-	// In fact, it can be viewed as a syntactic check of validity and can be called isValidAccumulation
-	public boolean isAccumulation() {
-		if(this.accuformula == null || this.accuformula.trim().isEmpty()) return false;
-		if(this.accutableName == null || this.accutableName.trim().isEmpty()) return false;
-		if(this.accupathName == null || this.accupathName.trim().isEmpty()) return false;
-
-		if(this.accutableName.equalsIgnoreCase(this.tableName)) return false;
-
-		return true;
-	}
 
 	//
 	// Tuple expression
@@ -129,92 +109,13 @@ public class ExprNode {
 	public void parse() {
 		if(this.formula == null || this.formula.isEmpty()) return;
 
-		if(!this.isTuple()) { // Non-tuple: either calculated or aggregated
-			this.primExprDependencies = new ArrayList<PrimExprDependency>();
+		this.primExprDependencies = new ArrayList<PrimExprDependency>();
 
-			this.parsePrimExpr(this.formula); // Parse main formula relative to main table
-
-			if(this.isAccumulation()) { // Parse accu formula relative to accu table
-				this.parsePrimExpr(this.accuformula);
-				this.parseAccupath();
-			}
-
-			return;
+		if(!this.isTuple()) { // Non-tuple (primitive)
+			this.parsePrimExpr(this.formula);
 		}
 		else { // Tuple - combination of assignments
-
-			//
-			// Check the enclosure (curly brackets)
-			//
-			int open = this.formula.indexOf("{");
-			int close = this.formula.lastIndexOf("}");
-
-			if(open < 0 || close < 0 || open >= close) {
-				this.status = new DcError(DcErrorCode.PARSE_ERROR, "Problem with curly braces.", "Tuple expression is a list of assignments in curly braces.");
-				return;
-			}
-
-			String sequence = this.formula.substring(open+1, close).trim();
-
-			//
-			// Build a list of members from comma separated list
-			//
-			List<String> members = new ArrayList<String>();
-			int previousSeparator = -1;
-			int level = 0; // Work only on level 0
-			for(int i=0; i<sequence.length(); i++) {
-				if(sequence.charAt(i) == '{') {
-					level++;
-				}
-				else if(sequence.charAt(i) == '}') {
-					level--;
-				}
-				
-				if(level > 0) { // We are in a nested block. More closing parentheses are expected to exit from this block.
-					continue;
-				}
-				else if(level < 0) {
-					this.status = new DcError(DcErrorCode.PARSE_ERROR, "Problem with curly braces.", "Opening and closing curly braces must match each other.");
-					return;
-				}
-				
-				// Check if it is a member separator
-				if(sequence.charAt(i) == ';') {
-					members.add(sequence.substring(previousSeparator+1, i));
-					previousSeparator = i;
-				}
-			}
-			members.add(sequence.substring(previousSeparator+1, sequence.length()));
-
-			//
-			// Create child tuples from members and parse them
-			//
-			for(String member : members) {
-				int eq = member.indexOf("=");
-				if(eq < 0) {
-					this.status = new DcError(DcErrorCode.PARSE_ERROR, "No equality sign.", "Tuple expression is a list of assignments using equality sign.");
-					return;
-				}
-				String left = member.substring(0, eq).trim();
-				if(left.startsWith("[")) left = left.substring(1);
-				if(left.endsWith("]")) left = left.substring(0,left.length()-1);
-				String rigth = member.substring(eq+1).trim();
-
-				ExprNode childTuple = new ExprNode();
-
-				childTuple.formula = rigth;
-				childTuple.name = left;
-
-				childTuple.parse();
-				if(childTuple.status != null && childTuple.status.code != DcErrorCode.NONE) { // Propagate child error to the parent
-					this.status = childTuple.status;
-					return;
-				}
-
-				this.children.add(childTuple);
-			}
-
-			this.status = new DcError(DcErrorCode.NONE, "Parsed successfully.", "");
+			parseTupleExpr(this.formula);
 		}
 	}
 
@@ -266,42 +167,114 @@ public class ExprNode {
 
 		for(PrimExprDependency dep : this.primExprDependencies) {
 			dep.pathName = frml.substring(dep.start, dep.end);
-			dep.qname = parser.buildQName(dep.pathName);
+			dep.qname = parser.buildQName(dep.pathName); // TODO: There might be errors here, e.g., wrong characters in names
 		}
 		
+		//
+		// Parse path
+		//
+		if(this.pathName != null && !this.pathName.trim().isEmpty()) {
+
+			this.pathQName = parser.buildQName(this.pathName);
+			if(this.pathQName == null || this.pathQName.names.size() == 0) {
+				this.status = new DcError(DcErrorCode.PARSE_ERROR, "Syntax error in group path.", "Error group path: '" + this.pathName + "'");
+				return;
+			}
+			
+			// TODO: We need to add the path into dependence graph taking into account that it is group path (along with other measures) 
+		}
+
 		this.status = new DcError(DcErrorCode.NONE, "Parsed successfully.", "");
 	}
 	
-	public void parseAccupath() {
-		QNameBuilder parser = new QNameBuilder();
+	public void parseTupleExpr(String frml) {
+		
+		//
+		// Check the enclosure (curly brackets)
+		//
+		int open = frml.indexOf("{");
+		int close = frml.lastIndexOf("}");
 
-		// this.accutableName has to be correct table name
-		// this.accupathName has to be correct column path
-		this.accupathQName = parser.buildQName(this.accupathName);
-		if(this.accupathQName == null || this.accupathQName.names.size() == 0) {
-			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Syntax error in group path.", "Error group path: '" + this.accupathName + "'");
+		if(open < 0 || close < 0 || open >= close) {
+			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Problem with curly braces.", "Tuple expression is a list of assignments in curly braces.");
 			return;
 		}
 
-		// TODO: We need to add these dependencies into dependence graph along with accu measures
+		String sequence = frml.substring(open+1, close).trim();
+
+		//
+		// Build a list of members from comma separated list
+		//
+		List<String> members = new ArrayList<String>();
+		int previousSeparator = -1;
+		int level = 0; // Work only on level 0
+		for(int i=0; i<sequence.length(); i++) {
+			if(sequence.charAt(i) == '{') {
+				level++;
+			}
+			else if(sequence.charAt(i) == '}') {
+				level--;
+			}
+			
+			if(level > 0) { // We are in a nested block. More closing parentheses are expected to exit from this block.
+				continue;
+			}
+			else if(level < 0) {
+				this.status = new DcError(DcErrorCode.PARSE_ERROR, "Problem with curly braces.", "Opening and closing curly braces must match each other.");
+				return;
+			}
+			
+			// Check if it is a member separator
+			if(sequence.charAt(i) == ';') {
+				members.add(sequence.substring(previousSeparator+1, i));
+				previousSeparator = i;
+			}
+		}
+		members.add(sequence.substring(previousSeparator+1, sequence.length()));
+
+		//
+		// Create child tuples from members and parse them
+		//
+		for(String member : members) {
+			int eq = member.indexOf("=");
+			if(eq < 0) {
+				this.status = new DcError(DcErrorCode.PARSE_ERROR, "No equality sign.", "Tuple expression is a list of assignments using equality sign.");
+				return;
+			}
+			String left = member.substring(0, eq).trim();
+			if(left.startsWith("[")) left = left.substring(1);
+			if(left.endsWith("]")) left = left.substring(0,left.length()-1);
+			String rigth = member.substring(eq+1).trim();
+
+			ExprNode childTuple = new ExprNode();
+
+			childTuple.formula = rigth;
+			childTuple.tableName = this.tableName; // All child right expressions are relative to the same parent table
+			childTuple.pathName = "";
+			childTuple.name = left; // Relative to the output table
+
+			childTuple.parse();
+
+			if(childTuple.status != null && childTuple.status.code != DcErrorCode.NONE) { // Propagate child error to the parent
+				this.status = childTuple.status;
+				return;
+			}
+
+			this.children.add(childTuple);
+		}
+
+		this.status = new DcError(DcErrorCode.NONE, "Parsed successfully.", "");
 	}
 
 	//
 	// Bind
 	//
 
+	// Resolve all symbols found after parsing and store them in dependency graph or in this expression fields
 	public void bind() {
 		
 		if(!this.isTuple()) { // Non-tuple: either calculated or aggregated
-
 			this.bindPrimExpr(); // Bind main formula relative to main table
-
-			if(this.isAccumulation()) { // Bind accu formula relative to accu table
-				//this.parsePrimExpr(this.accuformula);
-				//this.parseAccupath();
-			}
-
-			return;
 		}
 		else { // Tuple - combination of assignments
 			Table output = column.getOutput();
@@ -316,48 +289,57 @@ public class ExprNode {
 					return;
 				}
 				
-				expr.table = this.table; // Parent 'this' will be used by all child expressions
 				expr.bind(); // Recursion
+
+				if(expr.status != null && expr.status.code != DcErrorCode.NONE) {
+					this.status = expr.status;
+					return;
+				}
 			}
 
 			this.status = new DcError(DcErrorCode.NONE, "Resolved successfully.", "");
 		}
 	}
 
-	public void bindPrimExpr() { // Resolve column names used in the primitive expression (must be parsed)
+	public void bindPrimExpr() {
 
 		if(this.primExprDependencies == null) {
 			return;
 		}
+
+		Schema schema = column.getSchema(); // Resolve against this schema
+
+		//
+		// Resolve table
+		//
+		this.table = schema.getTable(this.tableName); // Resolve table name
 		
-		Schema schema = table.getSchema();
-
-		//
-		// Choose which of two tables will be a looping table the formula will be applied to and resolved from
-		//
-		Table looptable = this.table;
-		if(this.isAccumulation()) {
-
-			this.accutable = schema.getTable(accutableName); // Resolve fact table name
-			if(this.accutable == null) {
-				this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve table.", "Error resolving table " + accutableName);
-				return;
-			}
-			looptable = this.accutable;
-
-			this.accupath = this.accupathQName.resolveColumns(this.accutable); // Try to really resolve symbol
-			if(this.accupath == null || this.accupath.size() < this.accupathQName.names.size()) {
-				this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve columns.", "Error resolving column " + this.accupathName);
-				return;
-			}
+		if(this.table == null) {
+			this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve table.", "Error resolving table " + this.tableName);
+			return;
 		}
-
+		
 		//
-		// Resolve each column path in the formula relative to the loop table
+		// Resolve path (if any) relative to the table
+		//
+		this.path = null;
+		if(this.pathQName != null) {
+
+			this.path = this.pathQName.resolveColumns(this.table); // Try to really resolve symbol
+
+			if(this.path == null || this.path.size() < this.pathQName.names.size()) {
+				this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve columns.", "Error resolving column " + this.pathName);
+				return;
+			}
+			// TODO: Check correct sequence: table-path-column (it is possible that we can resolve all of them but they do not have this sequece
+		}
+		
+		//
+		// Resolve each column path in the formula relative to the table
 		//
 		for(PrimExprDependency dep : this.primExprDependencies) {
 
-			dep.columns = dep.qname.resolveColumns(looptable); // Try to really resolve symbol
+			dep.columns = dep.qname.resolveColumns(this.table); // Try to really resolve symbol
 
 			if(dep.columns == null || dep.columns.size() < dep.qname.names.size()) {
 				this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve columns.", "Error resolving columns " + dep.pathName);
@@ -368,18 +350,18 @@ public class ExprNode {
 		//
 		// Parse and bind the final (native) expression
 		//
-		buildPrimExpr();
+		buildFormulaExpression();
 	}
 	
 	//
 	// Evaluate
 	//
 
-	// It will be used during evaluation but we build it once
-	protected String transformedComputeFormula;
-	protected Expression computeExpression;
+	// Expression that is used during evaluation
+	protected Expression formulaExpression;
 
-	public void buildPrimExpr() {
+	// Build expression that can be evaluated
+	public void buildFormulaExpression() {
 		//
 		// Transform the expression by using new names and get an executable expression
 		//
@@ -389,8 +371,7 @@ public class ExprNode {
 			dep.paramName = "__p__"+i;
 			buf.replace(dep.start, dep.end, dep.paramName);
 		}
-		
-		this.transformedComputeFormula = buf.toString();
+		String transformedFormula = buf.toString();
 
 		//
 		// Create a list of variables used in the expression
@@ -412,13 +393,13 @@ public class ExprNode {
 		//
 		Expression exp = null;
 		try {
-			ExpressionBuilder builder = new ExpressionBuilder(this.transformedComputeFormula);
+			ExpressionBuilder builder = new ExpressionBuilder(transformedFormula);
 			builder.variables(vars);
 			exp = builder.build(); // Here we get parsing exceptions which might need be caught and processed
 		}
 		catch(Exception e) {
 			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Expression error.", e.getMessage());
-			this.computeExpression = null;
+			this.formulaExpression = null;
 			return;
 		}
 		exp.setVariables(vals);
@@ -426,58 +407,50 @@ public class ExprNode {
 		ValidationResult res = exp.validate(); // Boolean argument can be used to ignore unknown variables
 		if(!res.isValid()) {
 			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Expression error.", res.getErrors() != null && res.getErrors().size() > 0 ? res.getErrors().get(0) : "");
-			this.computeExpression = null;
+			this.formulaExpression = null;
+			return;
 		}
-		{
-			this.computeExpression = exp;
-		}
+
+		this.formulaExpression = exp;
 	}
 
 	public Object result; // Result of evaluation: either primitive value or record id
 
-	public void beginEvaluate() {
-		if(!this.isTuple()) {
-			this.buildPrimExpr();
-		}
-		else {
-			for(ExprNode expr : children) {
-				expr.beginEvaluate(); // Recursion
-			}
-		}
-	}
+	protected void setFormulaExpressionVariables(long i) { // Pass all variable values for the specified input to the compute expression
 
-	protected void setPrimExprVariables(long i) { // Pass all variable values for the specified input to the compute expression
 		for(PrimExprDependency dep : this.primExprDependencies) {
 			Object value = dep.columns.get(0).getValue(dep.columns, i);
 			if(value == null) value = Double.NaN;
-			this.computeExpression.setVariable(dep.paramName, ((Number)value).doubleValue());
+			this.formulaExpression.setVariable(dep.paramName, ((Number)value).doubleValue());
 		}
 		
-		// Set current output value as a special variable.
+		// Set current output value as a special variable
 		Object outputValue;
-		if(!this.isAccumulation()) {
+		if(this.path == null) {
 			outputValue = column.getValue(i);
 		}
 		else {
-			long g = (Long) this.accupath.get(0).getValue(this.accupath, i); // Find group element
+			long g = (Long) this.path.get(0).getValue(this.path, i); // Find group element
 			outputValue = column.getValue(g);
 		}
 		if(outputValue == null) outputValue = Double.NaN;
-		this.computeExpression.setVariable("output", ((Number)outputValue).doubleValue());
+		this.formulaExpression.setVariable("output", ((Number)outputValue).doubleValue());
 	}
 
 	public void evaluate(long i) {
+		
 		if(!this.isTuple()) { // Primitive expression
-			setPrimExprVariables(i); // For each input, read all necessary column values from fact table and the current output from the group table
-			result = this.computeExpression.evaluate();
+			setFormulaExpressionVariables(i); // For each input, read all necessary column values from fact table and the current output from the group table
+			result = this.formulaExpression.evaluate();
 		}
 		else { // Tuple
-			// Evaluation recursion down to primitive expressions which compute primitive values
-			for(ExprNode expr : children) {
+			
+			for(ExprNode expr : children) { // Evaluation recursion down to primitive expressions which compute primitive values
 				expr.evaluate(i);
 			}
 			// After recursion, members are supposed to store result values
 			
+			// Combine child results into a tuple and find it in the output table
 			Table output = column.getOutput();
 			Record r = this.childrenToRecord(); // Output value is this record
 			long row = output.find(r, true); // But we store a record reference so find it

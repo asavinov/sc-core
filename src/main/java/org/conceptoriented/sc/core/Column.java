@@ -140,15 +140,32 @@ public class Column {
 		this.accupath = accupath;
 	}
 	
+	// Determine if it is syntactically accumulation, that is, it seems to be intended for accumulation.
+	// In fact, it can be viewed as a syntactic check of validity and can be called isValidAccumulation
+	public boolean isAccumulation() {
+		if(this.accuformula == null || this.accuformula.trim().isEmpty()) return false;
+		if(this.accutable == null || this.accutable.trim().isEmpty()) return false;
+		if(this.accupath == null || this.accupath.trim().isEmpty()) return false;
+
+		if(this.accutable.equalsIgnoreCase(this.getInput().getName())) return false;
+
+		return true;
+	}
+
+	//
+	// Translate
+	//
+	
 	/**
-	 * Status of the column. Currently, it is own status of the formula (no propagation) and it is only translation (parse and bind) status (not evaluation).
+	 * Status of the column translation. 
+	 * It includes its own formulas status as well as status inherited from dependencies.
 	 */
 	public DcError getStatus() {
-		if(expression == null) {
+		if(mainExpr == null) {
 			return new DcError(DcErrorCode.NONE, "", "");
 		}
 		else {
-			ExprNode errorNode = expression.getErrorNode();
+			ExprNode errorNode = mainExpr.getErrorNode();
 			if(errorNode == null) {
 				return new DcError(DcErrorCode.NONE, "", "");
 			}
@@ -158,54 +175,86 @@ public class Column {
 		}
 	}
 
-	//
-	// Translate
-	//
-	
-	public ExprNode expression;
-	
+	public ExprNode mainExpr; // Either primitive or complex (tuple)
+
+	public ExprNode accuExpr; // Additional values collected from a lesser table
+
 	public void translate() {
-		if(formula == null || formula.isEmpty()) {
-			this.expression = null;
-			schema.setDependency(this, null); // Non-evaluatable column independent of the reason
-			return;
+
+		this.mainExpr = translateMain();
+		List<Column> mainColumns = null; // Non-evaluatable column independent of the reason
+		if(this.mainExpr != null) {
+			mainColumns = this.mainExpr.getDependencies();
 		}
 
+		this.accuExpr = translateAccu();
+		List<Column> accuColumns = null; // Non-evaluatable column independent of the reason
+		if(this.accuExpr != null) {
+			accuColumns = this.accuExpr.getDependencies();
+		}
+
+		// Update dependence graph
+		List<Column> columns = mainColumns;
+		if(accuColumns != null) {
+			columns.addAll(accuColumns);
+		}
+		this.schema.setDependency(this, columns);
+	}
+
+	public ExprNode translateMain() {
+		if(this.formula == null || this.formula.isEmpty()) {
+			return null;
+		}
+
+		ExprNode expr = new ExprNode();
+
 		//
-		// Parse (check correct syntax of strings only)
+		// Parse: check correct syntax, find all symbols and store them in dependencies
 		//
-		expression = new ExprNode();
-		expression.name = this.name;
-		expression.formula = this.formula;
-		expression.accuformula = this.accuformula;
-		expression.accutableName = this.accutable;
-		expression.accupathName = this.accupath;
+		expr.formula = this.formula;
+		expr.tableName = this.getInput().getName();
+		expr.pathName = "";
+		expr.name = this.name;
 		
-		expression.parse();
+		expr.parse();
 
 		//
 		// Bind (check if all the symbols can be resolved)
 		//
-		expression.table = this.getInput(); // It will be passed recursively to all child expressions
-		expression.column = this;
+		expr.column = this;
 
-		expression.bind();
-
-		// TODO: What kind of dependencies we need in the case of aggregation?
+		expr.bind();
 		
-		// Reset column data before evaluation. 0.0 for numeric. In future, additional param in formula can be used (for grouping) as well as postprocessing value like normal formula. So formula can be always thought of as initializor. In addition, we can add a collecotr formula for aggregation. And finally, we can add a finalizer executed after aggregation as a normal formula.
-		// Check that evaluation should not be called for formula/column updates (only explicitly).
-		// TODO: visualize none/group/tuple/calc columns differently (method getFormulaType similar to getStatus). It could be an icon.
-		// Check consistency of formula types: primitive -> only group and calc, non-primitive -> only tuple. Initially, as error message. Later, hiding irrelevant UI controls.
-		// Maybe introduce an explicit selector "formula type"=none_or_external/calc/tuple/group. It will be stored in a user provided property (what the user wants).
-		
-		//
-		// Store dependencies
-		//
-		List<Column> columns = expression.getDependencies();
-		schema.setDependency(this, columns); // Update dependency graph
+		return expr;
 	}
 		
+	public ExprNode translateAccu() {
+		if(this.accuformula == null || this.accuformula.isEmpty()) {
+			return null;
+		}
+
+		ExprNode expr = new ExprNode();
+
+		//
+		// Parse: check correct syntax, find all symbols and store them in dependencies
+		//
+		expr.formula = this.accuformula;
+		expr.tableName = this.accutable;
+		expr.pathName = this.accupath;
+		expr.name = this.name;
+		
+		expr.parse();
+
+		//
+		// Bind (check if all the symbols can be resolved)
+		//
+		expr.column = this;
+
+		expr.bind();
+		
+		return expr;
+	}
+
 	//
 	// Evaluate
 	//
@@ -222,13 +271,56 @@ public class Column {
 		//
 		// Evaluate
 		//
+		
+		// Step 1: Evaluate main formula to initialize the column. If it is empty but accu is given then use default initial values.
 
-		// TODO: Reset current column (important for grouping)
-		expression.beginEvaluate();
+		// Step 1: Evaluate accu formula to update the column values (in the case of accu formula)
+		
+		// Inputs:
+		// - user type of formula: none (do not want to evaluate), auto (determine itself), calculation (only if prim type), tuple (only if complex type), accu (only if prim type)
+		// - main formula (prim or complex), accu formula (what main column type is -> only prim)
+		// In the evaluation loop we give the following input:
+		// - current record id which is used to retrieve all column path values and use them to set expression variables
+		// - for accu, we provide also current record id but for another table, but in addition, the expr evaluator will rertrive current value using accu path and column name
+		// We could generalize it by either providing the current value from outside (for both calc and accu formula) or providing column path for retrieving this value (column name for calc and accupath+column name for accu)
+		// This parameter could be called outputpath and it will always have column name at the end and be prefixed by accu path.
+		// In this case, we can use the same ExprNode for both calc and accu (primitive) expressions
+		// So the idea is that one ExprNode is used for one expr only. However:
+		// - it has to know its table all column paths start from
+		// - it has to know either current value, or path to current value: col name for calc, and accupath+col name for accu
+		// - it can evaluate tuples by evaluating children, combining the results and finding the new output value
+		
+		// Algorithm:
+		// if none then do nothing
+		// if auto try to guess the type of formula using parsing and column type etc.
+		// if calc then parse-bind-eval main formula in calc mode: parseCalc, bindCalc, evalCalc
+		// if tuple parse-bind-eval main formula in tuple mode: parseTuple, bindTuple, evalTuple
+		// if accu then do calc as init and then additionally accu formula in accu mode: parseAccu, bindAccu, evalAccu.
+		
+		// Introduce 2 ExprNode types inheriting from one parent which has some common methods, say, for native expressions
+		// Each of them knows only how to deal with certain expressions: tuple and primitive
+		// Goal is to remove two formulas - main and accu - from one class. Rather, we create two ExprNodes - main and accu. They are linked to different tables and also accu uses group path.
+		// Then we use these ExprNodes from column evaluation rather than from expr evaluation - expr evaluation is simplified and knows only about one formula.
+
+		// Dependency graph currently does not store tables for resolving paths. In order to resolve, we need to provide a table. 
+		// Solution 1: store table name as the first segment in QName: [Table 1].[Column 1].[Column 2] etc.
+		// Solution 2: store table name for each entry as a separate field.
+
+		// We always evaluate main formula by initializing the column values.
+		// If it is empty and it is accu column then we use default initialization (0 for primitive columns, null for complex, "" for strings etc.)
+		
+		// If there is an accumulation addition then we also execute it. Normally for primitive columns only.
+		
+
+		// TODO: What kind of dependencies we need in the case of aggregation?
+		// TODO: visualize none/group/tuple/calc columns differently (method getFormulaType similar to getStatus). It could be an icon.
+		// Check consistency of formula types: primitive -> only group and calc, non-primitive -> only tuple. Initially, as error message. Later, hiding irrelevant UI controls.
+		// Maybe introduce an explicit selector "formula type"=none_or_external/calc/tuple/group. It will be stored in a user provided property (what the user wants).
+		
 
 		// Initialize values of the column (some default value or a formula). The default value can depend on the output type (complex, double, string etc.)
 		Object defaultValue;
-		if(this.expression.isTuple()) {
+		if(this.mainExpr.isTuple()) {
 			defaultValue = null;
 		}
 		else {
@@ -239,27 +331,27 @@ public class Column {
 			this.setValue(i, defaultValue);
 		}
 
-		if(!this.expression.isAccumulation()) {
+		if(!this.isAccumulation()) {
 			Table looptable = input;
 			range = looptable.getNewRange(); // All dirty/new rows
 			for(long i=range.start; i<range.end; i++) {
 
-				expression.evaluate(i);
+				mainExpr.evaluate(i);
 
-				this.setValue(i, expression.result); // Store the output value for the current row
+				this.setValue(i, mainExpr.result); // Store the output value for the current row
 			}
 		}
 		else {
-			Table looptable = expression.accutable;
+			Table looptable = mainExpr.table;
 			range = looptable.getNewRange(); // All dirty/new rows
 
 			for(long i=range.start; i<range.end; i++) {
-				long g = (Long) expression.accupath.get(0).getValue(expression.accupath, i); // Find group element
+				long g = (Long) mainExpr.path.get(0).getValue(mainExpr.path, i); // Find group element
 				//Object output = this.getValue(g); // Read current output
 
-				expression.evaluate(i);
+				mainExpr.evaluate(i);
 
-				this.setValue(g, expression.result); // Store the output value for the current row
+				this.setValue(g, mainExpr.result); // Store the output value for the current row
 			}
 		}
 

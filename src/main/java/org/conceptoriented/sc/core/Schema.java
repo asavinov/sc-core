@@ -357,54 +357,22 @@ public class Schema {
 
 
 	/**
-	 * Parse and bind all column formulas in the schema. The result is stored in the state property of each column.
+	 * Parse and bind all column formulas in the schema. 
+	 * All dependencies are computed and made up-to-date.
+	 * The updated result of translation is stored in individual columns.
 	 */
 	public void translate() {
 		
-		// Translate all columns individually by filling in their own dependencies and their own status
-		// Propagate translation status through the graph
+		for(Column col : this.columns) {
+			col.translate();
+		}
 		
-		// Result deps are up-to-date
-		// Translation own status is up-to-date
-		// Translation dependency status is up-to-date
-		
-		// How does it influence data status
-		
-
-		
-		
-		
-		// Complete translation means: parse all individual column formulas and bind all individual column formulas
-		// Dependencies are reset, that is, empty and we start from having no dependencies
-		// Results: 
-		// - dependencies are generated (even if some formulas have errors), 
-		// - all column statuses are set (with errors if any or success or anything that can be shown as status)
-		// - 
-		// What if a column has not been changed? 
-		// What happens with data status? For example, does it mean that all column data are marked dirty (even if the column has not changed)?
-
-		// One option is to translate only columns marked as 'formula changed' or 'name changed' (name can influence other columns). 
-		// In other words, in addition to data status (new, deleted, clean) we need a kind of schema/formula status which is important for translation phase.
-		// Note that changing formula makes automatically data dirty. However, it also makes this column formula dirty. What is the difference?
-		
-		// Track status of: column status, e.g., color and message, column evaluate status (dirty, errors), table status (new rows)
-		// Update (dirty) status: column name changed, column formula changed (expr, fact, path), rows added (data status)
-		// What we want to display? Status for each column: ...
-		
-		// Display translate status with explicit action, that is, 
-		// we need to update Translate status of all columns (and other elements) after any change automatically.
-		// Changes: name and property changes, formula and properties changes 
-		// Formula/translation Status: no-formula (not evaluable, no deps), valid/invalid own formula + valid/invalid dependant formulas -> readiness to evaluate
-		// After every column edit, we update - deps, own formulas, deps erro propagation - and store the new statuses so that they can be requested
-		// Alternatively, we can simply store all changes, while the complete status is computed by means of explicit call of Translate function.
-		
-		// What about dirty status of data? 
-		// If it is separate, then it is clean after (successfull) evaluation of this column
-		// If no formula, then no status (non-evaluable, e.g., always green or gray). Determined by property like HasFormula() 
-		// If formula is changed then it and all its followers are marked dirty. It is done directly in the data.
-		// If rows are added then all column of this table are marked dirty (which can be determined by dirty status of table/column data)
-		
-		
+		// TODO: How does it influences the data status? Should we reset it? What if a column has not changed?
+		// Maybe we need somehow mark types of changes (name change, formula change (different components like accu, tuple etc.), data add/remove/update etc.)
+		// Each change/modification/dirty type (status) use special visualization. 
+		// For each change, we need to describe how it propagates so that we can change accordingly the status of other columns/tables/rows
+		// Solution: Develop a uniform conception of dirty status, its propagation and its cleaning (translation, evaluation etc.)
+		// Solution: Currently we do complete translation and complete evaluation.
 	}
 
 	/**

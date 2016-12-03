@@ -178,7 +178,7 @@ public class Tests {
         record.set("A", 6);
         table.append(record);
         
-        columnB.formula = "2 * [A] + 1";
+        columnB.setFormula("2 * [A] + 1");
         columnB.evaluate();
 
         assertEquals(11.0, (Double)columnB.getValue(0), 0.00001);
