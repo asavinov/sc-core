@@ -7,6 +7,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.conceptoriented.sc.core.Column;
@@ -181,6 +182,11 @@ public class Tests {
         columnB.setFormula("2 * [A] + 1");
 
         columnB.translate();
+        
+        // Check correctness of dependencies
+        List<Column> depsB = schema.getDependency(columnB);
+        assertTrue( depsB.contains(columnA) );
+
         columnB.evaluate();
 
         assertEquals(11.0, (Double)columnB.getValue(0), 0.00001);
@@ -233,10 +239,86 @@ public class Tests {
         c5.setFormula(" { [A] = [A]; [B] = [B] } ");
 
         c5.translate();
+
+        // Check correctness of dependencies
+        List<Column> depsC5 = schema.getDependency(c5);
+        assertTrue( depsC5.contains(c3) );
+        assertTrue( depsC5.contains(c4) );
+
         c5.evaluate();
 
         assertEquals(0L, c5.getValue(0));
         assertEquals(1L, c5.getValue(1));
     }
     
+    @Test
+    public void accuExprTest()
+    {
+    	// Create and configure: schema, tables, columns
+        schema = new Schema("My Schema");
+
+        //
+        // Table 1 (group table)
+        //
+        Table t1 = schema.createTable("T");
+
+        Column tid = schema.createColumn("Id", "T", "Double");
+
+        // Add one or more records to the table
+        Record r = new Record();
+
+        r.set("Id", 5.0);
+        t1.append(r); 
+        r.set("Id", 10.0);
+        t1.append(r); 
+        r.set("Id", 15.0);
+        t1.append(r); 
+
+        // Define accu column
+        Column ta = schema.createColumn("A", "T", "Double");
+        ta.setFormula(""); // Init to default
+
+        ta.setAccutable("T2");
+        ta.setAccuformula(" output + 2.0 * [Id] ");
+        ta.setAccupath("[G]");
+
+        //
+        // Table 2 (fact table)
+        //
+        Table t2 = schema.createTable("T2");
+
+        Column t2id = schema.createColumn("Id", "T2", "Double");
+
+        // Add one or more records to the table
+        r = new Record();
+
+        r.set("Id", 5.0);
+        t2.append(r); 
+        r.set("Id", 5.0);
+        t2.append(r); 
+        r.set("Id", 10.0);
+        t2.append(r); 
+        r.set("Id", 20.0);
+        t2.append(r);
+
+        // Define group column
+        Column t2g = schema.createColumn("G", "T2", "T");
+        t2g.setFormula(" { [Id] = [Id] } ");
+
+        //
+        // Translate and evaluate
+        //
+        schema.translate();
+
+        // Check correctness of dependencies
+        List<Column> depsTa = schema.getDependency(ta);
+        assertTrue( depsTa.contains(t2id) ); // Used in formula
+        assertTrue( depsTa.contains(t2g) ); // Group path
+
+        schema.evaluate();
+
+        assertEquals(20.0, ta.getValue(0));
+        assertEquals(20.0, ta.getValue(1));
+        assertEquals(0.0, ta.getValue(2));
+    }
 }

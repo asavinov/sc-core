@@ -131,6 +131,7 @@ public class Table {
 
 			boolean found = true;
 			for(int j=0; j<names.size(); j++) {
+				// TODO: The same number in Double and Integer will not be equal. So we need cast to some common type at some level of the system or here.
 				Object recordValue = values.get(j);
 				Object columnValue = columns.get(j).getValue(i);
 				if(!recordValue.equals(columnValue)) { found = false; break; }

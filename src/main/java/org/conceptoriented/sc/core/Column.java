@@ -203,22 +203,44 @@ public class Column {
 
 	public void translate() {
 
-		this.mainExpr = translateMain();
+		if(determineAutoFormulaType() == DcFormulaType.NONE) {
+			this.schema.setDependency(this, null);
+			return;
+		}
+		
+		//
+		// Step 1: Evaluate main formula to initialize the column. If it is empty then we need to init it with default values
+		//
+
 		List<Column> mainColumns = null; // Non-evaluatable column independent of the reason
+		this.mainExpr = null;
+
+		this.mainExpr = translateMain();
 		if(this.mainExpr != null) {
 			mainColumns = this.mainExpr.getDependencies();
 		}
 
-		this.accuExpr = translateAccu();
+		//
+		// Step 2: Evaluate accu formula to update the column values (in the case of accu formula)
+		//
+		
 		List<Column> accuColumns = null; // Non-evaluatable column independent of the reason
-		if(this.accuExpr != null) {
-			accuColumns = this.accuExpr.getDependencies();
+		this.accuExpr = null;
+
+		if(this.determineAutoFormulaType() == DcFormulaType.ACCU) {
+			this.accuExpr = translateAccu();
+			if(this.accuExpr != null) {
+				accuColumns = this.accuExpr.getDependencies();
+			}
 		}
 
+		//
 		// Update dependence graph
+		//
 		List<Column> columns = mainColumns;
 		if(accuColumns != null) {
-			columns.addAll(accuColumns);
+			if(columns == null) columns = accuColumns;
+			else columns.addAll(accuColumns);
 		}
 		this.schema.setDependency(this, columns);
 	}
@@ -290,7 +312,7 @@ public class Column {
 		// Step 1: Evaluate main formula to initialize the column. If it is empty then we need to init it with default values
 		//
 
-		Range range = mainExpr.table.getNewRange(); // All dirty/new rows
+		Range mainRange = this.getInput().getNewRange(); // All dirty/new rows
 		if(this.formula == null || this.formula.trim().isEmpty()) { // Initialize to default constant
 			Object defaultValue; // Depends on the column type
 			if(this.getOutput().isPrimitive()) {
@@ -299,12 +321,12 @@ public class Column {
 			else {
 				defaultValue = null;
 			}
-			for(long i=range.start; i<range.end; i++) {
+			for(long i=mainRange.start; i<mainRange.end; i++) {
 				this.setValue(i, defaultValue);
 			}
 		}
-		else { // Evaluate formula
-			for(long i=range.start; i<range.end; i++) {
+		else { // Initialize to what formula returns
+			for(long i=mainRange.start; i<mainRange.end; i++) {
 				mainExpr.evaluate(i);
 				this.setValue(i, mainExpr.result);
 			}
@@ -315,20 +337,20 @@ public class Column {
 		//
 		
 		if(this.determineAutoFormulaType() == DcFormulaType.ACCU) {
-			range = accuExpr.table.getNewRange(); // All dirty/new rows
-			for(long i=range.start; i<range.end; i++) {
+			Range accuRange = accuExpr.table.getNewRange(); // All dirty/new rows
+			for(long i=accuRange.start; i<accuRange.end; i++) {
 				long g = (Long) accuExpr.path.get(0).getValue(accuExpr.path, i); // Find group element
 				accuExpr.evaluate(i);
 				this.setValue(g, accuExpr.result);
 			}
 		}
 
-		// TODO: What kind of dependencies we need in the case of aggregation?
-		// TODO: What kind of dependencies in the case of tuples?
+		// TODO: Always do complete translation/evaluate before we introduce dirty propagation mechanism.
+		// TODO: Replacement of column paths by artificial parameter names could theoretically produce bugs because we apply it directly to the formula and hence the <start,end> can be invalidated. Probably, we need to replace by occurrence of substring rather than using <start,end>. Note also that currently there is one dep entry for each ocuurance even for the same path. Method buildFormulaExpression() 
+
 		// TODO: visualize none/group/tuple/calc columns differently It could be an icon.
 		// Check consistency of formula types: primitive -> only group and calc, non-primitive -> only tuple. Initially, as error message. Later, hiding irrelevant UI controls.
 		// Maybe introduce an explicit selector "formula type"=none_or_external/calc/tuple/group. It will be stored in a user provided property (what the user wants).
-		// TODO: Always do complete translation/evaluate before we introduce dirty propagation mechanism.
 	}
 
 	//

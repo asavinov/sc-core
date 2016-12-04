@@ -92,7 +92,7 @@ public class ExprNode {
 				if(childDeps == null) continue;
 				childDeps.forEach(x -> { if(!columns.contains(x)) columns.add(x); } );
 			}
-			// Are member names also dependencies? Does this function depend on its tuple member names?
+			// Are member names also dependencies? Does this tuple column depend on its tuple member names (output table attributes)?
 		}
 		return columns;
 	}
@@ -171,7 +171,7 @@ public class ExprNode {
 		}
 		
 		//
-		// Parse path
+		// Parse path (treated as a normal access path along with those in the formula)
 		//
 		if(this.pathName != null && !this.pathName.trim().isEmpty()) {
 
@@ -181,7 +181,14 @@ public class ExprNode {
 				return;
 			}
 			
-			// TODO: We need to add the path into dependence graph taking into account that it is group path (along with other measures) 
+			// Add group path to dependencies (it must be computed before accumulation)
+			PrimExprDependency pathDep = new PrimExprDependency();
+			pathDep.paramName = "output";
+			pathDep.pathName = this.pathName;
+			pathDep.qname = this.pathQName;
+			pathDep.start = -1; // Means that it is not in the formula
+			pathDep.end = -1;
+			this.primExprDependencies.add(pathDep);
 		}
 
 		this.status = new DcError(DcErrorCode.NONE, "Parsed successfully.", "");
@@ -190,7 +197,7 @@ public class ExprNode {
 	public void parseTupleExpr(String frml) {
 		
 		//
-		// Check the enclosure (curly brackets)
+		// Check correct enclosure (curly brackets)
 		//
 		int open = frml.indexOf("{");
 		int close = frml.lastIndexOf("}");
@@ -275,6 +282,7 @@ public class ExprNode {
 		
 		if(!this.isTuple()) { // Non-tuple: either calculated or aggregated
 			this.bindPrimExpr(); // Bind main formula relative to main table
+			this.buildFormulaExpression(); // Parse and bind the final (native) expression
 		}
 		else { // Tuple - combination of assignments
 			Table output = this.column.getOutput();
@@ -332,11 +340,16 @@ public class ExprNode {
 				this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve columns.", "Error resolving column " + this.pathName);
 				return;
 			}
-			// TODO: Check correct sequence: table-path-column (it is possible that we can resolve all of them but they do not have this sequece
+
+			// Check the sequence: table-path-column. End of last path segment is start of column. 
+			if(this.path.get(this.path.size()-1).getOutput() != column.getInput()) {
+				this.status = new DcError(DcErrorCode.BIND_ERROR, "Wrong group path.", "Group path type has to be equal to the table where accumulation column is defined: " + this.pathName);
+				return;
+			}
 		}
 		
 		//
-		// Resolve each column path in the formula relative to the table
+		// Resolve each column path in the formula relative to the table. Group path is also in this list.
 		//
 		for(PrimExprDependency dep : this.primExprDependencies) {
 
@@ -347,11 +360,6 @@ public class ExprNode {
 				return;
 			}
 		}
-		
-		//
-		// Parse and bind the final (native) expression
-		//
-		buildFormulaExpression();
 	}
 	
 	//
@@ -369,6 +377,7 @@ public class ExprNode {
 		StringBuffer buf = new StringBuffer(formula);
 		for(int i = this.primExprDependencies.size()-1; i >= 0; i--) {
 			PrimExprDependency dep = this.primExprDependencies.get(i);
+			if(dep.start < 0 || dep.end < 0) continue; // Some dependencies are not from formula (e.g., group path)
 			dep.paramName = "__p__"+i;
 			buf.replace(dep.start, dep.end, dep.paramName);
 		}
@@ -380,13 +389,14 @@ public class ExprNode {
 		Set<String> vars = new HashSet<String>();
 		Map<String, Double> vals = new HashMap<String, Double>();
 		for(PrimExprDependency dep : this.primExprDependencies) {
+			if(dep.paramName == null || dep.paramName.trim().isEmpty()) continue;
 			vars.add(dep.paramName);
 			vals.put(dep.paramName, 0.0);
 		}
 		// Set<String> vars = this.primExprDependencies.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
 		
 		// Add the current output value as a special (reserved) variable
-		vars.add("output");
+		if(!vars.contains("output")) vars.add("output");
 		vals.put("output", 0.0);
 
 		//
@@ -420,9 +430,15 @@ public class ExprNode {
 	protected void setFormulaExpressionVariables(long i) { // Pass all variable values for the specified input to the compute expression
 
 		for(PrimExprDependency dep : this.primExprDependencies) {
+			if(dep.paramName == null || dep.paramName.trim().isEmpty()) continue;
 			Object value = dep.columns.get(0).getValue(dep.columns, i);
 			if(value == null) value = Double.NaN;
-			this.formulaExpression.setVariable(dep.paramName, ((Number)value).doubleValue());
+			try {
+				this.formulaExpression.setVariable(dep.paramName, ((Number)value).doubleValue());
+			}
+			catch(Exception e) {
+				dep = null;
+			}
 		}
 		
 		// Set current output value as a special variable
