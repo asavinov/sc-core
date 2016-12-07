@@ -183,18 +183,26 @@ public class Column {
 	 * It includes its own formulas status as well as status inherited from dependencies.
 	 */
 	public DcError getStatus() {
-		if(mainExpr == null) {
-			return new DcError(DcErrorCode.NONE, "", "");
-		}
-		else {
-			ExprNode errorNode = mainExpr.getErrorNode();
-			if(errorNode == null) {
-				return new DcError(DcErrorCode.NONE, "", "");
-			}
-			else {
-				return errorNode.status;
+		DcError err = null;
+		if(this.mainExpr != null) {
+			ExprNode errorNode = this.mainExpr.getErrorNode();
+			if(errorNode != null) {
+				err = errorNode.status;
 			}
 		}
+		
+		if(err == null && this.accuExpr != null) {
+			ExprNode errorNode = this.accuExpr.getErrorNode();
+			if(errorNode != null) {
+				err = errorNode.status;
+			}
+		}
+
+		if(err == null) {
+			err = new DcError(DcErrorCode.NONE, "", "");
+		}
+		
+		return err;
 	}
 
 	public ExprNode mainExpr; // Either primitive or complex (tuple)

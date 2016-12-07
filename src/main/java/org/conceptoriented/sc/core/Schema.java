@@ -355,6 +355,22 @@ public class Schema {
 		return res;
 	}
 
+	protected List<Column> getAllNextColumns(List<Column> previousColumns) {
+		List<Column> res = new ArrayList<Column>();
+		
+		for(Map.Entry<Column, List<Column>> entry : dependencies.entrySet()) {
+			Column col = entry.getKey();
+			List<Column> deps = entry.getValue();
+			if(deps == null) continue; // Non-evaluatable (no formula or error)
+			if(previousColumns.contains(col)) continue; // Skip already evaluated columns
+
+			if(previousColumns.containsAll(deps)) { // All deps have to be evaluated (non-dirty)
+				res.add(col); 
+			}
+		}
+		
+		return res;
+	}
 
 	/**
 	 * Parse and bind all column formulas in the schema. 
@@ -363,10 +379,44 @@ public class Schema {
 	 */
 	public void translate() {
 		
+		//
+		// Translate individual columns and build dependency graph
+		//
+
 		for(Column col : this.columns) {
 			col.translate();
 		}
 		
+		//
+		// Propagate translation status through dependency graph
+		//
+		
+		List<Column> readyColumns = getStartingColumns(); // Start from non-evaluatable columns (no definition)
+		List<Column> nextColumns = getAllNextColumns(readyColumns); // First iteration
+		while(nextColumns.size() > 0) {
+			for(Column col : nextColumns) {
+				if(col.getStatus() == null || col.getStatus().code == DcErrorCode.NONE) {
+					// If there is at least one error in dependencies then mark this as propagated error
+					List<Column> deps = this.getDependency(col);
+					// Find at least one column with errors which are not suitable for propagation
+					Column errCol = deps.stream().filter(x -> x.getStatus() != null && x.getStatus().code != DcErrorCode.NONE).findAny().orElse(null);
+					if(errCol != null) { // Mark this column as having propagated error
+						if(errCol.getStatus().code == DcErrorCode.PARSE_ERROR || errCol.getStatus().code == DcErrorCode.PARSE_PROPAGATION_ERROR)
+							col.mainExpr.status = new DcError(DcErrorCode.PARSE_PROPAGATION_ERROR, "Propagated parse error.", "Error in the column: '" + errCol.getName() + "'");
+						else if(errCol.getStatus().code == DcErrorCode.BIND_ERROR || errCol.getStatus().code == DcErrorCode.BIND_PROPAGATION_ERROR)
+							col.mainExpr.status = new DcError(DcErrorCode.BIND_PROPAGATION_ERROR, "Propagated bind error.", "Error in the column: '" + errCol.getName() + "'");
+						else if(errCol.getStatus().code == DcErrorCode.EVALUATE_ERROR || errCol.getStatus().code == DcErrorCode.EVALUATE_PROPAGATION_ERROR)
+							col.mainExpr.status = new DcError(DcErrorCode.EVALUATE_PROPAGATION_ERROR, "Propagated evaluation error.", "Error in the column: '" + errCol.getName() + "'");
+						else
+							col.mainExpr.status = new DcError(DcErrorCode.GENERAL, "Propagated error.", "Error in the column: '" + errCol.getName() + "'");
+					}
+				}
+				readyColumns.add(col);
+			}
+			// Next iteration
+			nextColumns = getAllNextColumns(readyColumns);
+		}
+
 		// TODO: How does it influences the data status? Should we reset it? What if a column has not changed?
 		// Maybe we need somehow mark types of changes (name change, formula change (different components like accu, tuple etc.), data add/remove/update etc.)
 		// Each change/modification/dirty type (status) use special visualization. 
@@ -384,7 +434,6 @@ public class Schema {
 		List<Column> readyColumns = getStartingColumns(); // Start from non-evaluatable columns (no definition)
 		List<Column> nextColumns = getNextColumns(readyColumns); // First iteration
 		while(nextColumns.size() > 0) {
-			// Evaluate all columns that can be evaluated
 			for(Column col : nextColumns) {
 				if(col.getStatus() == null || col.getStatus().code == DcErrorCode.NONE) {
 					col.evaluate();
