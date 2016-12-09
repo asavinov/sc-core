@@ -391,8 +391,8 @@ public class Schema {
 		// Propagate translation status through dependency graph
 		//
 		
-		List<Column> readyColumns = getStartingColumns(); // Start from non-evaluatable columns (no definition)
-		List<Column> nextColumns = getAllNextColumns(readyColumns); // First iteration
+		List<Column> readyColumns = this.getStartingColumns(); // Start from non-evaluatable columns (no definition)
+		List<Column> nextColumns = this.getAllNextColumns(readyColumns); // First iteration
 		while(nextColumns.size() > 0) {
 			for(Column col : nextColumns) {
 				if(col.getStatus() == null || col.getStatus().code == DcErrorCode.NONE) {
@@ -414,8 +414,22 @@ public class Schema {
 				readyColumns.add(col);
 			}
 			// Next iteration
-			nextColumns = getAllNextColumns(readyColumns);
+			nextColumns = this.getAllNextColumns(readyColumns);
 		}
+		
+		//
+		// Find columns with cyclic dependencies
+		//
+		for(Column col : this.getColumns()) {
+			if(readyColumns.contains(col)) continue;
+			
+			// If a column has not been covered during propagation then it belongs to a cycle. The cycle itself is not found by this procedure. 
+
+			if(col.getStatus() == null || col.getStatus().code == DcErrorCode.NONE) {
+				col.mainExpr.status = new DcError(DcErrorCode.DEPENDENCY_CYCLE_ERROR, "Cyclic dependency.", "This column formula depends on itself by using other columns which depend on it.");
+			}
+		}
+
 
 		// TODO: How does it influences the data status? Should we reset it? What if a column has not changed?
 		// Maybe we need somehow mark types of changes (name change, formula change (different components like accu, tuple etc.), data add/remove/update etc.)
@@ -431,8 +445,8 @@ public class Schema {
 	 */
 	public void evaluate() {
 
-		List<Column> readyColumns = getStartingColumns(); // Start from non-evaluatable columns (no definition)
-		List<Column> nextColumns = getNextColumns(readyColumns); // First iteration
+		List<Column> readyColumns = this.getStartingColumns(); // Start from non-evaluatable columns (no definition)
+		List<Column> nextColumns = this.getNextColumns(readyColumns); // First iteration
 		while(nextColumns.size() > 0) {
 			for(Column col : nextColumns) {
 				if(col.getStatus() == null || col.getStatus().code == DcErrorCode.NONE) {
@@ -441,7 +455,7 @@ public class Schema {
 				}
 			}
 			// Next iteration
-			nextColumns = getNextColumns(readyColumns);
+			nextColumns = this.getNextColumns(readyColumns);
 		}
 
 		//
