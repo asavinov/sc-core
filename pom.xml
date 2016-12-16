@@ -137,6 +137,11 @@
 			<artifactId>exp4j</artifactId>
 			<version>0.4.7</version>
 		</dependency>
+	    <dependency>
+	        <groupId>com.udojava</groupId>
+	        <artifactId>EvalEx</artifactId>
+	        <version>1.4</version>
+	    </dependency>
 
 		<!-- For tests -->
 		<dependency>

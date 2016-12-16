@@ -3,6 +3,7 @@ package org.conceptoriented.sc.core;
 import static org.junit.Assert.*;
 
 import java.io.File;
+import java.math.BigDecimal;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -32,31 +33,39 @@ public class Tests {
     public void setUp() {
     }
 
+    @Test
+    public void evalExTest()
+    {
+    	BigDecimal result = null;
+    	
+    	com.udojava.evalex.Expression e = new com.udojava.evalex.Expression("1+1/3");
+    	e.setPrecision(2);
+    	e.setRoundingMode(java.math.RoundingMode.UP);
+    	result = e.eval();
+    	
+    	e = new com.udojava.evalex.Expression("SQRT(a^2 + b^2)");
+    	List<String> usedVars = e.getUsedVariables();
 
-	// Major steps
-	// - create schema objects either programmatically or by de-serializing from JSON:
-	// - configure schema objects. Importantly, every column has to get its evaluator instance: instance of plug-in, instance of COEL expression, instance of Mapping specification etc.
-	//   - normal columns either explicitly assigned a plug-in or find this plug-in by name convention. 
-	//   - import columns need to be configured my using Mapping configuration so that their evaluate function can pop records from input stream and push then into the type table.
-	//     it also can use a (simple) filter so that not all input records are imported. A mapping is simply an output record with fields defined in terms of the input column values (COEL TUPLE) but it can be more complex in the case of complex import object structure (JSON, XML, audio etc.).
-	//     Import mapping specification can be executed in terms of the specific Record implementation which it exposes (rather than column structure). 
-	//   - export columns are normal user-defined columns which return a record and push it to the type table (which can be export table)
-	//   - export columns can be a special (export) column which accepts mapping as its formula. for example, it will read certain columns and then push a record to the output.
-	//     the only problem is that we do not want to output all records so we need a mechanism of filtering for mapping
-	//     filter can be specified as some other binary column (so it depends on it) computed by the user: if it is true then this export column outputs a record according to the mapping
-	//
-	// - evaluate schema
-	//   - retrieve dependencies from all column functions
-	//   - build dependency graph
-	//   - initialize column functions by passing column references and other parameters needed for evaluation.
-	//   - execute all column evaluations.
-	//     - a column might not need to be evaluated if it is not dirty (it is determined either by the driver or the column evaluator itself)
-	//     - import columns determine their dirty status from the import table (if its has new record)
-	//     - evaluation of import columns will add new records to normal tables by making them dirty
-	//     - normal columns can also append records to other tables by making them dirty
-	//     - records can be also appended to export tables but here nothing happens (the export thread will consume them)
-	//       we never write to export explicitly - we need to return the corresponding object to be pushed. 
+    	e.getExpressionTokenizer(); // Does not detect errors
+    	
+    	e.setVariable("a", "2.4"); // Can work with strings (representing numbers)
+    	e.setVariable("b", new BigDecimal(9.253));
 
+    	// Validate
+    	e.toRPN(); // Generates prefixed representation but can be used to check errors (variables have to be set in order to correctly determine parse errors)
+
+    	result = e.eval();
+		
+		result = new com.udojava.evalex.Expression("random() > 0.5").eval();
+
+		//e = new com.udojava.evalex.Expression("MAX('aaa', 'bbb')");
+		// We can define custom functions but they can take only numbers (as constants). 
+		// EvalEx does not have string parameters (literals). 
+		// It does not recognize quotes. So maybe simply introduce string literals even if they will be converted into numbers, that is, just like string in setVariable.
+		// We need to change tokenizer by adding string literals in addition to numbers and then their processing.
+		
+		e.eval();
+    }
 
     @Test
     public void schemaTest()
