@@ -52,7 +52,12 @@ public class Tests {
     	e.setVariable("b", new BigDecimal(9.253));
 
     	// Validate
-    	e.toRPN(); // Generates prefixed representation but can be used to check errors (variables have to be set in order to correctly determine parse errors)
+    	try {
+        	e.toRPN(); // Generates prefixed representation but can be used to check errors (variables have to be set in order to correctly determine parse errors)
+    	}
+    	catch(com.udojava.evalex.Expression.ExpressionException ee) {
+    		System.out.println(ee);
+    	}
 
     	result = e.eval();
 		

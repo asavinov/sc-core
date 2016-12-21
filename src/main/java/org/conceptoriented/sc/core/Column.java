@@ -333,7 +333,7 @@ public class Column {
 				this.setValue(i, defaultValue);
 			}
 		}
-		else { // Initialize to what formula returns
+		else if(mainExpr != null) { // Initialize to what formula returns
 			for(long i=mainRange.start; i<mainRange.end; i++) {
 				mainExpr.evaluate(i);
 				this.setValue(i, mainExpr.result);

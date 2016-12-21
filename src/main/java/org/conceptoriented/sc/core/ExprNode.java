@@ -1,5 +1,6 @@
 package org.conceptoriented.sc.core;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -123,6 +124,9 @@ public class ExprNode {
 	public void parsePrimExpr(String frml) {
 		if(frml == null || frml.isEmpty()) return;
 		
+		//
+		// Find all occurrences of individual columns names in square brackets
+		//
 		String ex =  "\\[(.*?)\\]";
 		//String ex = "[\\[\\]]";
 		Pattern p = Pattern.compile(ex,Pattern.DOTALL);
@@ -141,7 +145,7 @@ public class ExprNode {
 		}
 		
 		//
-		// Create column paths by concatenating dot separated name sequences
+		// Create paths by concatenating dot separated name sequences
 		//
 		for(int i = 0; i < names.size(); i++) {
 			if(i == names.size()-1) { // Last element does not have continuation
@@ -161,7 +165,7 @@ public class ExprNode {
 		}
 
     	//
-		// Process the column paths
+		// Process the paths
 		//
 		QNameBuilder parser = new QNameBuilder();
 
@@ -171,7 +175,7 @@ public class ExprNode {
 		}
 		
 		//
-		// Parse path (treated as a normal access path along with those in the formula)
+		// Parse accu path which is treated as a normal access path along with those in the formula
 		//
 		if(this.pathName != null && !this.pathName.trim().isEmpty()) {
 
@@ -282,7 +286,7 @@ public class ExprNode {
 		
 		if(!this.isTuple()) { // Non-tuple: either calculated or aggregated
 			this.bindPrimExpr(); // Bind main formula relative to main table
-			this.buildFormulaExpression(); // Parse and bind the final (native) expression
+			this.exp4jExpression = this.buildFormulaExpression(); // Parse and bind the final (native) expression
 		}
 		else { // Tuple - combination of assignments
 			Table output = this.column.getOutput();
@@ -312,7 +316,7 @@ public class ExprNode {
 
 	public void bindPrimExpr() {
 
-		if(this.primExprDependencies == null) {
+		if(this.primExprDependencies == null) { // Here we store all symbols in the formula that need to be resolved
 			return;
 		}
 
@@ -329,7 +333,20 @@ public class ExprNode {
 		}
 		
 		//
-		// Resolve path (if any) relative to the table
+		// Resolve each column path in the formula relative to the table. Group path is also in this list.
+		//
+		for(PrimExprDependency dep : this.primExprDependencies) {
+
+			dep.columns = dep.qname.resolveColumns(this.table); // Try to really resolve symbol
+
+			if(dep.columns == null || dep.columns.size() < dep.qname.names.size()) {
+				this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve columns.", "Error resolving columns " + dep.pathName);
+				return;
+			}
+		}
+
+		//
+		// Resolve accu path (if any) relative to the table
 		//
 		this.path = null;
 		if(this.pathQName != null) {
@@ -347,33 +364,11 @@ public class ExprNode {
 				return;
 			}
 		}
-		
-		//
-		// Resolve each column path in the formula relative to the table. Group path is also in this list.
-		//
-		for(PrimExprDependency dep : this.primExprDependencies) {
 
-			dep.columns = dep.qname.resolveColumns(this.table); // Try to really resolve symbol
-
-			if(dep.columns == null || dep.columns.size() < dep.qname.names.size()) {
-				this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve columns.", "Error resolving columns " + dep.pathName);
-				return;
-			}
-		}
 	}
 	
-	//
-	// Evaluate
-	//
-
-	// Expression that is used during evaluation
-	protected Expression formulaExpression;
-
-	// Build expression that can be evaluated
-	public void buildFormulaExpression() {
-		//
-		// Transform the expression by using new names and get an executable expression
-		//
+	// Replace all occurrences of column paths in the formula by variable names from the symbol table
+	private String transformFormula() {
 		StringBuffer buf = new StringBuffer(formula);
 		for(int i = this.primExprDependencies.size()-1; i >= 0; i--) {
 			PrimExprDependency dep = this.primExprDependencies.get(i);
@@ -381,7 +376,21 @@ public class ExprNode {
 			dep.paramName = "__p__"+i;
 			buf.replace(dep.start, dep.end, dep.paramName);
 		}
-		String transformedFormula = buf.toString();
+		return buf.toString();
+	}
+
+	//
+	// Evaluate
+	//
+
+	// Expression that is used during evaluation
+	protected net.objecthunter.exp4j.Expression exp4jExpression;
+	protected com.udojava.evalex.Expression evalexExpression = null;
+
+	// Build exp4j expression
+	public net.objecthunter.exp4j.Expression buildFormulaExpression() {
+
+		String transformedFormula = this.transformFormula();
 
 		//
 		// Create a list of variables used in the expression
@@ -402,7 +411,7 @@ public class ExprNode {
 		//
 		// Create expression object with the transformed formula
 		//
-		Expression exp = null;
+		net.objecthunter.exp4j.Expression exp = null;
 		try {
 			ExpressionBuilder builder = new ExpressionBuilder(transformedFormula);
 			builder.variables(vars);
@@ -410,19 +419,68 @@ public class ExprNode {
 		}
 		catch(Exception e) {
 			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Expression error.", e.getMessage());
-			this.formulaExpression = null;
-			return;
+			return null;
 		}
-		exp.setVariables(vals);
-		
+
+		//
+		// Validate
+		//
+		exp.setVariables(vals); // Validation requires variables to be set
 		ValidationResult res = exp.validate(); // Boolean argument can be used to ignore unknown variables
 		if(!res.isValid()) {
 			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Expression error.", res.getErrors() != null && res.getErrors().size() > 0 ? res.getErrors().get(0) : "");
-			this.formulaExpression = null;
-			return;
+			return null;
 		}
 
-		this.formulaExpression = exp;
+		return exp;
+	}
+
+	// Build Evalex expression
+	public com.udojava.evalex.Expression buildEvalexExpression() {
+
+		String transformedFormula = this.transformFormula();
+
+		//
+		// Create a list of variables used in the expression
+		//
+		Set<String> vars = new HashSet<String>();
+		Map<String, Double> vals = new HashMap<String, Double>();
+		for(PrimExprDependency dep : this.primExprDependencies) {
+			if(dep.paramName == null || dep.paramName.trim().isEmpty()) continue;
+			vars.add(dep.paramName);
+			vals.put(dep.paramName, 0.0);
+		}
+		// Set<String> vars = this.primExprDependencies.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
+		
+		// Add the current output value as a special (reserved) variable
+		if(!vars.contains("output")) vars.add("output");
+		vals.put("output", 0.0);
+
+		//
+		// Create expression object with the transformed formula
+		//
+		com.udojava.evalex.Expression exp = null;
+		try {
+			exp = new com.udojava.evalex.Expression(transformedFormula);
+		}
+		catch(Exception e) {
+			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Expression error.", e.getMessage());
+			return null;
+		}
+
+		//
+		// Validate
+		//
+		exp.setVariable("myvar", new BigDecimal(1.0));
+    	try {
+    		exp.toRPN(); // Generates prefixed representation but can be used to check errors (variables have to be set in order to correctly determine parse errors)
+    	}
+    	catch(com.udojava.evalex.Expression.ExpressionException ee) {
+			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Expression error.", ee.getMessage());
+			return null;
+    	}
+
+		return exp;
 	}
 
 	public Object result; // Result of evaluation: either primitive value or record id
@@ -431,10 +489,10 @@ public class ExprNode {
 
 		for(PrimExprDependency dep : this.primExprDependencies) {
 			if(dep.paramName == null || dep.paramName.trim().isEmpty()) continue;
-			Object value = dep.columns.get(0).getValue(dep.columns, i);
+			Object value = dep.columns.get(0).getValue(dep.columns, i); // Read column value
 			if(value == null) value = Double.NaN;
 			try {
-				this.formulaExpression.setVariable(dep.paramName, ((Number)value).doubleValue());
+				this.exp4jExpression.setVariable(dep.paramName, ((Number)value).doubleValue());
 			}
 			catch(Exception e) {
 				dep = null;
@@ -451,14 +509,14 @@ public class ExprNode {
 			outputValue = column.getValue(g);
 		}
 		if(outputValue == null) outputValue = Double.NaN;
-		this.formulaExpression.setVariable("output", ((Number)outputValue).doubleValue());
+		this.exp4jExpression.setVariable("output", ((Number)outputValue).doubleValue());
 	}
 
 	public void evaluate(long i) {
 		
 		if(!this.isTuple()) { // Primitive expression
 			setFormulaExpressionVariables(i); // For each input, read all necessary column values from fact table and the current output from the group table
-			result = this.formulaExpression.evaluate();
+			result = this.exp4jExpression.evaluate();
 		}
 		else { // Tuple
 			
