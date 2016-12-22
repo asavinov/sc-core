@@ -17,10 +17,6 @@ import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import net.objecthunter.exp4j.Expression;
-import net.objecthunter.exp4j.ExpressionBuilder;
-import net.objecthunter.exp4j.ValidationResult;
-
 public class Column {
 	private Schema schema;
 	public Schema getSchema() {
@@ -109,7 +105,9 @@ public class Column {
 		return this.formula;
 	}
 	public void setFormula(String formula) {
+		if(this.formula != null && this.formula.equals(formula)) return; // Nothing to change
 		this.formula = formula;
+		this.setDirtyDeep(true);
 	}
 	
 	//
@@ -121,7 +119,9 @@ public class Column {
 		return this.accuformula;
 	}
 	public void setAccuformula(String accuformula) {
+		if(this.accuformula != null && this.accuformula.equals(accuformula)) return; // Nothing to change
 		this.accuformula = accuformula;
+		this.setDirtyDeep(true);
 	}
 	
 	protected String accutable;
@@ -129,7 +129,9 @@ public class Column {
 		return this.accutable;
 	}
 	public void setAccutable(String accutable) {
+		if(this.accutable != null && this.accutable.equals(accutable)) return; // Nothing to change
 		this.accutable = accutable;
+		this.setDirtyDeep(true);
 	}
 	
 	protected String accupath; // It leads from accutable to the input table of the column
@@ -137,7 +139,9 @@ public class Column {
 		return this.accupath;
 	}
 	public void setAccupath(String accupath) {
+		if(this.accupath != null && this.accupath.equals(accupath)) return; // Nothing to change
 		this.accupath = accupath;
+		this.setDirtyDeep(true);
 	}
 	
 	// Determine if it is syntactically accumulation, that is, it seems to be intended for accumulation.
@@ -172,6 +176,53 @@ public class Column {
 		else { // Only tuple
 			return DcFormulaType.TUPLE;
 		}
+	}
+
+	//
+	// Data status
+	//
+
+	/**
+	 * Status of the data: clean (up-to-date) or dirty.
+	 * Evaluation is the only method that cleans this status in the case of formula columns.
+	 * Data change (append, delete, update) or formula change make this status dirty.
+	 * Note that here we store own status which propagates through dependencies. 
+	 */
+	private boolean dirty = false; // Own status
+	public boolean isDirty() {
+		return this.dirty;
+	}
+	public void setDirty(boolean dirty) {
+		this.dirty = dirty;
+	}
+
+	public boolean isDirtyDeep() { // Own status and status of all preceding cols (propagated)
+		if(this.dirty) { // Own dirty
+			return true;
+		}
+
+		// TODO: Cycle-unsafe code. All columns in a cycle have to be detected and marked as having formula error so not evaluatable and hence dirty.
+		List<Column> deps = this.getSchema().getParentDependencies(this);
+		if(deps == null) {
+			return false;
+		}
+		Column dirtyCol = deps.stream().filter(x -> x.isDirtyDeep()).findAny().orElse(null); // Recursion. Find at least one parent column with dirty status
+		if(dirtyCol != null) {
+			return true; // This column is also dirty
+		}
+
+		return false; // All dependencies and this column are up-to-date
+	}
+	public void setDirtyDeep(boolean dirty) { // Set own status and status of all following cols (propagated)
+		this.dirty = dirty;
+
+		if(!dirty) { // Cleaning is not propagated automatically
+			return;
+		}
+
+		// TODO: Cycle-unsafe code. All columns in a cycle have to be detected and marked as having formula error so not evaluatable and hence dirty.
+		List<Column> deps = this.getSchema().getChildDependencies(this);
+		deps.forEach(x -> x.setDirtyDeep(dirty)); // Recursion
 	}
 
 	//
@@ -212,7 +263,7 @@ public class Column {
 	public void translate() {
 
 		if(determineAutoFormulaType() == DcFormulaType.NONE) {
-			this.schema.setDependency(this, null);
+			this.schema.setParentDependencies(this, null);
 			return;
 		}
 		
@@ -223,7 +274,7 @@ public class Column {
 		List<Column> mainColumns = null; // Non-evaluatable column independent of the reason
 		this.mainExpr = null;
 
-		this.mainExpr = translateMain();
+		this.mainExpr = this.translateMain();
 		if(this.mainExpr != null) {
 			mainColumns = this.mainExpr.getDependencies();
 		}
@@ -236,7 +287,7 @@ public class Column {
 		this.accuExpr = null;
 
 		if(this.determineAutoFormulaType() == DcFormulaType.ACCU) {
-			this.accuExpr = translateAccu();
+			this.accuExpr = this.translateAccu();
 			if(this.accuExpr != null) {
 				accuColumns = this.accuExpr.getDependencies();
 			}
@@ -250,7 +301,7 @@ public class Column {
 			if(columns == null) columns = accuColumns;
 			else columns.addAll(accuColumns);
 		}
-		this.schema.setDependency(this, columns);
+		this.schema.setParentDependencies(this, columns);
 	}
 
 	public ExprNode translateMain() {
@@ -314,8 +365,13 @@ public class Column {
 
 	public void evaluate() {
 		
-		if(determineAutoFormulaType() == DcFormulaType.NONE) return;
+		if(determineAutoFormulaType() == DcFormulaType.NONE) {
+			this.setDirty(false);
+			return;
+		}
 		
+		this.setDirtyDeep(true); // Invalidate data
+
 		//
 		// Step 1: Evaluate main formula to initialize the column. If it is empty then we need to init it with default values
 		//
@@ -353,12 +409,7 @@ public class Column {
 			}
 		}
 
-		// TODO: Always do complete translation/evaluate before we introduce dirty propagation mechanism.
-		// TODO: Replacement of column paths by artificial parameter names could theoretically produce bugs because we apply it directly to the formula and hence the <start,end> can be invalidated. Probably, we need to replace by occurrence of substring rather than using <start,end>. Note also that currently there is one dep entry for each ocuurance even for the same path. Method buildFormulaExpression() 
-
-		// TODO: visualize none/group/tuple/calc columns differently It could be an icon.
-		// Check consistency of formula types: primitive -> only group and calc, non-primitive -> only tuple. Initially, as error message. Later, hiding irrelevant UI controls.
-		// Maybe introduce an explicit selector "formula type"=none_or_external/calc/tuple/group. It will be stored in a user provided property (what the user wants).
+		this.setDirty(false); // Validate own data (make up-to-date) if success
 	}
 
 	//
@@ -385,11 +436,11 @@ public class Column {
 
 			columns = getEvaluatorDependencies();
 
-			schema.setDependency(this, columns); // Update dependency graph
+			schema.setParentDependencies(this, columns); // Update dependency graph
 			return;
 		}
 		else {
-			schema.setDependency(this, null); // Non-evaluatable column for any reason
+			schema.setParentDependencies(this, null); // Non-evaluatable column for any reason
 		}
 
 		// Here we might want to check the validity of the dependency graph (cycles, at least for this column)
@@ -472,7 +523,7 @@ public class Column {
 		
 		// Pass direct references to the required columns so that the evaluator can use them during evaluation. The first element has to be this (output) column
 		evaluator.setColumn(this);
-		List<Column> columns = schema.getDependency(this);
+		List<Column> columns = schema.getParentDependencies(this);
 		evaluator.setColumns(columns);
 		
 		evaluator.beginEvaluate();
@@ -513,6 +564,9 @@ public class Column {
 		String joutid = "`id`: `" + this.getOutput().getId() + "`";
 		String jout = "`output`: {" + joutid + "}";
 
+		String jstatus = "`status`: " + (this.getStatus() != null ? this.getStatus().toJson() : "undefined");
+		String jdirty = "`dirty`: " + (this.isDirtyDeep() ? "true" : "false"); // We transfer deep dirty
+
 		String jfmla = "`formula`: " + JSONObject.valueToString(this.getFormula()) + "";
 
 		String jafor = "`accuformula`: " + JSONObject.valueToString(this.getAccuformula()) + "";
@@ -522,9 +576,7 @@ public class Column {
 		//String jdescr = "`descriptor`: " + (this.getDescriptor() != null ? "`"+this.getDescriptor()+"`" : "null");
 		String jdescr = "`descriptor`: " + JSONObject.valueToString(this.getDescriptor()) + "";
 
-		String jstatus = "`status`: " + (this.getStatus() != null ? this.getStatus().toJson() : "undefined");
-
-		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jfmla + ", " + jafor + ", " + jatbl + ", " + japath + ", " + jdescr + ", " + jstatus;
+		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jdirty + ", " + jstatus + ", " + jfmla + ", " + jafor + ", " + jatbl + ", " + japath + ", " + jdescr;
 
 		return ("{" + json + "}").replace('`', '"');
 	}

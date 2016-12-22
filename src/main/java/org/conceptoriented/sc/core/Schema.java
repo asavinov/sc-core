@@ -199,6 +199,9 @@ public class Schema {
 			throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating column. ", "Name contains invalid characters. ");
 		}
 
+		// We do not process status
+		// We do not process dirty
+		
 		String formula = (String)JSONObject.stringToValue(obj.has("formula") && !obj.isNull("formula") ? obj.getString("formula") : "");
 
 		String accuformula = (String)JSONObject.stringToValue(obj.has("accuformula") && !obj.isNull("accuformula") ? obj.getString("accuformula") : "");
@@ -272,6 +275,9 @@ public class Schema {
 			}
 		}
 
+		// We do not process status
+		// We do not process dirty
+		
 		String formula = (String)JSONObject.stringToValue(obj.has("formula") && !obj.isNull("formula") ? obj.getString("formula") : "");
 		
 		String accuformula = (String)JSONObject.stringToValue(obj.has("accuformula") && !obj.isNull("accuformula") ? obj.getString("accuformula") : "");
@@ -317,11 +323,16 @@ public class Schema {
 	 * For each column, we store all other columns it directly depends on, that is, columns that it directly uses in its formula
 	 */
 	protected Map<Column,List<Column>> dependencies = new HashMap<Column,List<Column>>();
-	public List<Column> getDependency(Column column) {
+	public List<Column> getParentDependencies(Column column) {
 		return dependencies.get(column);
 	}
-	public void setDependency(Column column, List<Column> deps) {
+	public void setParentDependencies(Column column, List<Column> deps) {
 		dependencies.put(column, deps);
+	}
+	public List<Column> getChildDependencies(Column column) {
+		// Return all columns which point to the specified column as a dependency, that is, which have this column in its deps
+		List<Column> res = columns.stream().filter(x -> this.getParentDependencies(x) != null && this.getParentDependencies(x).contains(column)).collect(Collectors.<Column>toList());
+		return res;
 	}
 
 	// Return all columns with no definition which therefore are supposed to be always clean and do not need evaluation
@@ -397,7 +408,7 @@ public class Schema {
 			for(Column col : nextColumns) {
 				if(col.getStatus() == null || col.getStatus().code == DcErrorCode.NONE) {
 					// If there is at least one error in dependencies then mark this as propagated error
-					List<Column> deps = this.getDependency(col);
+					List<Column> deps = this.getParentDependencies(col);
 					// Find at least one column with errors which are not suitable for propagation
 					Column errCol = deps.stream().filter(x -> x.getStatus() != null && x.getStatus().code != DcErrorCode.NONE).findAny().orElse(null);
 					if(errCol != null) { // Mark this column as having propagated error
@@ -430,13 +441,6 @@ public class Schema {
 			}
 		}
 
-
-		// TODO: How does it influences the data status? Should we reset it? What if a column has not changed?
-		// Maybe we need somehow mark types of changes (name change, formula change (different components like accu, tuple etc.), data add/remove/update etc.)
-		// Each change/modification/dirty type (status) use special visualization. 
-		// For each change, we need to describe how it propagates so that we can change accordingly the status of other columns/tables/rows
-		// Solution: Develop a uniform conception of dirty status, its propagation and its cleaning (translation, evaluation etc.)
-		// Solution: Currently we do complete translation and complete evaluation.
 	}
 
 	/**

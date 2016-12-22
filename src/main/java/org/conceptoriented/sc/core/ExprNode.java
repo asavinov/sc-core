@@ -12,15 +12,14 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import net.objecthunter.exp4j.Expression;
-import net.objecthunter.exp4j.ExpressionBuilder;
-import net.objecthunter.exp4j.ValidationResult;
-
 /**
  * It is a function definition with function name, function type and function formula. 
  * The formula can be a primitive expression or a tuple which is a combination of function formulas. 
  */
 public class ExprNode {
+	
+	public boolean isExp4j() { return true; }
+	public boolean isEvalex() { return false; }
 	
 	//
 	// Formula and its parameters
@@ -285,8 +284,16 @@ public class ExprNode {
 	public void bind() {
 		
 		if(!this.isTuple()) { // Non-tuple: either calculated or aggregated
-			this.bindPrimExpr(); // Bind main formula relative to main table
-			this.exp4jExpression = this.buildFormulaExpression(); // Parse and bind the final (native) expression
+
+			this.bindPrimExpr(); // Resolve symbols used in the formula relative to the main table
+
+			// Build the final (native) expression
+			if(this.isExp4j()) {
+				this.exp4jExpression = this.buildExp4jExpression();
+			}
+			else if(this.isEvalex()) {
+				this.evalexExpression = this.buildEvalexExpression();
+			}
 		}
 		else { // Tuple - combination of assignments
 			Table output = this.column.getOutput();
@@ -388,7 +395,7 @@ public class ExprNode {
 	protected com.udojava.evalex.Expression evalexExpression = null;
 
 	// Build exp4j expression
-	public net.objecthunter.exp4j.Expression buildFormulaExpression() {
+	protected net.objecthunter.exp4j.Expression buildExp4jExpression() {
 
 		String transformedFormula = this.transformFormula();
 
@@ -413,7 +420,7 @@ public class ExprNode {
 		//
 		net.objecthunter.exp4j.Expression exp = null;
 		try {
-			ExpressionBuilder builder = new ExpressionBuilder(transformedFormula);
+			net.objecthunter.exp4j.ExpressionBuilder builder = new net.objecthunter.exp4j.ExpressionBuilder(transformedFormula);
 			builder.variables(vars);
 			exp = builder.build(); // Here we get parsing exceptions which might need be caught and processed
 		}
@@ -426,7 +433,7 @@ public class ExprNode {
 		// Validate
 		//
 		exp.setVariables(vals); // Validation requires variables to be set
-		ValidationResult res = exp.validate(); // Boolean argument can be used to ignore unknown variables
+		net.objecthunter.exp4j.ValidationResult res = exp.validate(); // Boolean argument can be used to ignore unknown variables
 		if(!res.isValid()) {
 			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Expression error.", res.getErrors() != null && res.getErrors().size() > 0 ? res.getErrors().get(0) : "");
 			return null;
@@ -436,7 +443,7 @@ public class ExprNode {
 	}
 
 	// Build Evalex expression
-	public com.udojava.evalex.Expression buildEvalexExpression() {
+	protected com.udojava.evalex.Expression buildEvalexExpression() {
 
 		String transformedFormula = this.transformFormula();
 
@@ -459,7 +466,7 @@ public class ExprNode {
 		//
 		// Create expression object with the transformed formula
 		//
-		com.udojava.evalex.Expression exp = null;
+		final com.udojava.evalex.Expression exp;
 		try {
 			exp = new com.udojava.evalex.Expression(transformedFormula);
 		}
@@ -471,7 +478,7 @@ public class ExprNode {
 		//
 		// Validate
 		//
-		exp.setVariable("myvar", new BigDecimal(1.0));
+		vars.forEach(x -> exp.setVariable(x, new BigDecimal(1.0)));
     	try {
     		exp.toRPN(); // Generates prefixed representation but can be used to check errors (variables have to be set in order to correctly determine parse errors)
     	}
@@ -492,10 +499,15 @@ public class ExprNode {
 			Object value = dep.columns.get(0).getValue(dep.columns, i); // Read column value
 			if(value == null) value = Double.NaN;
 			try {
-				this.exp4jExpression.setVariable(dep.paramName, ((Number)value).doubleValue());
+				if(this.isExp4j()) {
+					this.exp4jExpression.setVariable(dep.paramName, ((Number)value).doubleValue());
+				}
+				else if(this.isEvalex()) {
+					
+				}
 			}
 			catch(Exception e) {
-				dep = null;
+				;
 			}
 		}
 		
@@ -509,19 +521,38 @@ public class ExprNode {
 			outputValue = column.getValue(g);
 		}
 		if(outputValue == null) outputValue = Double.NaN;
-		this.exp4jExpression.setVariable("output", ((Number)outputValue).doubleValue());
+		try {
+			if(this.isExp4j()) {
+				this.exp4jExpression.setVariable("output", ((Number)outputValue).doubleValue());
+			}
+			else if(this.isEvalex()) {
+				
+			}
+		}
+		catch(Exception e) {
+			;
+		}
 	}
 
 	public void evaluate(long i) {
 		
 		if(!this.isTuple()) { // Primitive expression
+
 			setFormulaExpressionVariables(i); // For each input, read all necessary column values from fact table and the current output from the group table
-			result = this.exp4jExpression.evaluate();
+
+			// Build the final (native) expression
+			if(this.isExp4j()) {
+				result = this.exp4jExpression.evaluate();
+			}
+			else if(this.isEvalex()) {
+				result = this.evalexExpression.eval();
+			}
+
 		}
 		else { // Tuple
 			
 			for(ExprNode expr : children) { // Evaluation recursion down to primitive expressions which compute primitive values
-				expr.evaluate(i);
+				expr.evaluate(i); // Recursion
 			}
 			// After recursion, members are supposed to store result values
 			
