@@ -202,11 +202,11 @@ public class Schema {
 		// We do not process status
 		// We do not process dirty
 		
-		String formula = (String)JSONObject.stringToValue(obj.has("formula") && !obj.isNull("formula") ? obj.getString("formula") : "");
+		String formula = obj.has("formula") && !obj.isNull("formula") ? obj.getString("formula") : "";
 
-		String accuformula = (String)JSONObject.stringToValue(obj.has("accuformula") && !obj.isNull("accuformula") ? obj.getString("accuformula") : "");
-		String accutable = (String)JSONObject.stringToValue(obj.has("accutable") && !obj.isNull("accutable") ? obj.getString("accutable") : "");
-		String accupath = (String)JSONObject.stringToValue(obj.has("accupath") && !obj.isNull("accupath") ? obj.getString("accupath") : "");
+		String accuformula = obj.has("accuformula") && !obj.isNull("accuformula") ? obj.getString("accuformula") : "";
+		String accutable = obj.has("accutable") && !obj.isNull("accutable") ? obj.getString("accutable") : "";
+		String accupath = obj.has("accupath") && !obj.isNull("accupath") ? obj.getString("accupath") : "";
 
 		// Descriptor is either JSON object or JSON string with an object but we want to store a string
 		String descr_string = "";
@@ -241,6 +241,10 @@ public class Schema {
 			column.setAccupath(accupath);
 
 			column.setDescriptor(descr_string);
+			
+			if(column.determineAutoFormulaType() == DcFormulaType.NONE) { // Columns without formula are clean
+				column.setDirty(false);
+			}
 
 			return column;
 		}
@@ -278,11 +282,11 @@ public class Schema {
 		// We do not process status
 		// We do not process dirty
 		
-		String formula = (String)JSONObject.stringToValue(obj.has("formula") && !obj.isNull("formula") ? obj.getString("formula") : "");
+		String formula = obj.has("formula") && !obj.isNull("formula") ? obj.getString("formula") : "";
 		
-		String accuformula = (String)JSONObject.stringToValue(obj.has("accuformula") && !obj.isNull("accuformula") ? obj.getString("accuformula") : "");
-		String accutable = (String)JSONObject.stringToValue(obj.has("accutable") && !obj.isNull("accutable") ? obj.getString("accutable") : "");
-		String accupath = (String)JSONObject.stringToValue(obj.has("accupath") && !obj.isNull("accupath") ? obj.getString("accupath") : "");
+		String accuformula = obj.has("accuformula") && !obj.isNull("accuformula") ? obj.getString("accuformula") : "";
+		String accutable = obj.has("accutable") && !obj.isNull("accutable") ? obj.getString("accutable") : "";
+		String accupath = obj.has("accupath") && !obj.isNull("accupath") ? obj.getString("accupath") : "";
 
 		// Descriptor is either JSON object or JSON string with an object but we want to store a string
 		String descr_string = null;
@@ -337,7 +341,7 @@ public class Schema {
 
 	// Return all columns with no definition which therefore are supposed to be always clean and do not need evaluation
 	protected List<Column> getStartingColumns() {
-		List<Column> res = columns.stream().filter(x -> x.getFormula() == null && x.getDescriptor() == null).collect(Collectors.<Column>toList());
+		List<Column> res = columns.stream().filter(x -> x.determineAutoFormulaType() == DcFormulaType.NONE).collect(Collectors.<Column>toList());
 		return res;
 	}
 
@@ -402,13 +406,17 @@ public class Schema {
 		// Propagate translation status through dependency graph
 		//
 		
-		List<Column> readyColumns = this.getStartingColumns(); // Start from non-evaluatable columns (no definition)
-		List<Column> nextColumns = this.getAllNextColumns(readyColumns); // First iteration
+		List<Column> readyColumns = new ArrayList<Column>(); // Already evaluated
+		List<Column> nextColumns = this.getStartingColumns(); // Initialize. First iteration with column with no dependency formulas. 
 		while(nextColumns.size() > 0) {
 			for(Column col : nextColumns) {
 				if(col.getStatus() == null || col.getStatus().code == DcErrorCode.NONE) {
 					// If there is at least one error in dependencies then mark this as propagated error
 					List<Column> deps = this.getParentDependencies(col);
+					if(deps == null) { 
+						readyColumns.add(col);
+						continue;
+					}
 					// Find at least one column with errors which are not suitable for propagation
 					Column errCol = deps.stream().filter(x -> x.getStatus() != null && x.getStatus().code != DcErrorCode.NONE).findAny().orElse(null);
 					if(errCol != null) { // Mark this column as having propagated error
@@ -424,8 +432,7 @@ public class Schema {
 				}
 				readyColumns.add(col);
 			}
-			// Next iteration
-			nextColumns = this.getAllNextColumns(readyColumns);
+			nextColumns = this.getAllNextColumns(readyColumns); // Next iteration
 		}
 		
 		//
@@ -437,6 +444,7 @@ public class Schema {
 			// If a column has not been covered during propagation then it belongs to a cycle. The cycle itself is not found by this procedure. 
 
 			if(col.getStatus() == null || col.getStatus().code == DcErrorCode.NONE) {
+				if(col.mainExpr == null) col.mainExpr = new ExprNode(); // Wrong use. Should not happen.
 				col.mainExpr.status = new DcError(DcErrorCode.DEPENDENCY_CYCLE_ERROR, "Cyclic dependency.", "This column formula depends on itself by using other columns which depend on it.");
 			}
 		}
@@ -449,8 +457,8 @@ public class Schema {
 	 */
 	public void evaluate() {
 
-		List<Column> readyColumns = this.getStartingColumns(); // Start from non-evaluatable columns (no definition)
-		List<Column> nextColumns = this.getNextColumns(readyColumns); // First iteration
+		List<Column> readyColumns = new ArrayList<Column>(); // Already evaluated
+		List<Column> nextColumns = this.getStartingColumns(); // Initialize. First iteration with column with no dependency formulas. 
 		while(nextColumns.size() > 0) {
 			for(Column col : nextColumns) {
 				if(col.getStatus() == null || col.getStatus().code == DcErrorCode.NONE) {
@@ -458,8 +466,7 @@ public class Schema {
 					readyColumns.add(col);
 				}
 			}
-			// Next iteration
-			nextColumns = this.getNextColumns(readyColumns);
+			nextColumns = this.getNextColumns(readyColumns); // Next iteration
 		}
 
 		//

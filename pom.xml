@@ -5,9 +5,9 @@
   <groupId>org.conceptoriented</groupId>
   <artifactId>sc-core</artifactId>
   <packaging>jar</packaging>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
 
-  <name>DataCommander Engine</name>
+  <name>Data Commander Engine</name>
   <url>http://conceptoriented.org</url>
 
 	<properties>
@@ -34,7 +34,7 @@
 				<activeByDefault>false</activeByDefault>
 			</activation>
 			<properties>
-				<jdk>C:/Program Files/Java/jdk1.8.0_60</jdk>
+				<jdk>C:/Program Files/Java/jdk1.8.0_112</jdk>
 			</properties>
 		</profile>
 
@@ -55,7 +55,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
-				<version>2.5.1</version>
+				<version>3.6.0</version>
 				<configuration>
 					<verbose>true</verbose>
 					<fork>true</fork>
@@ -115,22 +115,22 @@
 		<dependency>
 			<groupId>com.google.guava</groupId>
 			<artifactId>guava</artifactId>
-			<version>18.0</version>
+			<version>20.0</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-lang3</artifactId>
-			<version>3.4</version>
+			<version>3.5</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-csv</artifactId>
-			<version>1.0</version>
+			<version>1.4</version>
 		</dependency>
 		<dependency>
 			<groupId>org.json</groupId>
 			<artifactId>json</artifactId>
-			<version>20160212</version>
+			<version>20160810</version>
 		</dependency>
 		<dependency>
 			<groupId>net.objecthunter</groupId>
@@ -147,7 +147,7 @@
 		<dependency>
 			<groupId>junit</groupId>
 			<artifactId>junit</artifactId>
-			<version>4.11</version>
+			<version>4.12</version>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
