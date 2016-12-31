@@ -2,6 +2,7 @@ package org.conceptoriented.sc.core;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -116,6 +117,11 @@ public class Table {
 					newRange.start = cleanRange.end;
 				}
 			}
+		}
+	}
+	public void append(List<Record> records, Map<String, String> columnMapping) {
+		for(Record record : records) {
+			this.append(record);
 		}
 	}
 

@@ -1,5 +1,9 @@
 package org.conceptoriented.sc.core;
 
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.Reader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -9,6 +13,8 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVRecord;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONTokener;
@@ -61,6 +67,10 @@ public class Record {
 		
 		return data.replace('`', '"'); // Trick to avoid backslashing double quotes: use backticks and then replace it at the end
 	}
+	
+	//
+	// Creation methods
+	//
 	
 	public static Record fromJson(String json) {
 		JSONObject obj = new JSONObject(json);
@@ -144,6 +154,42 @@ public class Record {
 			}
 			records.add(record);
 		}
+
+		return records;
+	}
+	public static List<Record> fromCsvFile(String fileName, List<String> columnNames, boolean skipFirst) {
+		List<Record> records = new ArrayList<Record>();
+    	Record record = null;
+
+        try {
+            File file = new File(fileName);
+
+            Reader in = new FileReader(file);
+            Iterable<CSVRecord> csvRecs = CSVFormat.EXCEL.parse(in);
+
+            int recordNumber = 0;
+            for (CSVRecord csvRec : csvRecs) {
+
+            	if(skipFirst && recordNumber == 0) { // First record
+            		recordNumber++;
+            		continue;
+                }
+
+            	record = new Record();
+            	for(int i=0; i<csvRec.size(); i++) {
+            		Object value = csvRec.get(i);
+            		record.set(columnNames.get(i), value);
+                }
+            	records.add(record);
+
+                recordNumber++;
+            }
+
+            in.close();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
 		return records;
 	}

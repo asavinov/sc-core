@@ -335,4 +335,22 @@ public class Tests {
         assertEquals(20.0, ta.getValue(1));
         assertEquals(0.0, ta.getValue(2));
     }
+
+    @Test
+    public void csvReadTest()
+    {
+        schema = new Schema("My Schema");
+
+        String path = "../dc-core/src/test/resources/example1/Order Details Status.csv"; // Relative to project directory
+
+        Table table = schema.createFromCsv(path, true);
+        
+        assertEquals("Order Details Status", table.getName());
+        assertEquals("Double", schema.getColumn("Order Details Status", "Status ID").getOutput().getName());
+        assertEquals("String", schema.getColumn("Order Details Status", "Status Name").getOutput().getName());
+        
+        assertEquals(3L, schema.getColumn("Order Details Status", "Status ID").getValue(3));
+        assertEquals("Shipped", schema.getColumn("Order Details Status", "Status Name").getValue(3));
+    }
+
 }

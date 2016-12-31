@@ -2,8 +2,10 @@ package org.conceptoriented.sc.core;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.Reader;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -16,8 +18,12 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.lang3.StringUtils;
 import org.json.JSONObject;
+
+import com.google.common.io.Files;
 
 /**
  * Stream schema stores the complete data state and is able to consistently update it. 
@@ -79,9 +85,9 @@ public class Schema {
 		// Validate properties
 		//
 		String id = obj.getString("id");
-
 		String name = obj.getString("name");
-		Table tab = getTable(name);
+
+		Table tab = this.getTable(name);
 		if(tab != null) {
 			throw new DcError(DcErrorCode.CREATE_ELEMENT, "Error creating table. ", "Name already exists. ");
 		}
@@ -100,7 +106,34 @@ public class Schema {
 		
 		return table;
 	}
-	public void updateTableFromJson(String json) throws DcError {
+    public Table createFromCsv(String fileName, boolean hasHeaderRecord) {
+        String tableName = null;
+        File file = new File(fileName);
+        tableName = file.getName();
+        tableName = Files.getNameWithoutExtension(tableName);
+
+        // Read column schema from CSV
+        List<String> columnNames = this.readColumnNamesFromCsvFile(fileName);
+        
+        // Read Records from CSV
+        List<Record> records = Record.fromCsvFile(fileName, columnNames, true);
+        
+        // Get column types
+        List<String> columnTypes = Utils.recommendTypes(columnNames, records);
+
+        // Create/append table with file name
+		Table table = this.createTable(tableName);
+        
+        // Append columns
+        this.createColumns(columnNames, table.getName(), columnTypes);
+        
+        // Append records to this table
+        table.append(records, null);
+        
+        return table;
+    }
+
+    public void updateTableFromJson(String json) throws DcError {
 		JSONObject obj = new JSONObject(json);
 
 		// Find table
@@ -134,7 +167,8 @@ public class Schema {
 		if(obj.has("name")) table.setName(obj.getString("name"));
 		if(obj.has("maxLength")) table.setMaxLength(obj.getLong("maxLength"));
 	}
-	public void deleteTable(String id) {
+
+    public void deleteTable(String id) {
 		Table table = getTableById(id);
 
 		// Remove input columns
@@ -174,6 +208,16 @@ public class Schema {
 		Column column = new Column(this, name, input, output);
 		columns.add(column);
 		return column;
+	}
+	public List<Column> createColumns(List<String> names, String input, List<String> outputs) {
+		List<Column> columns = new ArrayList<Column>();
+		
+		for(int i=0; i<names.size(); i++) {
+			// TODO: We need to check if such a column already exists and skip it (or update type)
+			Column column = this.createColumn(names.get(i), input, outputs.get(i));
+		}
+
+		return columns;
 	}
 	public Column createColumnFromJson(String json) throws DcError {
 		JSONObject obj = new JSONObject(json);
@@ -252,6 +296,7 @@ public class Schema {
 			return null;
 		}
 	}
+
 	public void updateColumnFromJson(String json) throws DcError {
 		JSONObject obj = new JSONObject(json);
 
@@ -314,9 +359,35 @@ public class Schema {
 
 		if(obj.has("descriptor")) column.setDescriptor(descr_string);
 	}
+
 	public void deleteColumn(String id) {
 		Column column = getColumnById(id);
 		columns.remove(column);
+	}
+
+	public static List<String> readColumnNamesFromCsvFile(String fileName) {
+		List<String> columnNames = new ArrayList<String>();
+
+		try {
+            File file = new File(fileName);
+
+            Reader in = new FileReader(file);
+            Iterable<CSVRecord> csvRecs = CSVFormat.EXCEL.parse(in);
+
+            for (CSVRecord csvRec : csvRecs) {
+            	for(int i=0; i<csvRec.size(); i++) {
+            		columnNames.add(csvRec.get(i));
+                }
+            	break; // Only one record is needed
+            }
+
+            in.close();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+		return columnNames;
 	}
 
 	//
