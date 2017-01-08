@@ -140,7 +140,16 @@ public class Table {
 				// TODO: The same number in Double and Integer will not be equal. So we need cast to some common type at some level of the system or here.
 				Object recordValue = values.get(j);
 				Object columnValue = columns.get(j).getValue(i);
-				if(!recordValue.equals(columnValue)) { found = false; break; }
+
+				// Compare two values of different types
+				if(recordValue instanceof Number && columnValue instanceof Number) {
+					if( ((Number) recordValue).doubleValue() != ((Number) columnValue).doubleValue() ) { found = false; break; }
+					// OLD: if(!recordValue.equals(columnValue)) { found = false; break; }
+				}
+				else {
+					// Compare nullable objects
+					if( !com.google.common.base.Objects.equal(recordValue, columnValue) ) { found = false; break; }
+				}
 			}
 			
 			if(found) {

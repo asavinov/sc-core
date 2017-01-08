@@ -68,7 +68,8 @@ public class Column {
 	public long appendValue(Object value) {
 		// Cast the value to type of this column
 		if(this.getOutput().getName().equalsIgnoreCase("String")) {
-			value = value.toString();
+			try { value = value.toString(); } 
+			catch (Exception e) { value = ""; }
 		}
 		else if(this.getOutput().getName().equalsIgnoreCase("Double") || this.getOutput().getName().equalsIgnoreCase("Integer")) {
 			if(value instanceof String) {
