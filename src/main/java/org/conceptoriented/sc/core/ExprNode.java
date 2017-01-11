@@ -17,6 +17,7 @@ import java.util.stream.Collectors;
  * The formula can be a primitive expression or a tuple which is a combination of function formulas. 
  */
 public class ExprNode {
+	public static String OUT_VARIABLE_NAME = "out";
 	
 	public boolean isExp4j() { return true; }
 	public boolean isEvalex() { return false; }
@@ -186,7 +187,7 @@ public class ExprNode {
 			
 			// Add group path to dependencies (it must be computed before accumulation)
 			PrimExprDependency pathDep = new PrimExprDependency();
-			pathDep.paramName = "output";
+			pathDep.paramName = OUT_VARIABLE_NAME;
 			pathDep.pathName = this.pathName;
 			pathDep.qname = this.pathQName;
 			pathDep.start = -1; // Means that it is not in the formula
@@ -412,8 +413,8 @@ public class ExprNode {
 		// Set<String> vars = this.primExprDependencies.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
 		
 		// Add the current output value as a special (reserved) variable
-		if(!vars.contains("output")) vars.add("output");
-		vals.put("output", 0.0);
+		if(!vars.contains(OUT_VARIABLE_NAME)) vars.add(OUT_VARIABLE_NAME);
+		vals.put(OUT_VARIABLE_NAME, 0.0);
 
 		//
 		// Create expression object with the transformed formula
@@ -460,8 +461,8 @@ public class ExprNode {
 		// Set<String> vars = this.primExprDependencies.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
 		
 		// Add the current output value as a special (reserved) variable
-		if(!vars.contains("output")) vars.add("output");
-		vals.put("output", 0.0);
+		if(!vars.contains(OUT_VARIABLE_NAME)) vars.add(OUT_VARIABLE_NAME);
+		vals.put(OUT_VARIABLE_NAME, 0.0);
 
 		//
 		// Create expression object with the transformed formula
@@ -523,7 +524,7 @@ public class ExprNode {
 		if(outputValue == null) outputValue = Double.NaN;
 		try {
 			if(this.isExp4j()) {
-				this.exp4jExpression.setVariable("output", ((Number)outputValue).doubleValue());
+				this.exp4jExpression.setVariable(OUT_VARIABLE_NAME, ((Number)outputValue).doubleValue());
 			}
 			else if(this.isEvalex()) {
 				
