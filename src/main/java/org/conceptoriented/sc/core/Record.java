@@ -150,7 +150,7 @@ public class Record {
 			String[] fields = line.split(",");
 			for(int j=0; j<fields.length; j++) {
 				if(j >= columns.size()) break; // More field values than columns
-				record.set(columns.get(j), fields[j]);
+				record.set(columns.get(j), fields[j].trim());
 			}
 			records.add(record);
 		}

@@ -73,7 +73,7 @@ public class Column {
 		}
 		else if(this.getOutput().getName().equalsIgnoreCase("Double") || this.getOutput().getName().equalsIgnoreCase("Integer")) {
 			if(value instanceof String) {
-				try { value = NumberFormat.getInstance(Locale.US).parse((String)value); } 
+				try { value = NumberFormat.getInstance(Locale.US).parse(((String)value).trim()); } 
 				catch (ParseException e) { value = Double.NaN; }
 			}
 		}
