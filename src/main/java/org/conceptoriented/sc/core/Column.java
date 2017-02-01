@@ -101,6 +101,14 @@ public class Column {
 	// Formula
 	//
 	
+	protected DcColumnKind kind;
+	public DcColumnKind getKind() {
+		return this.kind;
+	}
+	public void setKind(DcColumnKind kind) {
+		this.kind = kind;
+	}
+
 	protected String formula;
 	public String getFormula() {
 		return this.formula;
@@ -147,7 +155,7 @@ public class Column {
 	
 	// Determine if it is syntactically accumulation, that is, it seems to be intended for accumulation.
 	// In fact, it can be viewed as a syntactic check of validity and can be called isValidAccumulation
-	public boolean isAccumulation() {
+	public boolean isAccumulatedColumnKind() {
 		if(this.accuformula == null || this.accuformula.trim().isEmpty()) return false;
 		if(this.accutable == null || this.accutable.trim().isEmpty()) return false;
 		if(this.accupath == null || this.accupath.trim().isEmpty()) return false;
@@ -158,24 +166,24 @@ public class Column {
 	}
 
 	// Try to auto determine what is the formula type and hence how it has to be translated and evaluated
-	public DcFormulaType determineAutoFormulaType() {
+	public DcColumnKind determineAutoColumnKind() {
 
 		if((this.formula == null || this.formula.trim().isEmpty()) && (this.accuformula == null || this.accuformula.trim().isEmpty())) {
-			return DcFormulaType.NONE;
+			return DcColumnKind.NONE;
 		}
 		
 		if(this.getOutput().isPrimitive()) { // Either calc or accu
 			
 			if(this.accuformula == null || this.accuformula.trim().isEmpty()) {
-				return DcFormulaType.CALC;
+				return DcColumnKind.CALC;
 			}
 			else {
-				return DcFormulaType.ACCU;
+				return DcColumnKind.ACCU;
 			}
 
 		}
 		else { // Only tuple
-			return DcFormulaType.TUPLE;
+			return DcColumnKind.LINK;
 		}
 	}
 
@@ -263,7 +271,7 @@ public class Column {
 
 	public void translate() {
 
-		if(determineAutoFormulaType() == DcFormulaType.NONE) {
+		if(determineAutoColumnKind() == DcColumnKind.NONE) {
 			this.schema.setParentDependencies(this, null);
 			return;
 		}
@@ -287,7 +295,7 @@ public class Column {
 		List<Column> accuColumns = null; // Non-evaluatable column independent of the reason
 		this.accuExpr = null;
 
-		if(this.determineAutoFormulaType() == DcFormulaType.ACCU) {
+		if(this.determineAutoColumnKind() == DcColumnKind.ACCU) {
 			this.accuExpr = this.translateAccu();
 			if(this.accuExpr != null) {
 				accuColumns = this.accuExpr.getDependencies();
@@ -366,7 +374,7 @@ public class Column {
 
 	public void evaluate() {
 		
-		if(determineAutoFormulaType() == DcFormulaType.NONE) {
+		if(determineAutoColumnKind() == DcColumnKind.NONE) {
 			this.setDirty(false);
 			return;
 		}
@@ -401,7 +409,7 @@ public class Column {
 		// Step 2: Evaluate accu formula to update the column values (in the case of accu formula)
 		//
 		
-		if(this.determineAutoFormulaType() == DcFormulaType.ACCU) {
+		if(this.determineAutoColumnKind() == DcColumnKind.ACCU) {
 			Range accuRange = accuExpr.table.getNewRange(); // All dirty/new rows
 			for(long i=accuRange.start; i<accuRange.end; i++) {
 				long g = (Long) accuExpr.path.get(0).getValue(accuExpr.path, i); // Find group element
@@ -568,6 +576,8 @@ public class Column {
 		String jstatus = "`status`: " + (this.getStatus() != null ? this.getStatus().toJson() : "undefined");
 		String jdirty = "`dirty`: " + (this.isDirtyDeep() ? "true" : "false"); // We transfer deep dirty
 
+		String jkind = "`kind`:" + this.kind.getValue() + "";
+
 		String jfmla = "`formula`: " + JSONObject.valueToString(this.getFormula()) + "";
 
 		String jafor = "`accuformula`: " + JSONObject.valueToString(this.getAccuformula()) + "";
@@ -577,7 +587,7 @@ public class Column {
 		//String jdescr = "`descriptor`: " + (this.getDescriptor() != null ? "`"+this.getDescriptor()+"`" : "null");
 		String jdescr = "`descriptor`: " + JSONObject.valueToString(this.getDescriptor()) + "";
 
-		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jdirty + ", " + jstatus + ", " + jfmla + ", " + jafor + ", " + jatbl + ", " + japath + ", " + jdescr;
+		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jdirty + ", " + jstatus + ", " + jkind + ", " + jfmla + ", " + jafor + ", " + jatbl + ", " + japath + ", " + jdescr;
 
 		return ("{" + json + "}").replace('`', '"');
 	}
@@ -606,18 +616,23 @@ public class Column {
 		this.input = schema.getTable(input);
 		this.output = schema.getTable(output);
 		
-		values = new Object[1000];
+		this.kind = DcColumnKind.USER;
+
+		this.values = new Object[1000];
 	}
 }
 
 
-enum DcFormulaType {
-	NONE(0), // No formula
-	AUTO(10), // Auto. Needs to be determined.
+enum DcColumnKind {
+	NONE(10), // Not specified (missing)
 	UNKNOWN(20), // Cannot determine
-	CALC(30), // Calculated (row-based, no accumulation, non-complex)
-	TUPLE(40), // Tuple (complex)
-	ACCU(50), // Accumulation
+
+	AUTO(0), // Auto. Best kind has to be determined from other parameters. 
+
+	USER(50), // Values are provided by the user or in any case from outside, that is, not derived. 
+	CALC(60), // Calculated (row-based, no accumulation, non-complex)
+	LINK(70), // Tuple (complex)
+	ACCU(80), // Accumulation
 	;
 
 	private int value;
@@ -626,7 +641,16 @@ enum DcFormulaType {
 		return value;
 	}
 
-	private DcFormulaType(int value) {
+	public static DcColumnKind fromInt(int value) {
+	    for (DcColumnKind kind : DcColumnKind.values()) {
+	        if (kind.getValue() == value) {
+	            return kind;
+	        }
+	    }
+	    return DcColumnKind.AUTO;
+	 }
+
+	private DcColumnKind(int value) {
 		this.value = value;
 	}
 }

@@ -243,8 +243,10 @@ public class Schema {
 			throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating column. ", "Name contains invalid characters. ");
 		}
 
-		// We do not process status
-		// We do not process dirty
+		// We do not process status (it is always result of the backend)
+		// We do not process dirty (it is always result of the backend)
+		
+		DcColumnKind kind = obj.has("kind") ? DcColumnKind.fromInt(obj.getInt("kind")) : DcColumnKind.AUTO;
 		
 		String formula = obj.has("formula") && !obj.isNull("formula") ? obj.getString("formula") : "";
 
@@ -278,6 +280,8 @@ public class Schema {
 		if(isValid) {
 			Column column = this.createColumn(name, input.getName(), output.getName());
 
+			column.setKind(kind);
+
 			column.setFormula(formula);
 
 			column.setAccuformula(accuformula);
@@ -286,7 +290,7 @@ public class Schema {
 
 			column.setDescriptor(descr_string);
 			
-			if(column.determineAutoFormulaType() == DcFormulaType.NONE) { // Columns without formula are clean
+			if(column.determineAutoColumnKind() == DcColumnKind.NONE) { // Columns without formula are clean
 				column.setDirty(false);
 			}
 
@@ -324,8 +328,10 @@ public class Schema {
 			}
 		}
 
-		// We do not process status
-		// We do not process dirty
+		// We do not process status (it is always result of the backend)
+		// We do not process dirty (it is always result of the backend)
+		
+		DcColumnKind kind = obj.has("kind") ? DcColumnKind.fromInt(obj.getInt("kind")) : DcColumnKind.AUTO;
 		
 		String formula = obj.has("formula") && !obj.isNull("formula") ? obj.getString("formula") : "";
 		
@@ -350,6 +356,8 @@ public class Schema {
 		if(obj.has("input")) column.setInput(input);
 		if(obj.has("output")) column.setOutput(output);
 		if(obj.has("name")) column.setName(obj.getString("name"));
+
+		if(obj.has("kind")) column.setKind(kind);
 
 		if(obj.has("formula")) column.setFormula(formula);
 
@@ -412,7 +420,7 @@ public class Schema {
 
 	// Return all columns with no definition which therefore are supposed to be always clean and do not need evaluation
 	protected List<Column> getStartingColumns() {
-		List<Column> res = columns.stream().filter(x -> x.determineAutoFormulaType() == DcFormulaType.NONE).collect(Collectors.<Column>toList());
+		List<Column> res = columns.stream().filter(x -> x.determineAutoColumnKind() == DcColumnKind.NONE).collect(Collectors.<Column>toList());
 		return res;
 	}
 
