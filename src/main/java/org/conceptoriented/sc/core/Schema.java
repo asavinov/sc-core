@@ -62,21 +62,21 @@ public class Schema {
 	
 	private List<Table> tables = new ArrayList<Table>();
 	public List<Table> getTables() {
-		return tables;
+		return this.tables;
 	}
 	public Table getTable(String table) {
-        Table ret = tables.stream().filter(x -> x.getName().equalsIgnoreCase(table)).findAny().orElse(null);
+        Table ret = this.tables.stream().filter(x -> x.getName().equalsIgnoreCase(table)).findAny().orElse(null);
         return ret;
 	}
 	public Table getTableById(String id) {
-        Table ret = tables.stream().filter(x -> x.getId().toString().equals(id)).findAny().orElse(null);
+        Table ret = this.tables.stream().filter(x -> x.getId().toString().equals(id)).findAny().orElse(null);
         return ret;
 	}
 
 	public Table createTable(String name) {
-		Table table = new Table(this, name);
-		tables.add(table);
-		return table;
+		Table tab = new Table(this, name);
+		this.tables.add(tab);
+		return tab;
 	}
 	public Table createTableFromJson(String json) throws DcError {
 		JSONObject obj = new JSONObject(json);
@@ -101,10 +101,10 @@ public class Schema {
 		// Create
 		//
 		
-		Table table = this.createTable(name);
-		table.setMaxLength(maxLength);
+		tab = this.createTable(name);
+		tab.setMaxLength(maxLength);
 		
-		return table;
+		return tab;
 	}
     public Table createFromCsv(String fileName, boolean hasHeaderRecord) {
         String tableName = null;
@@ -122,15 +122,15 @@ public class Schema {
         List<String> columnTypes = Utils.recommendTypes(columnNames, records);
 
         // Create/append table with file name
-		Table table = this.createTable(tableName);
+		Table tab = this.createTable(tableName);
         
         // Append columns
-        this.createColumns(columnNames, table.getName(), columnTypes);
+        this.createColumns(columnNames, tab.getName(), columnTypes);
         
         // Append records to this table
-        table.append(records, null);
+        tab.append(records, null);
         
-        return table;
+        return tab;
     }
 
     public void updateTableFromJson(String json) throws DcError {
@@ -139,8 +139,8 @@ public class Schema {
 		// Find table
 		
 		String id = obj.getString("id");
-		Table table = getTableById(id);
-		if(table == null) {
+		Table tab = getTableById(id);
+		if(tab == null) {
 			throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating table. ", "Table not found. ");
 		}
 		
@@ -149,8 +149,8 @@ public class Schema {
 		//
 		if(obj.has("name")) {
 			String name = obj.getString("name");
-			Table tab = getTable(name);
-			if(tab != null && tab != table) {
+			Table t = getTable(name);
+			if(t != null && t != tab) {
 				throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating table. ", "Name already exists. ");
 			}
 			if(!StringUtils.isAlphanumericSpace(name)) {
@@ -164,23 +164,23 @@ public class Schema {
 		// Update only properties which are present
 		//
 
-		if(obj.has("name")) table.setName(obj.getString("name"));
-		if(obj.has("maxLength")) table.setMaxLength(obj.getLong("maxLength"));
+		if(obj.has("name")) tab.setName(obj.getString("name"));
+		if(obj.has("maxLength")) tab.setMaxLength(obj.getLong("maxLength"));
 	}
 
     public void deleteTable(String id) {
-		Table table = getTableById(id);
+		Table tab = getTableById(id);
 
 		// Remove input columns
-		List<Column> inColumns = columns.stream().filter(x -> x.getInput().equals(table)).collect(Collectors.<Column>toList());
-		columns.removeAll(inColumns);
+		List<Column> inColumns = this.columns.stream().filter(x -> x.getInput().equals(tab)).collect(Collectors.<Column>toList());
+		this.columns.removeAll(inColumns);
 		
 		// Remove output columns
-		List<Column> outColumns = columns.stream().filter(x -> x.getOutput().equals(table)).collect(Collectors.<Column>toList());
-		columns.removeAll(outColumns);
+		List<Column> outColumns = this.columns.stream().filter(x -> x.getOutput().equals(tab)).collect(Collectors.<Column>toList());
+		this.columns.removeAll(outColumns);
 		
 		// Remove table itself
-		tables.remove(table);
+		this.tables.remove(tab);
 	}
 
 	//
@@ -189,35 +189,35 @@ public class Schema {
 
 	private List<Column> columns = new ArrayList<Column>();
 	public List<Column> getColumns() {
-		return columns;
+		return this.columns;
 	}
 	public List<Column> getColumns(String table) {
-		List<Column> res = columns.stream().filter(x -> x.getInput().getName().equalsIgnoreCase(table)).collect(Collectors.<Column>toList());
+		List<Column> res = this.columns.stream().filter(x -> x.getInput().getName().equalsIgnoreCase(table)).collect(Collectors.<Column>toList());
 		return res;
 	}
 	public Column getColumn(String table, String column) {
-        Column ret = columns.stream().filter(x -> x.getInput().getName().equalsIgnoreCase(table) && x.getName().equalsIgnoreCase(column)).findAny().orElse(null);
+        Column ret = this.columns.stream().filter(x -> x.getInput().getName().equalsIgnoreCase(table) && x.getName().equalsIgnoreCase(column)).findAny().orElse(null);
         return ret;
 	}
 	public Column getColumnById(String id) {
-        Column ret = columns.stream().filter(x -> x.getId().toString().equals(id)).findAny().orElse(null);
+        Column ret = this.columns.stream().filter(x -> x.getId().toString().equals(id)).findAny().orElse(null);
         return ret;
 	}
 
 	public Column createColumn(String name, String input, String output) {
-		Column column = new Column(this, name, input, output);
-		columns.add(column);
-		return column;
+		Column col = new Column(this, name, input, output);
+		this.columns.add(col);
+		return col;
 	}
 	public List<Column> createColumns(List<String> names, String input, List<String> outputs) {
-		List<Column> columns = new ArrayList<Column>();
+		List<Column> cols = new ArrayList<Column>();
 		
 		for(int i=0; i<names.size(); i++) {
 			// TODO: We need to check if such a column already exists and skip it (or update type)
-			Column column = this.createColumn(names.get(i), input, outputs.get(i));
+			Column col = this.createColumn(names.get(i), input, outputs.get(i));
 		}
 
-		return columns;
+		return cols;
 	}
 	public Column createColumnFromJson(String json) throws DcError {
 		JSONObject obj = new JSONObject(json);
@@ -278,23 +278,23 @@ public class Schema {
 		// Create
 
 		if(isValid) {
-			Column column = this.createColumn(name, input.getName(), output.getName());
+			col = this.createColumn(name, input.getName(), output.getName());
 
-			column.setKind(kind);
+			col.setKind(kind);
 
-			column.setFormula(formula);
+			col.setFormula(formula);
 
-			column.setAccuformula(accuformula);
-			column.setAccutable(accutable);
-			column.setAccupath(accupath);
+			col.setAccuformula(accuformula);
+			col.setAccutable(accutable);
+			col.setAccupath(accupath);
 
-			column.setDescriptor(descr_string);
+			col.setDescriptor(descr_string);
 			
-			if(column.determineAutoColumnKind() == DcColumnKind.NONE) { // Columns without formula are clean
-				column.setDirty(false);
+			if(!col.isDerived()) { // Columns without formula (non-evalatable) are clean
+				col.setDirty(false);
 			}
 
-			return column;
+			return col;
 		}
 		else {
 			return null;
@@ -369,8 +369,8 @@ public class Schema {
 	}
 
 	public void deleteColumn(String id) {
-		Column column = getColumnById(id);
-		columns.remove(column);
+		Column col = this.getColumnById(id);
+		this.columns.remove(col);
 	}
 
 	public static List<String> readColumnNamesFromCsvFile(String fileName) {
@@ -406,21 +406,24 @@ public class Schema {
 	 * For each column, we store all other columns it directly depends on, that is, columns that it directly uses in its formula
 	 */
 	protected Map<Column,List<Column>> dependencies = new HashMap<Column,List<Column>>();
-	public List<Column> getParentDependencies(Column column) {
-		return dependencies.get(column);
+	public List<Column> getParentDependencies(Column col) {
+		return this.dependencies.get(col);
 	}
-	public void setParentDependencies(Column column, List<Column> deps) {
-		dependencies.put(column, deps);
+	public void setParentDependencies(Column col, List<Column> deps) {
+		this.dependencies.put(col, deps);
 	}
-	public List<Column> getChildDependencies(Column column) {
+	public List<Column> getChildDependencies(Column col) {
 		// Return all columns which point to the specified column as a dependency, that is, which have this column in its deps
-		List<Column> res = columns.stream().filter(x -> this.getParentDependencies(x) != null && this.getParentDependencies(x).contains(column)).collect(Collectors.<Column>toList());
+		List<Column> res = this.columns.stream().filter(x -> this.getParentDependencies(x) != null && this.getParentDependencies(x).contains(col)).collect(Collectors.<Column>toList());
 		return res;
+	}
+	public void emptyDependencies() { // Reset. Normally before finding them.
+		this.dependencies = new HashMap<Column,List<Column>>();
 	}
 
 	// Return all columns with no definition which therefore are supposed to be always clean and do not need evaluation
 	protected List<Column> getStartingColumns() {
-		List<Column> res = columns.stream().filter(x -> x.determineAutoColumnKind() == DcColumnKind.NONE).collect(Collectors.<Column>toList());
+		List<Column> res = this.columns.stream().filter(x -> !x.isDerived()).collect(Collectors.<Column>toList());
 		return res;
 	}
 
@@ -477,12 +480,13 @@ public class Schema {
 		// Translate individual columns and build dependency graph
 		//
 
+		this.emptyDependencies(); // Reset
 		for(Column col : this.columns) {
 			col.translate();
 		}
 		
 		//
-		// Propagate translation status through dependency graph
+		// Propagate translation status (errors) through dependency graph
 		//
 		
 		List<Column> readyColumns = new ArrayList<Column>(); // Already evaluated
@@ -552,10 +556,10 @@ public class Schema {
 		// Update ranges of all tables
 		//
 
-		for(Table table : tables) {
-			if(table.isPrimitive()) continue;
-			table.markNewAsClean(); // Mark dirty as clean
-			table.removeDelRange(); // Really remove old records
+		for(Table tab : tables) {
+			if(tab.isPrimitive()) continue;
+			tab.markNewAsClean(); // Mark dirty as clean
+			tab.removeDelRange(); // Really remove old records
 		}
 		
 	}

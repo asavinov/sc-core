@@ -109,6 +109,19 @@ public class Column {
 		this.kind = kind;
 	}
 
+	public boolean isDerived() {
+		DcColumnKind k = this.kind;
+		if(this.kind == DcColumnKind.AUTO) {
+			k = this.determineAutoColumnKind();
+		}
+
+		if(k == DcColumnKind.CALC || k == DcColumnKind.ACCU || k == DcColumnKind.LINK) {
+			return true;
+		}
+
+		return false;
+	}
+
 	protected String formula;
 	public String getFormula() {
 		return this.formula;
@@ -271,11 +284,17 @@ public class Column {
 
 	public void translate() {
 
-		if(determineAutoColumnKind() == DcColumnKind.NONE) {
+		if(this.kind == DcColumnKind.AUTO) {
+			this.kind = determineAutoColumnKind();
+		}
+		if(!this.isDerived()) { // User column - no deps
 			this.schema.setParentDependencies(this, null);
 			return;
 		}
-		
+
+		// Dependencies
+		List<Column> columns = new ArrayList<Column>();
+
 		//
 		// Step 1: Evaluate main formula to initialize the column. If it is empty then we need to init it with default values
 		//
@@ -288,28 +307,30 @@ public class Column {
 			mainColumns = this.mainExpr.getDependencies();
 		}
 
+		if(mainColumns != null) columns.addAll(mainColumns);
+
 		//
 		// Step 2: Evaluate accu formula to update the column values (in the case of accu formula)
 		//
-		
-		List<Column> accuColumns = null; // Non-evaluatable column independent of the reason
-		this.accuExpr = null;
+		if(this.kind == DcColumnKind.ACCU) {
 
-		if(this.determineAutoColumnKind() == DcColumnKind.ACCU) {
-			this.accuExpr = this.translateAccu();
-			if(this.accuExpr != null) {
-				accuColumns = this.accuExpr.getDependencies();
+			List<Column> accuColumns = null; // Non-evaluatable column independent of the reason
+			this.accuExpr = null;
+
+			if(this.determineAutoColumnKind() == DcColumnKind.ACCU) {
+				this.accuExpr = this.translateAccu();
+				if(this.accuExpr != null) {
+					accuColumns = this.accuExpr.getDependencies();
+				}
 			}
+			
+			if(accuColumns != null) columns.addAll(accuColumns);
 		}
+
 
 		//
 		// Update dependence graph
 		//
-		List<Column> columns = mainColumns;
-		if(accuColumns != null) {
-			if(columns == null) columns = accuColumns;
-			else columns.addAll(accuColumns);
-		}
 		this.schema.setParentDependencies(this, columns);
 	}
 
@@ -374,7 +395,7 @@ public class Column {
 
 	public void evaluate() {
 		
-		if(determineAutoColumnKind() == DcColumnKind.NONE) {
+		if(!this.isDerived()) {
 			this.setDirty(false);
 			return;
 		}
@@ -409,13 +430,15 @@ public class Column {
 		// Step 2: Evaluate accu formula to update the column values (in the case of accu formula)
 		//
 		
-		if(this.determineAutoColumnKind() == DcColumnKind.ACCU) {
+		if(this.getKind() == DcColumnKind.ACCU) {
+
 			Range accuRange = accuExpr.table.getNewRange(); // All dirty/new rows
 			for(long i=accuRange.start; i<accuRange.end; i++) {
 				long g = (Long) accuExpr.path.get(0).getValue(accuExpr.path, i); // Find group element
 				accuExpr.evaluate(i);
 				this.setValue(g, accuExpr.result);
 			}
+
 		}
 
 		this.setDirty(false); // Validate own data (make up-to-date) if success
@@ -619,38 +642,5 @@ public class Column {
 		this.kind = DcColumnKind.USER;
 
 		this.values = new Object[1000];
-	}
-}
-
-
-enum DcColumnKind {
-	NONE(10), // Not specified (missing)
-	UNKNOWN(20), // Cannot determine
-
-	AUTO(0), // Auto. Best kind has to be determined from other parameters. 
-
-	USER(50), // Values are provided by the user or in any case from outside, that is, not derived. 
-	CALC(60), // Calculated (row-based, no accumulation, non-complex)
-	LINK(70), // Tuple (complex)
-	ACCU(80), // Accumulation
-	;
-
-	private int value;
-
-	public int getValue() {
-		return value;
-	}
-
-	public static DcColumnKind fromInt(int value) {
-	    for (DcColumnKind kind : DcColumnKind.values()) {
-	        if (kind.getValue() == value) {
-	            return kind;
-	        }
-	    }
-	    return DcColumnKind.AUTO;
-	 }
-
-	private DcColumnKind(int value) {
-		this.value = value;
 	}
 }

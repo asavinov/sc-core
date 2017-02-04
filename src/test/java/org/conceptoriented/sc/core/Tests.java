@@ -193,6 +193,7 @@ public class Tests {
         record.set("A", 6);
         table.append(record);
         
+        columnB.setKind(DcColumnKind.CALC);
         columnB.setFormula("2 * [A] + 1");
 
         columnB.translate();
@@ -250,6 +251,7 @@ public class Tests {
         r.set("B", 5.0);
         t2.append(r); 
 
+        c5.setKind(DcColumnKind.LINK);
         c5.setFormula(" { [A] = [A]; [B] = [B] } ");
 
         c5.translate();
@@ -290,8 +292,8 @@ public class Tests {
 
         // Define accu column
         Column ta = schema.createColumn("A", "T", "Double");
+        ta.setKind(DcColumnKind.ACCU);
         ta.setFormula(""); // Init to default
-
         ta.setAccutable("T2");
         ta.setAccuformula(" out + 2.0 * [Id] ");
         ta.setAccupath("[G]");
@@ -317,6 +319,7 @@ public class Tests {
 
         // Define group column
         Column t2g = schema.createColumn("G", "T2", "T");
+        t2g.setKind(DcColumnKind.LINK);
         t2g.setFormula(" { [Id] = [Id] } ");
 
         //
