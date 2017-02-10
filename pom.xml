@@ -5,7 +5,7 @@
   <groupId>org.conceptoriented</groupId>
   <artifactId>sc-core</artifactId>
   <packaging>jar</packaging>
-  <version>0.3.0</version>
+  <version>0.4.0</version>
 
   <name>Data Commander Engine</name>
   <url>http://conceptoriented.org</url>
@@ -34,7 +34,7 @@
 				<activeByDefault>false</activeByDefault>
 			</activation>
 			<properties>
-				<jdk>C:/Program Files/Java/jdk1.8.0_112</jdk>
+				<jdk>C:/Program Files/Java/jdk1.8.0_121</jdk>
 			</properties>
 		</profile>
 
@@ -55,7 +55,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
-				<version>3.6.0</version>
+				<version>3.6.1</version>
 				<configuration>
 					<verbose>true</verbose>
 					<fork>true</fork>
@@ -66,6 +66,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-source-plugin</artifactId>
+				<version>3.0.1</version>
 				<executions>
 					<execution>
 						<id>attach-sources</id>
@@ -115,7 +116,7 @@
 		<dependency>
 			<groupId>com.google.guava</groupId>
 			<artifactId>guava</artifactId>
-			<version>20.0</version>
+			<version>21.0</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.commons</groupId>
@@ -135,12 +136,12 @@
 		<dependency>
 			<groupId>net.objecthunter</groupId>
 			<artifactId>exp4j</artifactId>
-			<version>0.4.7</version>
+			<version>0.4.8</version>
 		</dependency>
 	    <dependency>
 	        <groupId>com.udojava</groupId>
 	        <artifactId>EvalEx</artifactId>
-	        <version>1.4</version>
+	        <version>1.6</version>
 	    </dependency>
 
 		<!-- For tests -->
