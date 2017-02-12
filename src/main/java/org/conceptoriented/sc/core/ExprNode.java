@@ -156,7 +156,7 @@ public class ExprNode {
 			int thisEnd = names.get(i).end;
 			int nextStart = names.get(i+1).start;
 			
-			if(frml.substring(thisEnd, nextStart).trim() == ".") { // There is continuation.
+			if(frml.substring(thisEnd, nextStart).trim().equals(".")) { // There is continuation.
 				names.get(i+1).start = names.get(i).start; // Attach this name to the next name as a prefix
 			}
 			else { // No continuation. Ready to copy as path.

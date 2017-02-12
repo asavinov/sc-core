@@ -10,6 +10,7 @@ public enum DcColumnKind {
 	CALC(60), // Calculated (row-based, no accumulation, non-complex)
 	ACCU(70), // Accumulation
 	LINK(80), // Tuple (complex)
+	CLASS(100), // Java class
 	;
 
 	private int value;

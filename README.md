@@ -20,7 +20,7 @@ StreamCommandr relies on the concept-oriented model as its theoretical foundatio
 
 A list of changes for each release can be found in the UI project.
 
-* v0.4.0 (2017-02-xx)
+* v0.4.0 (2017-02-12)
 * v0.3.0 (2017-01-22)
 * v0.2.0 (2016-12-10)
 * v0.1.0 (2016-09-05)

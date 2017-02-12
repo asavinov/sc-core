@@ -256,8 +256,8 @@ public class Schema {
 
 		// Descriptor is either JSON object or JSON string with an object but we want to store a string
 		String descr_string = "";
-		if(obj.has("descriptor") && !obj.isNull("descriptor")) {
-			Object jdescr = obj.get("descriptor");
+		if(obj.has("descriptor")) {
+			Object jdescr = !obj.isNull("descriptor") ? obj.get("descriptor") : "";
 			if(jdescr instanceof String) {
 				descr_string = (String)jdescr;
 			}
@@ -341,12 +341,14 @@ public class Schema {
 
 		// Descriptor is either JSON object or JSON string with an object but we want to store a string
 		String descr_string = null;
-		Object jdescr = obj.get("descriptor");
-		if(jdescr instanceof String) {
-			descr_string = (String)jdescr;
-		}
-		else if(jdescr instanceof JSONObject) {
-			descr_string = ((JSONObject) jdescr).toString();
+		if(obj.has("descriptor")) {
+			Object jdescr = !obj.isNull("descriptor") ? obj.get("descriptor") : "";
+			if(jdescr instanceof String) {
+				descr_string = (String)jdescr;
+			}
+			else if(jdescr instanceof JSONObject) {
+				descr_string = ((JSONObject) jdescr).toString();
+			}
 		}
 
 		//
@@ -440,7 +442,12 @@ public class Schema {
 			if(deps == null) continue; // Non-evaluatable (no formula or error)
 			if(previousColumns.contains(col)) continue; // Skip already evaluated columns
 
-			// Find at least one column with errors which are not suitable for propagation
+			// If it has errors then exclude it (cannot be evaluated)
+			if(col.getStatus() != null && col.getStatus().code != DcErrorCode.NONE) {
+				continue;
+			}
+
+			// If one of its dependencies has errors then exclude it (cannot be evaluated)
 			Column errCol = deps.stream().filter(x -> x.getStatus() != null && x.getStatus().code != DcErrorCode.NONE).findAny().orElse(null);
 			if(errCol != null) continue;
 			
@@ -500,7 +507,7 @@ public class Schema {
 						readyColumns.add(col);
 						continue;
 					}
-					// Find at least one column with errors which are not suitable for propagation
+					// If at least one dependency has errors then this column is not suitable for propagation
 					Column errCol = deps.stream().filter(x -> x.getStatus() != null && x.getStatus().code != DcErrorCode.NONE).findAny().orElse(null);
 					if(errCol != null) { // Mark this column as having propagated error
 						if(errCol.getStatus().code == DcErrorCode.PARSE_ERROR || errCol.getStatus().code == DcErrorCode.PARSE_PROPAGATION_ERROR)
@@ -602,6 +609,7 @@ public class Schema {
 		String id = obj.getString("id");
 
 		if(obj.has("name")) {
+			String name = obj.getString("name");
 			if(!StringUtils.isAlphanumericSpace(name)) {
 				throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating column. ", "Name contains invalid characters. ");
 			}

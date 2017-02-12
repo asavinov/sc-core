@@ -64,6 +64,7 @@ public class Column {
 	}
 	public void setValue(long row, Object value) {
 		values[(int)row] = value;
+		this.setDirtyDeep(true); // Mark as dirty
 	}
 	public long appendValue(Object value) {
 		// Cast the value to type of this column
@@ -78,6 +79,8 @@ public class Column {
 			}
 		}
 		
+		this.setDirtyDeep(true); // Mark as dirty
+
 		long row = length++;
 		values[(int)row] = value;
 		return row;
@@ -115,7 +118,7 @@ public class Column {
 			k = this.determineAutoColumnKind();
 		}
 
-		if(k == DcColumnKind.CALC || k == DcColumnKind.ACCU || k == DcColumnKind.LINK) {
+		if(k == DcColumnKind.CALC || k == DcColumnKind.ACCU || k == DcColumnKind.LINK || k == DcColumnKind.CLASS) {
 			return true;
 		}
 
@@ -181,10 +184,16 @@ public class Column {
 	// Try to auto determine what is the formula type and hence how it has to be translated and evaluated
 	public DcColumnKind determineAutoColumnKind() {
 
-		if((this.formula == null || this.formula.trim().isEmpty()) && (this.accuformula == null || this.accuformula.trim().isEmpty())) {
+		if((this.formula == null || this.formula.trim().isEmpty()) 
+				&& (this.accuformula == null || this.accuformula.trim().isEmpty())
+				&& (this.descriptor == null || this.descriptor.trim().isEmpty())) {
 			return DcColumnKind.NONE;
 		}
 		
+		if(this.descriptor != null && !this.descriptor.trim().isEmpty()) {
+			return DcColumnKind.CLASS;
+		}
+
 		if(this.getOutput().isPrimitive()) { // Either calc or accu
 			
 			if(this.accuformula == null || this.accuformula.trim().isEmpty()) {
@@ -223,14 +232,16 @@ public class Column {
 			return true;
 		}
 
-		// TODO: Cycle-unsafe code. All columns in a cycle have to be detected and marked as having formula error so not evaluatable and hence dirty.
 		List<Column> deps = this.getSchema().getParentDependencies(this);
-		if(deps == null) {
-			return false;
-		}
-		Column dirtyCol = deps.stream().filter(x -> x.isDirtyDeep()).findAny().orElse(null); // Recursion. Find at least one parent column with dirty status
-		if(dirtyCol != null) {
-			return true; // This column is also dirty
+		if(deps == null) return false;
+
+		for(Column dep : deps) {
+			if(dep.getStatus() == null || dep.getStatus().code == DcErrorCode.NONE) {
+				if(dep.isDirtyDeep()) return true; // Recursion. Find at least one parent column with dirty status (and hence this column will be also dirty)
+			}
+			else { // If error then automatically dirty
+				return true;
+			}
 		}
 
 		return false; // All dependencies and this column are up-to-date
@@ -242,9 +253,13 @@ public class Column {
 			return;
 		}
 
-		// TODO: Cycle-unsafe code. All columns in a cycle have to be detected and marked as having formula error so not evaluatable and hence dirty.
 		List<Column> deps = this.getSchema().getChildDependencies(this);
-		deps.forEach(x -> x.setDirtyDeep(dirty)); // Recursion
+		if(deps == null) return;
+		for(Column dep : deps) {
+			if(dep.getStatus() == null || dep.getStatus().code == DcErrorCode.NONE) {
+				dep.setDirtyDeep(dirty); // Recursion to only non-error columns (actually we need to avoid cyclic columns only)
+			}
+		}
 	}
 
 	//
@@ -395,48 +410,50 @@ public class Column {
 
 	public void evaluate() {
 		
-		if(!this.isDerived()) {
-			this.setDirty(false);
-			return;
-		}
-		
 		this.setDirtyDeep(true); // Invalidate data
-
-		//
-		// Step 1: Evaluate main formula to initialize the column. If it is empty then we need to init it with default values
-		//
-
-		Range mainRange = this.getInput().getNewRange(); // All dirty/new rows
-		if(this.formula == null || this.formula.trim().isEmpty()) { // Initialize to default constant
-			Object defaultValue; // Depends on the column type
-			if(this.getOutput().isPrimitive()) {
-				defaultValue = 0.0;
-			}
-			else {
-				defaultValue = null;
-			}
-			for(long i=mainRange.start; i<mainRange.end; i++) {
-				this.setValue(i, defaultValue);
-			}
-		}
-		else if(mainExpr != null) { // Initialize to what formula returns
-			for(long i=mainRange.start; i<mainRange.end; i++) {
-				mainExpr.evaluate(i);
-				this.setValue(i, mainExpr.result);
-			}
-		}
-
-		//
-		// Step 2: Evaluate accu formula to update the column values (in the case of accu formula)
-		//
 		
-		if(this.getKind() == DcColumnKind.ACCU) {
-
-			Range accuRange = accuExpr.table.getNewRange(); // All dirty/new rows
-			for(long i=accuRange.start; i<accuRange.end; i++) {
-				long g = (Long) accuExpr.path.get(0).getValue(accuExpr.path, i); // Find group element
-				accuExpr.evaluate(i);
-				this.setValue(g, accuExpr.result);
+		if(this.getKind() == DcColumnKind.CLASS) {
+			;
+		}
+		else if(this.getKind() == DcColumnKind.CALC || this.getKind() == DcColumnKind.ACCU || this.getKind() == DcColumnKind.LINK) {
+			
+			//
+			// Step 1: Evaluate main formula to initialize the column. If it is empty then we need to init it with default values
+			//
+	
+			Range mainRange = this.getInput().getNewRange(); // All dirty/new rows
+			if(this.formula == null || this.formula.trim().isEmpty()) { // Initialize to default constant
+				Object defaultValue; // Depends on the column type
+				if(this.getOutput().isPrimitive()) {
+					defaultValue = 0.0;
+				}
+				else {
+					defaultValue = null;
+				}
+				for(long i=mainRange.start; i<mainRange.end; i++) {
+					this.setValue(i, defaultValue);
+				}
+			}
+			else if(mainExpr != null) { // Initialize to what formula returns
+				for(long i=mainRange.start; i<mainRange.end; i++) {
+					mainExpr.evaluate(i);
+					this.setValue(i, mainExpr.result);
+				}
+			}
+	
+			//
+			// Step 2: Evaluate accu formula to update the column values (in the case of accu formula)
+			//
+			
+			if(this.getKind() == DcColumnKind.ACCU) {
+	
+				Range accuRange = accuExpr.table.getNewRange(); // All dirty/new rows
+				for(long i=accuRange.start; i<accuRange.end; i++) {
+					long g = (Long) accuExpr.path.get(0).getValue(accuExpr.path, i); // Find group element
+					accuExpr.evaluate(i);
+					this.setValue(g, accuExpr.result);
+				}
+	
 			}
 
 		}

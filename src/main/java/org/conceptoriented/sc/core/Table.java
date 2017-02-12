@@ -87,7 +87,7 @@ public class Table {
 	public void append(Record record) {
 
 		// Get all outgoing columns
-		List<Column> columns = schema.getColumns(this.getName());
+		List<Column> columns = this.schema.getColumns(this.getName());
 
 		for(Column column : columns) { // We must append a new value to all columns even if it has not been provided (null)
 

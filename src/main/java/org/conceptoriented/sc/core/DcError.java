@@ -1,14 +1,16 @@
 package org.conceptoriented.sc.core;
 
+import org.json.JSONObject;
+
 public class DcError extends Exception {
 	public DcErrorCode code;
 	public String message;
 	public String description;
 	
 	public String toJson() {
-		String jcode = "`code`:" + code.getValue() + "";
-		String jmessage = "`message`:`" + message + "`";
-		String jdescription = "`description`:`" + description + "`";
+		String jcode = "`code`:" + this.code.getValue() + "";
+		String jmessage = "`message`: " + JSONObject.valueToString(this.message) + "";
+		String jdescription = "`description`: " + JSONObject.valueToString(this.description) + "";
 
 		String json = jcode + ", " + jmessage + ", " + jdescription;
 
