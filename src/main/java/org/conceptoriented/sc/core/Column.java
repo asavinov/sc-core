@@ -81,8 +81,11 @@ public class Column {
 		
 		this.setDirtyDeep(true); // Mark as dirty
 
-		long row = length++;
+		// We append after the last row
+		Range mainRange = this.getInput().getNewRange(); // All dirty/new rows
+		long row = mainRange.end; 
 		values[(int)row] = value;
+		length++;
 		return row;
 	}
 

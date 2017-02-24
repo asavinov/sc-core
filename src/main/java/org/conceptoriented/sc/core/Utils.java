@@ -3,7 +3,12 @@ package org.conceptoriented.sc.core;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+
+import org.json.JSONObject;
+
+import com.google.common.base.CharMatcher;
 
 public class Utils {
 
@@ -218,4 +223,14 @@ public class Utils {
 		return types;
 	}
 	
+	public static List<String> csvLineToList(String line, JSONObject paramsObj) {
+		List<String> ret = new ArrayList<String>();
+		String[] fields = line.split(",");
+		for(int j=0; j<fields.length; j++) {
+			String val = fields[j].trim();
+			val = CharMatcher.is('\"').trimFrom(val); // Remove quotes if any
+			ret.add(val);
+		}
+		return ret;
+	}
 }

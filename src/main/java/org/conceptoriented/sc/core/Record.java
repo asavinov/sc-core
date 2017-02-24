@@ -19,6 +19,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
+import com.google.common.base.CharMatcher;
+
 /**
  *
  */
@@ -128,30 +130,34 @@ public class Record {
 		return records;
 	}
 	
-	public static List<Record> fromCsvList(String csvString) {
-		List<Record> records = new ArrayList<Record>();
-		
-		List<String> lines = new ArrayList<String>(Arrays.asList(csvString.split("\\r?\\n")));
+	public static List<Record> fromCsvList(String csvLines, String params) {
+		if(params == null || params.isEmpty()) params = "{}";
+			
+		JSONObject paramsObj = new JSONObject(params);
+		List<String> lines = new ArrayList<String>(Arrays.asList(csvLines.split("\\r?\\n")));
 
-		// Create a list of column names
+		//
+		// Extract a list of column names from the header (first line)
+		//
 		String headerLine = lines.get(0);
-		List<String> columns = new ArrayList<String>(Arrays.asList(headerLine.split(",")));
-		for(int i=0; i < columns.size(); i++) { 
-			columns.set(i, columns.get(i).trim());
-		}
+		List<String> colNames = Utils.csvLineToList(headerLine, paramsObj);
 
-		// Loop over all lines
+		//
+		// Add records in the loop over all lines
+		//
+		List<Record> records = new ArrayList<Record>();
 		for (int i=1; i < lines.size(); i++) {
 			String line = lines.get(i);
 			if(line == null || line.trim().isEmpty()) continue;
 			
+			List<String> vals = Utils.csvLineToList(line, paramsObj);
+			
 			Record record = new Record();
-
-			String[] fields = line.split(",");
-			for(int j=0; j<fields.length; j++) {
-				if(j >= columns.size()) break; // More field values than columns
-				record.set(columns.get(j), fields[j].trim());
+			for(int j=0; j<vals.size(); j++) {
+				if(j >= colNames.size()) break; // More values than columns
+				record.set(colNames.get(j), vals.get(j));
 			}
+
 			records.add(record);
 		}
 

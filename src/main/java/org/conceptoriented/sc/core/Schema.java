@@ -11,6 +11,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URLConnection;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -74,7 +75,10 @@ public class Schema {
 	}
 
 	public Table createTable(String name) {
-		Table tab = new Table(this, name);
+		Table tab = this.getTable(name);
+		if(tab != null) return tab; // Already exists
+
+		tab = new Table(this, name);
 		this.tables.add(tab);
 		return tab;
 	}
@@ -106,32 +110,60 @@ public class Schema {
 		
 		return tab;
 	}
-    public Table createFromCsv(String fileName, boolean hasHeaderRecord) {
+    public Table createFromCsvFile(String fileName, boolean hasHeaderRecord) {
         String tableName = null;
         File file = new File(fileName);
         tableName = file.getName();
         tableName = Files.getNameWithoutExtension(tableName);
 
-        // Read column schema from CSV
-        List<String> columnNames = this.readColumnNamesFromCsvFile(fileName);
+        // Read column names from CSV
+        List<String> colNames = Schema.readColumnNamesFromCsvFile(fileName);
         
         // Read Records from CSV
-        List<Record> records = Record.fromCsvFile(fileName, columnNames, true);
+        List<Record> records = Record.fromCsvFile(fileName, colNames, true);
         
         // Get column types
-        List<String> columnTypes = Utils.recommendTypes(columnNames, records);
+        List<String> colTypes = Utils.recommendTypes(colNames, records);
 
         // Create/append table with file name
 		Table tab = this.createTable(tableName);
         
         // Append columns
-        this.createColumns(columnNames, tab.getName(), columnTypes);
+		this.createColumns(tab.getName(), colNames, colTypes);
         
         // Append records to this table
         tab.append(records, null);
         
         return tab;
     }
+    public Table createFromCsvLines(String tableName, String csvLines, String params) {
+		if(params == null || params.isEmpty()) params = "{}";
+		
+		JSONObject paramsObj = new JSONObject(params);
+		List<String> lines = new ArrayList<String>(Arrays.asList(csvLines.split("\\r?\\n")));
+
+        // Read column names from CSV
+		String headerLine = lines.get(0);
+		List<String> colNames = Utils.csvLineToList(headerLine, paramsObj);
+        
+        // Read Records from CSV
+		List<Record> records = Record.fromCsvList(csvLines, params);
+        
+        // Create/append table with file name
+		Table tab = this.createTable(tableName);
+
+		// Append columns if necessary
+		if(paramsObj.optBoolean("createColumns")) {
+	        List<String> colTypes = Utils.recommendTypes(colNames, records);
+			this.createColumns(tab.getName(), colNames, colTypes);
+		}
+        
+        // Append records to this table
+        tab.append(records, null);
+        
+        return tab;
+    }
+
 
     public void updateTableFromJson(String json) throws DcError {
 		JSONObject obj = new JSONObject(json);
@@ -204,17 +236,20 @@ public class Schema {
         return ret;
 	}
 
-	public Column createColumn(String name, String input, String output) {
+	public Column createColumn(String input, String name, String output) {
 		Column col = new Column(this, name, input, output);
 		this.columns.add(col);
 		return col;
 	}
-	public List<Column> createColumns(List<String> names, String input, List<String> outputs) {
+	public List<Column> createColumns(String input, List<String> names, List<String> outputs) {
 		List<Column> cols = new ArrayList<Column>();
 		
 		for(int i=0; i<names.size(); i++) {
-			// TODO: We need to check if such a column already exists and skip it (or update type)
-			Column col = this.createColumn(names.get(i), input, outputs.get(i));
+			Column col = this.getColumn(input, names.get(i));
+			if(col != null) continue; // Already exists
+
+			col = this.createColumn(input, names.get(i), outputs.get(i));
+			cols.add(col);
 		}
 
 		return cols;
@@ -278,7 +313,7 @@ public class Schema {
 		// Create
 
 		if(isValid) {
-			col = this.createColumn(name, input.getName(), output.getName());
+			col = this.createColumn(input.getName(), name, output.getName());
 
 			col.setKind(kind);
 

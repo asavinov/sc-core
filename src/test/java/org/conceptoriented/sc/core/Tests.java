@@ -81,13 +81,13 @@ public class Tests {
         table.maxLength = 2;
 
         // Data column will get its data from pushed records (input column)
-        Column columnA = schema.createColumn("A", "T", "Double");
+        Column columnA = schema.createColumn("T", "A", "Double");
 
         // Calculated column. It has a user-defined evaluation method (plug-in, mapping, coel etc.)
         // This column can read its own and other column values, and it knows about new/valid/old record ranges 
         // It is expected to write/update its own value
         // If necessary, it can update its type/output by pushing records to its type/output table and using the returned row id for writing into itself
-        Column columnB = schema.createColumn("B", "T", "Double");
+        Column columnB = schema.createColumn("T", "B", "Double");
         String descr = "{ `class`:`org.conceptoriented.sc.core.EvaluatorB`, `dependencies`:[`A`] }";
         columnB.setDescriptor(descr.replace('`', '"'));
 
@@ -151,9 +151,9 @@ public class Tests {
         table.maxLength = 2;
 
         // Data column will get its data from pushed records (input column)
-        Column columnA = schema.createColumn("A", "T", "Double");
+        Column columnA = schema.createColumn("T", "A", "Double");
 
-        Column columnB = schema.createColumn("B", "T", "Double");
+        Column columnB = schema.createColumn("T", "B", "Double");
         columnB.setDescriptor("{ \"class\":\"org.conceptoriented.sc.core.EvaluatorB\" }");
         
         
@@ -182,8 +182,8 @@ public class Tests {
     {
     	schema = new Schema("My Schema");
         Table table = schema.createTable("T");
-        Column columnA = schema.createColumn("A", "T", "Double");
-        Column columnB = schema.createColumn("B", "T", "Double");
+        Column columnA = schema.createColumn("T", "A", "Double");
+        Column columnB = schema.createColumn("T", "B", "Double");
         
         Record record = new Record();
         record.set("A", 5.0);
@@ -220,8 +220,8 @@ public class Tests {
         //
         Table t1 = schema.createTable("T");
 
-        Column c1 = schema.createColumn("A", "T", "Double");
-        Column c2 = schema.createColumn("B", "T", "Double");
+        Column c1 = schema.createColumn("T", "A", "Double");
+        Column c2 = schema.createColumn("T", "B", "Double");
 
         // Add one or more records to the table
         Record r = new Record();
@@ -235,10 +235,10 @@ public class Tests {
         //
         Table t2 = schema.createTable("T2");
 
-        Column c3 = schema.createColumn("A", "T2", "Double");
-        Column c4 = schema.createColumn("B", "T2", "Double");
+        Column c3 = schema.createColumn("T2", "A", "Double");
+        Column c4 = schema.createColumn("T2", "B", "Double");
 
-        Column c5 = schema.createColumn("C", "T2", "T");
+        Column c5 = schema.createColumn("T2", "C", "T");
 
         // Add one or more records to the table
         r = new Record();
@@ -278,7 +278,7 @@ public class Tests {
         //
         Table t1 = schema.createTable("T");
 
-        Column tid = schema.createColumn("Id", "T", "Double");
+        Column tid = schema.createColumn("T", "Id", "Double");
 
         // Add one or more records to the table
         Record r = new Record();
@@ -291,7 +291,7 @@ public class Tests {
         t1.append(r); 
 
         // Define accu column
-        Column ta = schema.createColumn("A", "T", "Double");
+        Column ta = schema.createColumn("T", "A", "Double");
         ta.setKind(DcColumnKind.ACCU);
         ta.setFormula(""); // Init to default
         ta.setAccutable("T2");
@@ -303,7 +303,7 @@ public class Tests {
         //
         Table t2 = schema.createTable("T2");
 
-        Column t2id = schema.createColumn("Id", "T2", "Double");
+        Column t2id = schema.createColumn("T2", "Id", "Double");
 
         // Add one or more records to the table
         r = new Record();
@@ -318,7 +318,7 @@ public class Tests {
         t2.append(r);
 
         // Define group column
-        Column t2g = schema.createColumn("G", "T2", "T");
+        Column t2g = schema.createColumn("T2", "G", "T");
         t2g.setKind(DcColumnKind.LINK);
         t2g.setFormula(" { [Id] = [Id] } ");
 
