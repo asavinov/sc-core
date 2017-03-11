@@ -272,10 +272,10 @@ public class Schema {
 		String name = obj.getString("name");
 		Column col = this.getColumn(input.getName(), name);
 		if(col != null) {
-			throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating column. ", "Name already exists. ");
+			throw new DcError(DcErrorCode.CREATE_ELEMENT, "Error creating column. ", "Name already exists. ");
 		}
 		if(!StringUtils.isAlphanumericSpace(name)) {
-			throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating column. ", "Name contains invalid characters. ");
+			throw new DcError(DcErrorCode.CREATE_ELEMENT, "Error creating column. ", "Name contains invalid characters. ");
 		}
 
 		// We do not process status (it is always result of the backend)

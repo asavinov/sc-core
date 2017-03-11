@@ -155,8 +155,6 @@ public class Tests {
 
         Column columnB = schema.createColumn("T", "B", "Double");
         columnB.setDescriptor("{ \"class\":\"org.conceptoriented.sc.core.EvaluatorB\" }");
-        
-        
     }
 
     @Test
@@ -178,7 +176,7 @@ public class Tests {
     }
 
     @Test
-    public void primExprTest() 
+    public void calcEvaluationTest() 
     {
     	schema = new Schema("My Schema");
         Table table = schema.createTable("T");
@@ -210,7 +208,7 @@ public class Tests {
     }
 
     @Test
-    public void tupleExprTest()
+    public void tupleEvaluationTest()
     {
     	// Create and configure: schema, tables, columns
         schema = new Schema("My Schema");
@@ -268,9 +266,49 @@ public class Tests {
     }
     
     @Test
-    public void accuExprTest()
+    public void accuEvaluationTest()
     {
-    	// Create and configure: schema, tables, columns
+        schema = this.createAccuSchema();
+
+        //
+        // Add one or more records to the group table T
+        //
+        Table t1 = schema.getTable("T");
+
+        t1.append(Record.fromJson("{ Id: 5.0 }"));
+        t1.append(Record.fromJson("{ Id: 10.0 }"));
+        t1.append(Record.fromJson("{ Id: 15.0 }"));
+
+        //
+        // Add one or more records to the fact table T2
+        //
+        Table t2 = schema.getTable("T2");
+        
+        t2.append(Record.fromJson("{ Id: 5.0 }"));
+        t2.append(Record.fromJson("{ Id: 5.0 }"));
+        t2.append(Record.fromJson("{ Id: 10.0 }"));
+        t2.append(Record.fromJson("{ Id: 20.0 }"));
+        
+        //
+        // Translate and evaluate
+        //
+        schema.translate();
+
+        // Check correctness of dependencies
+        Column ta = schema.getColumn("T", "A");
+
+        List<Column> depsTa = schema.getParentDependencies(ta);
+        assertTrue( depsTa.contains( schema.getColumn("T2", "Id") ) ); // Used in formula
+        assertTrue( depsTa.contains( schema.getColumn("T2", "G") ) ); // Group path
+
+        schema.evaluate();
+
+        assertEquals(20.0, ta.getValue(0));
+        assertEquals(20.0, ta.getValue(1));
+        assertEquals(0.0, ta.getValue(2));
+    }
+    Schema createAccuSchema() {
+    	
         schema = new Schema("My Schema");
 
         //
@@ -279,16 +317,6 @@ public class Tests {
         Table t1 = schema.createTable("T");
 
         Column tid = schema.createColumn("T", "Id", "Double");
-
-        // Add one or more records to the table
-        Record r = new Record();
-
-        r.set("Id", 5.0);
-        t1.append(r); 
-        r.set("Id", 10.0);
-        t1.append(r); 
-        r.set("Id", 15.0);
-        t1.append(r); 
 
         // Define accu column
         Column ta = schema.createColumn("T", "A", "Double");
@@ -305,38 +333,39 @@ public class Tests {
 
         Column t2id = schema.createColumn("T2", "Id", "Double");
 
-        // Add one or more records to the table
-        r = new Record();
-
-        r.set("Id", 5.0);
-        t2.append(r); 
-        r.set("Id", 5.0);
-        t2.append(r); 
-        r.set("Id", 10.0);
-        t2.append(r); 
-        r.set("Id", 20.0);
-        t2.append(r);
-
         // Define group column
         Column t2g = schema.createColumn("T2", "G", "T");
         t2g.setKind(DcColumnKind.LINK);
         t2g.setFormula(" { [Id] = [Id] } ");
+        
+        return schema;
+    }
 
-        //
-        // Translate and evaluate
-        //
-        schema.translate();
+    @Test
+    public void dependencyTest()
+    {
+    	// What do we need?
+    	
+    	// We want to append records asynchronously
+    	// Each append increases the new interval of the table
 
-        // Check correctness of dependencies
-        List<Column> depsTa = schema.getParentDependencies(ta);
-        assertTrue( depsTa.contains(t2id) ); // Used in formula
-        assertTrue( depsTa.contains(t2g) ); // Group path
+    	// Each append result in column append and column status has to be updated
+    	// User column becomes dirty and propagates deeply (its own dirty status will be resent immediately or by evaluate because it is a user column)
+    	// Calc columns cannot be changed from outside but since it is a new record we do not lose anything so we can set the new value. But the column itself is marked dirty because this new value has to be computed from the formula.
+    	// Link columns cannot be changed same as calc. And this column is also marked as dirty for future evaluation.
+    	// Accu column also is marked dirty.
+    	
+    	// Evaluation means full evaluation (whole columns). But only dirty. 
+    	// Evaluation starts from user columns which are marked clean without evaluation. 
+    	// Then we evaluate next level as usual. And evaluated columns are marked clean.
+    	// !!! Error columns are skipped and do not participate in evaluation as well as they are always dirty. 
+    	// !!! Cycle columns are skipped and their status remains unchanged.
+    	
+    	// After evaluation, new table interval is merged with clean so we do not have new records anymore.
+    	// We could add several records and then evaluate. 
 
-        schema.evaluate();
+        
 
-        assertEquals(20.0, ta.getValue(0));
-        assertEquals(20.0, ta.getValue(1));
-        assertEquals(0.0, ta.getValue(2));
     }
 
     @Test
