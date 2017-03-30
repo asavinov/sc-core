@@ -538,17 +538,38 @@ public class ExprNode {
 	public void evaluate(long i) {
 		
 		if(!this.isTuple()) { // Primitive expression
-
-			setFormulaExpressionVariables(i); // For each input, read all necessary column values from fact table and the current output from the group table
-
-			// Build the final (native) expression
-			if(this.isExp4j()) {
-				result = this.exp4jExpression.evaluate();
+			
+			// Determine if the formula can be and has to be evaluated
+			boolean numericEvalution = true;
+			if(this.primExprDependencies.size() == 1) {
+				PrimExprDependency dep = this.primExprDependencies.get(0);
+				
+				// Check if param name is equal to the whole formula (there are no operations)
+				// Alternatively, check if expression tree has one node with parameter
+				if(this.formula.trim().equals(dep.pathName.trim())) {
+					numericEvalution = false;
+				}
 			}
-			else if(this.isEvalex()) {
-				result = this.evalexExpression.eval();
+			
+			if(!numericEvalution) { // No evaluation needed or possible for this formula
+				// Copy the value to the output (since no operations)
+				PrimExprDependency dep = this.primExprDependencies.get(0);
+				Object value = dep.columns.get(0).getValue(dep.columns, i); // Read column value
+				result = value;
 			}
+			else { // Arithmetic expression that needs to be evaluated
+				
+				setFormulaExpressionVariables(i); // For each input, read all necessary column values from fact table and the current output from the group table
 
+				// Build the final (native) expression
+				if(this.isExp4j()) {
+					result = this.exp4jExpression.evaluate();
+				}
+				else if(this.isEvalex()) {
+					result = this.evalexExpression.eval();
+				}
+
+			}
 		}
 		else { // Tuple
 			

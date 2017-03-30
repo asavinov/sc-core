@@ -208,7 +208,7 @@ public class Tests {
     }
 
     @Test
-    public void tupleEvaluationTest()
+    public void linkEvaluationTest()
     {
     	// Create and configure: schema, tables, columns
         schema = new Schema("My Schema");
@@ -219,14 +219,10 @@ public class Tests {
         Table t1 = schema.createTable("T");
 
         Column c1 = schema.createColumn("T", "A", "Double");
-        Column c2 = schema.createColumn("T", "B", "Double");
+        Column c2 = schema.createColumn("T", "B", "String");
 
         // Add one or more records to the table
-        Record r = new Record();
-
-        r.set("A", 5.0);
-        r.set("B", 10.0);
-        t1.append(r); 
+        t1.append(Record.fromJson("{ A: 5.0, B: \"bbb\" }"));
 
         //
         // Table 2
@@ -234,20 +230,13 @@ public class Tests {
         Table t2 = schema.createTable("T2");
 
         Column c3 = schema.createColumn("T2", "A", "Double");
-        Column c4 = schema.createColumn("T2", "B", "Double");
+        Column c4 = schema.createColumn("T2", "B", "String");
 
         Column c5 = schema.createColumn("T2", "C", "T");
 
         // Add one or more records to the table
-        r = new Record();
-
-        r.set("A", 5.0);
-        r.set("B", 10.0);
-        t2.append(r); 
-    	
-        r.set("A", 10.0);
-        r.set("B", 5.0);
-        t2.append(r); 
+        t2.append(Record.fromJson("{ A: 5.0, B: \"bbb\" }"));
+        t2.append(Record.fromJson("{ A: 10.0, B: \"ccc\" }"));
 
         c5.setKind(DcColumnKind.LINK);
         c5.setFormula(" { [A] = [A]; [B] = [B] } ");
