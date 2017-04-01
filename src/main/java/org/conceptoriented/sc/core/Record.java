@@ -41,7 +41,7 @@ public class Record {
 		fields.put(name, value);
 	}
 	
-	public String toJson() {
+	public String toJsonMap() { // Column name is a key. Column value is the key value. 
 		// Loop over all keys
 		String data = "";
 		for (Map.Entry<String, Object> entry : fields.entrySet())
@@ -55,11 +55,27 @@ public class Record {
 		
 		return ("{" + data + "}").replace('`', '"'); // Trick to avoid backslashing double quotes: use backticks and then replace it at the end
 	}
-	public String toCsv(List<String> columns) { // Comma separated
+	public String toJsonList(List<String> columns) { // First element in the pair is column name. Second element is column value. 
 		String data = "";
-		// Loop over all columns
+		// Loop over all columns (to retain their order in the list)
 		for(String column : columns) {
 			Object value = this.get(column);
+			if(value == null) value = "";
+			String data_elem = "[`" + column + "`,`" + value.toString() + "`], ";
+			data += data_elem;
+		}
+		if(data.length() > 2) {
+			data = data.substring(0, data.length()-2);
+		}
+
+		return ("[" + data + "]").replace('`', '"'); // Trick to avoid backslashing double quotes: use backticks and then replace it at the end
+	}
+	public String toCsv(List<String> columns) { // Comma separated column values.
+		String data = "";
+		// Loop over all columns (to retain their order in the list)
+		for(String column : columns) {
+			Object value = this.get(column);
+			if(value == null) value = "";
 			String data_elem = "`" + value.toString() + "`,";
 			data += data_elem;
 		}
