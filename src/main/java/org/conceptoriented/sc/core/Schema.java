@@ -95,7 +95,7 @@ public class Schema {
 		if(tab != null) {
 			throw new DcError(DcErrorCode.CREATE_ELEMENT, "Error creating table. ", "Name already exists. ");
 		}
-		if(!StringUtils.isAlphanumericSpace(name)) {
+		if(!Utils.validElementName(name)) {
 			throw new DcError(DcErrorCode.CREATE_ELEMENT, "Error creating table. ", "Name contains invalid characters. ");
 		}
 
@@ -185,7 +185,7 @@ public class Schema {
 			if(t != null && t != tab) {
 				throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating table. ", "Name already exists. ");
 			}
-			if(!StringUtils.isAlphanumericSpace(name)) {
+			if(!Utils.validElementName(name)) {
 				throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating table. ", "Name contains invalid characters. ");
 			}
 		}
@@ -274,7 +274,7 @@ public class Schema {
 		if(col != null) {
 			throw new DcError(DcErrorCode.CREATE_ELEMENT, "Error creating column. ", "Name already exists. ");
 		}
-		if(!StringUtils.isAlphanumericSpace(name)) {
+		if(!Utils.validElementName(name)) {
 			throw new DcError(DcErrorCode.CREATE_ELEMENT, "Error creating column. ", "Name contains invalid characters. ");
 		}
 
@@ -358,7 +358,7 @@ public class Schema {
 			if(col != null && col != column) {
 				throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating column. ", "Name already exists. ");
 			}
-			if(!StringUtils.isAlphanumericSpace(name)) {
+			if(!Utils.validElementName(name)) {
 				throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating column. ", "Name contains invalid characters. ");
 			}
 		}
@@ -623,7 +623,7 @@ public class Schema {
 		String id = obj.getString("id");
 
 		String name = obj.getString("name");
-		if(!StringUtils.isAlphanumericSpace(name)) {
+		if(!Utils.validElementName(name)) {
 			throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating schema. ", "Name contains invalid characters. ");
 		}
 
@@ -645,7 +645,7 @@ public class Schema {
 
 		if(obj.has("name")) {
 			String name = obj.getString("name");
-			if(!StringUtils.isAlphanumericSpace(name)) {
+			if(!Utils.validElementName(name)) {
 				throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating column. ", "Name contains invalid characters. ");
 			}
 		}
