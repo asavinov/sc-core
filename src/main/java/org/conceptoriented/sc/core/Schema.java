@@ -10,6 +10,8 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URLConnection;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -44,7 +46,43 @@ public class Schema {
 		this.name = name;
 	}
 	
+	//
+	// Rules
+	//
+	
+	// Return 0 if evaluation is needed and positive value meaning that it is not needed. The value is time when evaluation will be neede
+	public boolean evaluateNeeded() {
+		return evaluateAfterAppend();
+	}
+	
+	// Evaluate in some time after the last append. 
+	// The system tries to keep dirty status only during some limited time, and clean it after the specified time.
+	// null (= MAX) means do nothing, that is, no evaluations after appends
+	// ZERO means immediate evaluation after append without any additional external time trigger
+	public Duration afterAppend = null;
+	public boolean evaluateAfterAppend() {
+		if(this.afterAppend == null) {
+			return false;
+		}
 
+		Instant now = Instant.now();
+		Instant appendTime = null;
+		
+		if(Duration.between(appendTime, now).toNanos() < afterAppend.toNanos()) {
+			return false;
+		}
+		
+		return true;
+	}
+
+	// Every regular interval aligned with calendar units like every 1 minute or every 1 second. 
+	// The system will try to do evaluation exactly after each calendar time unit. 
+	// After each time tick, the system will trigger evaluation (if not already scheduled or running).
+	
+	// After the specified arbitrary time after the last evaluation
+	// The system tries to do evaluations in the specified time after the last evaluation.
+	// It may happen that no evaluation is required because the status is clean
+	
 	//
 	// Environment
 	//
@@ -436,7 +474,7 @@ public class Schema {
 	}
 
 	//
-	// Dependencies
+	// Dependencies, translation, evaluation
 	//
 	
 	/**
@@ -576,6 +614,19 @@ public class Schema {
 
 	}
 
+
+	
+	Instant evaluateTime = Instant.MIN; // Last time the evaluation has been performed (successfully finished)
+	public Instant getEvaluateTime() {
+		return this.evaluateTime;
+	}
+	public void setEvaluateTime() {
+		this.evaluateTime = Instant.now();
+	}
+	public Duration durationFomrLastEvaluated() {
+		return Duration.between(this.evaluateTime, Instant.now());
+	}
+	
 	/**
 	 * Evaluate all columns of the schema. The result is stored in the state property of each column.
 	 * Only new (dirty) rows will be evaluated and made clean (non-dirty). 
@@ -604,7 +655,12 @@ public class Schema {
 			tab.removeDelRange(); // Really remove old records
 		}
 		
+		this.setEvaluateTime(); // Store the time of evaluation
 	}
+	
+	//
+	// Schema construction and serialization
+	//
 	
 	public String toJson() {
 		// Trick to avoid backslashing double quotes: use backticks and then replace it at the end 

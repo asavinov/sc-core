@@ -2,6 +2,8 @@ package org.conceptoriented.sc.core;
 
 import java.text.NumberFormat;
 import java.text.ParseException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -411,6 +413,17 @@ public class Column {
 	// Evaluate
 	//
 
+	Instant evaluateTime = Instant.MIN; // Last time the evaluation has been performed (successfully finished)
+	public Instant getEvaluateTime() {
+		return this.evaluateTime;
+	}
+	public void setEvaluateTime() {
+		this.evaluateTime = Instant.now();
+	}
+	public Duration durationFomrLastEvaluated() {
+		return Duration.between(this.evaluateTime, Instant.now());
+	}
+	
 	public void evaluate() {
 		
 		this.setDirtyDeep(true); // Invalidate data
@@ -462,6 +475,7 @@ public class Column {
 		}
 
 		this.setDirty(false); // Validate own data (make up-to-date) if success
+		this.setEvaluateTime(); // Store the time of evaluation
 	}
 
 	//

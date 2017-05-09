@@ -1,5 +1,7 @@
 package org.conceptoriented.sc.core;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -84,6 +86,15 @@ public class Table {
 		return new Range(newRange);
 	}
 	
+
+	Instant appendTime = Instant.now(); // Last time a record was (successfully) appended
+	public void setAppendTime() {
+		this.appendTime = Instant.now();
+	}
+	public Duration durationFromLastAppend() {
+		return Duration.between(this.appendTime, Instant.now());
+	}
+
 	public void append(Record record) {
 
 		// Get all outgoing columns
@@ -118,6 +129,8 @@ public class Table {
 				}
 			}
 		}
+		
+		setAppendTime(); // Store the time of append operation
 	}
 	public void append(List<Record> records, Map<String, String> columnMapping) {
 		for(Record record : records) {
@@ -167,8 +180,8 @@ public class Table {
 	}
 
 	public void remove() {
-		markAllAsDel();
-		removeDelRange();
+		this.markAllAsDel();
+		this.removeDelRange();
 	}
 
 	public void markCleanAsNew() { // Mark clean records as dirty (new). Deleted range does not change.
