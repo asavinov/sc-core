@@ -7,7 +7,7 @@
   <packaging>jar</packaging>
   <version>0.6.0</version>
 
-  <name>Data Commander Engine</name>
+  <name>Stream Commandr Engine</name>
   <url>http://conceptoriented.org</url>
 
 	<properties>
@@ -79,7 +79,7 @@
 			<plugin>
 				<groupId>org.antlr</groupId>
 				<artifactId>antlr4-maven-plugin</artifactId>
-				<version>4.5</version>
+				<version>4.7</version>
 				<executions>
 					<execution>
 						<id>antlr</id>
@@ -111,7 +111,7 @@
 		<dependency>
 			<groupId>org.antlr</groupId>
 			<artifactId>antlr4-runtime</artifactId>
-			<version>4.5</version>
+			<version>4.7</version>
 		</dependency>
 		<dependency>
 			<groupId>com.google.guava</groupId>
