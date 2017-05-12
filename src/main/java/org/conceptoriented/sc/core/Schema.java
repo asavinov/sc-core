@@ -59,16 +59,12 @@ public class Schema {
 	// The system tries to keep dirty status only during some limited time, and clean it after the specified time.
 	// null (= MAX) means do nothing, that is, no evaluations after appends
 	// ZERO means immediate evaluation after append without any additional external time trigger
-	public Duration afterAppend = null;
+	public long afterAppend = -1;
 	public boolean evaluateAfterAppend() {
-		if(this.afterAppend == null) {
-			return false;
-		}
-
 		Instant now = Instant.now();
 		Instant appendTime = null;
 		
-		if(Duration.between(appendTime, now).toNanos() < afterAppend.toNanos()) {
+		if(Duration.between(appendTime, now).toNanos() < Duration.ofMillis(afterAppend).toNanos()) {
 			return false;
 		}
 		
@@ -667,7 +663,9 @@ public class Schema {
 		String jid = "`id`: `" + this.getId() + "`";
 		String jname = "`name`: `" + this.getName() + "`";
 		
-		String json = jid + ", " + jname;
+		String jafterAppend = "`afterAppend`: " + this.afterAppend + "";
+
+		String json = jid + ", " + jname + ", " + jafterAppend;
 
 		return ("{" + json + "}").replace('`', '"');
 	}
@@ -683,11 +681,14 @@ public class Schema {
 			throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating schema. ", "Name contains invalid characters. ");
 		}
 
+		long afterAppend = obj.has("afterAppend") && !obj.isNull("afterAppend") ? obj.getLong("afterAppend") : -1;
+
 		//
 		// Create
 		//
 		
 		Schema schema = new Schema(name);
+		schema.afterAppend = afterAppend;
 		return schema;
 	}
 	public void updateFromJson(String json) throws DcError {
@@ -706,11 +707,14 @@ public class Schema {
 			}
 		}
 
+		long afterAppend = obj.has("afterAppend") && !obj.isNull("afterAppend") ? obj.getLong("afterAppend") : -1;
+
 		//
 		// Update the properties
 		//
 
 		if(obj.has("name")) this.setName(obj.getString("name"));
+		if(obj.has("afterAppend")) this.afterAppend = obj.getLong("afterAppend");
 	}
 	
 	@Override
