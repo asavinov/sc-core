@@ -7,20 +7,20 @@
 
 
  
-# StreamCommandr: Integrate. Transform. Analyze. 
+# Stream Commandr: Integrate. Transform. Analyze. 
 
-StreamCommandr Engine is a Java library for in-stream analytics by intergrating incoming data, transforming and analyzing it. 
+Stream Commandr Engine is a Java library for in-stream analytics by integrating incoming data, transforming and analyzing it. 
 Its specific feature is that it is based on a column-oriented data representation and column-oriented operations with data. 
-StreamCommandr relates to conventional stream processing system like column-oriented databases relate to conventional databases. 
+Stream Commandr relates to conventional stream processing system like column-oriented databases relate to conventional databases. 
 The column-oriented approach to in-stream analytics is especially efficient where very high performance is needed, e.g., in IoT application. 
 Operations with data are performed by defining new columns in terms of already existing columns. 
-StreamCommandr relies on the concept-oriented model as its theoretical foundation. 
+Stream Commandr relies on the concept-oriented model as its theoretical foundation. 
 
 # Change Log
 
 A list of changes for each release can be found in the UI project.
 
-* v0.6.0 (2017-04-xx)
+* v0.6.0 (2017-05-14)
 * v0.5.0 (2017-03-19)
 * v0.4.0 (2017-02-12)
 * v0.3.0 (2017-01-22)
