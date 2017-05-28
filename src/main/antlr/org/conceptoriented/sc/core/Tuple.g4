@@ -1,7 +1,9 @@
 grammar Tuple;
 import Common;
 
-
+@header {
+  package org.conceptoriented.sc.core;
+}
 
 // tuple is a list of members
 tuple

@@ -1,6 +1,10 @@
 grammar QName;
 import Common;
 
+@header {
+  package org.conceptoriented.sc.core;
+}
+
 // path of names
 qname
   : name ('.' name)*
