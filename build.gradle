@@ -15,7 +15,7 @@ apply plugin: 'maven-publish'
 
 jar {
     baseName = 'sc-core'
-    version =  '0.6.0'
+    version =  '0.7.0'
 }
 
 repositories {
@@ -28,7 +28,7 @@ sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
 group = 'org.conceptoriented.sc'
-version = '0.6.0'
+version = '0.7.0'
 
 dependencies {
     antlr("org.antlr:antlr4:4.7")

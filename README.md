@@ -16,10 +16,17 @@ The column-oriented approach to in-stream analytics is especially efficient wher
 Operations with data are performed by defining new columns in terms of already existing columns. 
 Stream Commandr relies on the concept-oriented model as its theoretical foundation. 
 
+# Build
+
+The following steps have to be performed: 
+* Build the project by executing gradle build
+* Publish the library by executing gradle publish 
+
 # Change Log
 
 A list of changes for each release can be found in the UI project.
 
+* v0.7.0 (2017-06-xx)
 * v0.6.0 (2017-05-14)
 * v0.5.0 (2017-03-19)
 * v0.4.0 (2017-02-12)
