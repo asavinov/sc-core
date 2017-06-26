@@ -50,31 +50,43 @@ public class Schema {
 	// Rules
 	//
 	
-	// Return 0 if evaluation is needed and positive value meaning that it is not needed. The value is time when evaluation will be neede
-	public boolean evaluateNeeded() {
-		return evaluateAfterAppend();
-	}
-	
-	// Evaluate in some time after the last append. 
+	// Evaluate automatically after this time elapsed after the last append.
+	// It is time duration during which the schema is allowed to be dirty and after this period the system will try to make it up-to-date by performing evaluation.
 	// The system tries to keep dirty status only during some limited time, and clean it after the specified time.
-	// null (= MAX) means do nothing, that is, no evaluations after appends
-	// ZERO means immediate evaluation after append without any additional external time trigger
 	public long afterAppend = -1;
-	public boolean evaluateAfterAppend() {
-		Instant now = Instant.now();
-		Instant appendTime = null;
+
+	public boolean autoevaluationNeeded() {
+		if(this.afterAppend < 0) return false; // Auto-evaluation is turned off (evaluate only manually). Also null or MAX could be used for other units.
 		
-		if(Duration.between(appendTime, now).toNanos() < Duration.ofMillis(afterAppend).toNanos()) {
+		if(this.afterAppend == 0) return true; // Immediate evaluation after every append (no dirty state)
+
+		if(this.durationSinceLastEvaluate().toNanos() < Duration.ofMillis(afterAppend).toNanos()) {
 			return false;
 		}
+		return true;
+	}
+	
+	public boolean autoEvaluate() {
+		if(!this.autoevaluationNeeded()) {
+			return false; // No auto-evaluation needed
+		}
+		
+		//
+		// Evaluate all
+		//
+		this.getTables().forEach(x -> x.markCleanAsNew()); // Mark all columns in the schema as new (dirty, non-evaluated)
+		this.translate();
+		this.evaluate(); // Evaluate
 		
 		return true;
 	}
 
+	//
 	// Every regular interval aligned with calendar units like every 1 minute or every 1 second. 
 	// The system will try to do evaluation exactly after each calendar time unit. 
 	// After each time tick, the system will trigger evaluation (if not already scheduled or running).
 	
+	//
 	// After the specified arbitrary time after the last evaluation
 	// The system tries to do evaluations in the specified time after the last evaluation.
 	// It may happen that no evaluation is required because the status is clean
@@ -168,6 +180,9 @@ public class Schema {
         // Append records to this table
         tab.append(records, null);
         
+        // Auto-evaluation if needed
+        this.autoEvaluate();
+
         return tab;
     }
     public Table createFromCsvLines(String tableName, String csvLines, String params) {
@@ -194,6 +209,9 @@ public class Schema {
         
         // Append records to this table
         tab.append(records, null);
+        
+        // Auto-evaluation if needed
+        this.autoEvaluate();
         
         return tab;
     }
@@ -612,14 +630,14 @@ public class Schema {
 
 
 	
-	Instant evaluateTime = Instant.MIN; // Last time the evaluation has been performed (successfully finished)
+	Instant evaluateTime = Instant.now(); // Last time the evaluation has been performed (successfully finished)
 	public Instant getEvaluateTime() {
 		return this.evaluateTime;
 	}
 	public void setEvaluateTime() {
 		this.evaluateTime = Instant.now();
 	}
-	public Duration durationFomrLastEvaluated() {
+	public Duration durationSinceLastEvaluate() {
 		return Duration.between(this.evaluateTime, Instant.now());
 	}
 	
