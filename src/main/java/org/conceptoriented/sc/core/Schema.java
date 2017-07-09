@@ -47,7 +47,7 @@ public class Schema {
 	}
 	
 	//
-	// Rules
+	// Rules of evaluation and population for the whole schema
 	//
 	
 	// Evaluate automatically after this time elapsed after the last append.
@@ -90,7 +90,8 @@ public class Schema {
 	// After the specified arbitrary time after the last evaluation
 	// The system tries to do evaluations in the specified time after the last evaluation.
 	// It may happen that no evaluation is required because the status is clean
-	
+	protected long minEvaluationFrequency = -1;  
+
 	//
 	// Environment
 	//
@@ -488,7 +489,7 @@ public class Schema {
 	}
 
 	//
-	// Dependencies, translation, evaluation
+	// Dependencies
 	//
 	
 	/**
@@ -563,6 +564,10 @@ public class Schema {
 		return res;
 	}
 
+	//
+	// Translation (parse and bind formulas, prepare for evaluation)
+	//
+	
 	/**
 	 * Parse and bind all column formulas in the schema. 
 	 * All dependencies are computed and made up-to-date.
@@ -628,7 +633,9 @@ public class Schema {
 
 	}
 
-
+	//
+	// Evaluate (re-compute dirty, selected or all function outputs)
+	//
 	
 	Instant evaluateTime = Instant.now(); // Last time the evaluation has been performed (successfully finished)
 	public Instant getEvaluateTime() {
@@ -642,8 +649,8 @@ public class Schema {
 	}
 	
 	/**
-	 * Evaluate all columns of the schema. The result is stored in the state property of each column.
-	 * Only new (dirty) rows will be evaluated and made clean (non-dirty). 
+	 * Evaluate all columns of the schema by (resetting and) re-computing their outputs for the full ranges (independent of dirty status).  
+	 * The result of evaluation is stored in the state property of each individual column.
 	 */
 	public void evaluate() {
 
@@ -651,7 +658,7 @@ public class Schema {
 		List<Column> nextColumns = this.getStartingColumns(); // Initialize. First iteration with column with no dependency formulas. 
 		while(nextColumns.size() > 0) {
 			for(Column col : nextColumns) {
-				if(col.getStatus() == null || col.getStatus().code == DcErrorCode.NONE) {
+				if(col.getStatus() == null || col.getStatus().code == DcErrorCode.NONE) { // Only columns without problems can be evaluated
 					col.evaluate();
 					readyColumns.add(col);
 				}
@@ -672,8 +679,77 @@ public class Schema {
 		this.setEvaluateTime(); // Store the time of evaluation
 	}
 	
+	/**
+	 * Empty (reset de-populate) and populate all tables with elements independent of their dirty status.
+	 * The result of population is stored in the state property of each individual table.
+	 * 
+	 *  Population means adding elements with only their key attributes. Population is the only way add or remove elements of a table (evaluation changes only function outputs). 
+	 *  Optionally, non-key attributes can be also generated. We could assume that some key attributes could be computed via functions but it needs to be deeper studied.
+	 *  
+	 * Each table has a (explicit or implicit) definition of its elements, that is, how its elements are generated or where they come from. 
+	 * This definition is used by this procedure. There are the following types of definitions and the ways elements can be generated:
+	 * o Product of key attribute domains. The key domains must be populated before this table can be populated. Only non-primitive tables can be used. 
+	 *   1) Primitive key domains are either ignored, or computed via a function, or the product fails (not permitted).
+	 *   2) If there are no keys then the record-id is a key. Product is not possible (we cannot reference a table via table columns).
+	 *   3) Super means only auto-resolution of columns/functions in the parent tables. 
+	 * o Filtered product. The filter formula/function must be ready for evaluation, that is, all its dependencies have to be clean (already evaluated). Note that is already formula dependency. There are two cases: inheritance and product.
+	 * o Projection (viewed as a filter). In this case, the project formula must be ready for evaluation and there are two dependencies: 
+	 *   1) all its formula dependencies have to be clean (already evaluated) precisely as for filters, and 
+	 *   2) the referencing sub-table has to be already populated (it works as a basis for the filter). Hence, it cannot depend on this table population status (otherwise we get a cycle).
+	 * 
+	 * Importantly, both population and evaluation are directed by the dirty state. If the state is up-to-date then these operations will do nothing and there is only one way to completely recompute the state - mark the complete state as dirty.
+	 * Essentially, these procedures get the ranges that need to be re-computed for each element (table or column) and then do the work for these ranges only.
+	 * For a column, the range is determined by the subset of the inputs. Complete re-evaluation means that all inputs are dirty (and all their outputs are reset to null).
+	 * For tables, the range is determined by ... Complete re-population means removing all elements and then generating new elements. 
+	 * 
+	 * Types of population:
+	 * o Full. All tables are emptied and newly populated. It is full reset of the data state of the schema.
+	 * o Import. Only tables with external element providers are emptied (and hence this reset is propagated to other tables).
+	 * o Internal.
+	 * o Export. Only providers which populate external tables are activated. This does not change this schema.
+	 * o Append (import, internal, export). Here we only append new elements without emptying the table.
+	 * 
+	 * Problems and tasks:
+	 * o There are two types of operations: population and evaluation. Can they be combined and unified?
+	 *   - Solution 1. pop and eval are independent ops. Yet, pop can cause eval (if a column is needed for pop). And eval can cause pop (if table is needed for eval). 
+	 * o There are two types of dependencies: table and column. How they can be combined?
+	 *   - Solution 1. Dependency graph has elements of two types: tables and column. Tables can be populated and columns can be evaluated.
+	 *       However, table nodes can depend on columns and column nodes can depend on tables (e.g., any column depend on its input table).
+	 *   - Solution 2. Table dependencies are reduced to column dependencies. 
+	 * o Table population can depend on column evaluation status and column evaluation can depend on table population status. We need to somehow combine it.
+	 *  
+	 * Limited approach. 
+	 * Assumption: no product, inheritance, filters and no keys -> only link/import columns can populate tables (append records).
+	 * The necessity to populate is determined by the population dirty status/rules. (New/clean/deleted is not population status/rules - it influences evaluation only.)
+	 * Population status/rules is a mechanism which determines if a table need to be populated or de-populated.
+	 * For example, auto-deletion parameters (age etc.) are an example of population rules.
+	 * Also, a table or its import column might define a parameter for regular population.
+	 * If it is supported, then population could be done asynchronously.
+	 * This mechanism can trigger population and the population procedure will change the dirty state for some elements which is then propagated to the whole schema.
+	 *   
+	 * There are rules for triggering evaluation, e.g., doing it periodically or immediately after any dirty state.
+	 * The evaluation procedure will read the dirty state of the schema and make it up-to-date.
+	 * So it is important to distinguish between the mechanism of triggering population/evaluation and the scope of population/evaluation.
+	 * For example, once population or evaluation has been triggered, it will do its work according to the parameters described by the dirty state.
+	 * In the case of stream processing, population is responsible for inserting all new records while triggering evaluation is performed according to other rules, that is, the data can be in dirty state for some time.
+	 * Appending records is then done not explicitly but rather by starting evaluation of import columns but they also are not evaluated explicitly.
+	 * Rather, import columns are marked as having dirty input tables (that is, input table has new records).
+	 * Only after that evaluation of input columns will really do something.
+	 *  
+	 * In fact, this simplified model without product/filters/keys relies on only column evaluations and column dependencies.
+	 * To make it work with import columns, it is enough to maintain dirty status for virtual input tables of input columns.
+	 * Or we need otherwise make it possible evaluation of input columns only when new data is available.
+	 * The main change is that now we do not add records to tables explicitly - we develop special columns for that purpose.
+	 * For example, we could develop an import column has an input buffer with records and then inserts them into the output table during evaluation.
+	 * Another type of an input column could be a connector to an external data source like file or database which reads some data when evaluatino started.
+	 * 
+	 */
+	public void populate() {
+		
+	}
+
 	//
-	// Schema construction and serialization
+	// Serialization and construction
 	//
 	
 	public String toJson() {

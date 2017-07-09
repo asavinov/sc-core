@@ -32,12 +32,13 @@ public class Table {
 		return false;
 	}
 	
+	//
+	// Rules for automatic population and de-population (similar to auto-evaluation)
+	//
 
-	// 0,1,2,...,100,...,1000,...
-	// [del)[clean)[new)
-	// [rowRange) - all records that physically exist and can be accessed
-	// |clean|+|new| <= maxLength
-	
+	// Max age. Old records will be automatically deleted. 0 means immediate deletion of new records. MAX, NULL or -1 mean any age and hence no auto-deletion.  
+	protected long maxAge = -1;  
+
 	// If more rows are added then then the oldest will be marked for deletion.  
 	// The real deletion happens only after evaluation.
 	protected long maxLength = -1;  
@@ -62,6 +63,18 @@ public class Table {
 		this.maxLength = maxLength;
 	}
 
+	//
+	// Population dirty state.
+	//
+
+	// 0,1,2,...,100,...,1000,...
+	// [del)[clean)[new)
+	// [rowRange) - all records that physically exist and can be accessed
+	// |clean|+|new| <= maxLength
+	// New records have been physically added but this change of data state was not propagated
+	// Deleted records were marked for deletion but before physical deletion this change of state has to be propagated
+	// Clean records are records the addition of which has been already propagated through the schema
+	
 	// Records to be deleted after the next re-evaluation
 	// We need to store records marked for removal after they have been used for evaluating new records.
 	protected Range delRange = new Range();
@@ -87,7 +100,35 @@ public class Table {
 	}
 	
 
-	Instant appendTime = Instant.now(); // Last time a record was (successfully) appended
+	public void markCleanAsNew() { // Mark clean records as dirty (new). Deleted range does not change.
+		// [del)[clean)[new)
+		cleanRange.end = cleanRange.start; // No clean records
+		newRange.start = cleanRange.start; // All new range
+	}
+
+	public void markNewAsClean() { // Mark dirty records as clean
+		// [del)[clean)[new)
+		cleanRange.end = newRange.end; // All clean records
+		newRange.start = newRange.end; // No new range
+	}
+
+	public void markAllAsDel() { // Mark all records as deleted
+		// [del)[clean)[new)
+
+		delRange.end = newRange.end;
+		
+		cleanRange.start = newRange.end;
+		cleanRange.end = newRange.end;
+		
+		newRange.start = newRange.end;
+		newRange.end = newRange.end;
+	}
+
+	//
+	// Operations with records
+	//
+
+	Instant appendTime = Instant.now(); // Last time a record was (successfully) appended. It is equal to the time stamp of the last record.
 	public void setAppendTime() {
 		this.appendTime = Instant.now();
 	}
@@ -184,30 +225,6 @@ public class Table {
 		this.removeDelRange();
 	}
 
-	public void markCleanAsNew() { // Mark clean records as dirty (new). Deleted range does not change.
-		// [del)[clean)[new)
-		cleanRange.end = cleanRange.start; // No clean records
-		newRange.start = cleanRange.start; // All new range
-	}
-
-	public void markNewAsClean() { // Mark dirty records as clean
-		// [del)[clean)[new)
-		cleanRange.end = newRange.end; // All clean records
-		newRange.start = newRange.end; // No new range
-	}
-
-	public void markAllAsDel() { // Mark all records as deleted
-		// [del)[clean)[new)
-
-		delRange.end = newRange.end;
-		
-		cleanRange.start = newRange.end;
-		cleanRange.end = newRange.end;
-		
-		newRange.start = newRange.end;
-		newRange.end = newRange.end;
-	}
-
 	public void removeDelRange() { // Physically remove records marked for deletion by freeing the resources
 
 		// Get all outgoing columns
@@ -253,6 +270,10 @@ public class Table {
 		
 		return records;
 	}
+
+	//
+	// Serialization and construction
+	//
 
 	public String toJson() {
 		// Trick to avoid backslashing double quotes: use backticks and then replace it at the end 

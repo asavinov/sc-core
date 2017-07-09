@@ -55,7 +55,7 @@ public class Column {
 	}
 
 	//
-	// Data access
+	// Data and access
 	//
 	
 	Object[] values;
@@ -215,14 +215,14 @@ public class Column {
 	}
 
 	//
-	// Data status
+	// Evaluation dirty status. Which outputs of the function need to be re-computed. 
 	//
 
 	/**
 	 * Status of the data: clean (up-to-date) or dirty.
 	 * Evaluation is the only method that cleans this status in the case of formula columns.
 	 * Data change (append, delete, update) or formula change make this status dirty.
-	 * Note that here we store own status which propagates through dependencies. 
+	 * Note that here we store own status which propagates through dependencies to other columns. 
 	 */
 	private boolean dirty = false; // Own status
 	public boolean isDirty() {
@@ -251,7 +251,7 @@ public class Column {
 
 		return false; // All dependencies and this column are up-to-date
 	}
-	public void setDirtyDeep(boolean dirty) { // Set own status and status of all following cols (propagated)
+	public void setDirtyDeep(boolean dirty) { // Set own status and status of all following columns (that is, propagate dirty status)
 		this.dirty = dirty;
 
 		if(!dirty) { // Cleaning is not propagated automatically
@@ -479,7 +479,7 @@ public class Column {
 	}
 
 	//
-	// Descriptor
+	// Descriptor (if column is computed via Java class and not formula)
 	//
 	
 	private String descriptor;
@@ -618,6 +618,10 @@ public class Column {
 
 		this.endEvaluate(); // De-initialize (evaluator, computational resources etc.)
 	}
+
+	//
+	// Serialization and construction
+	//
 
 	public String toJson() {
 		// Trick to avoid backslashing double quotes: use backticks and then replace it at the end 
