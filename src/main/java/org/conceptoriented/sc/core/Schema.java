@@ -74,7 +74,10 @@ public class Schema {
 		//
 		// Evaluate all
 		//
-		this.getTables().forEach(x -> x.markCleanAsNew()); // Mark all columns in the schema as new (dirty, non-evaluated)
+
+		// Mark all columns dirty (non-evaluated) - otherwise evaluation will not do anything because it thinks that the functions are up-ot-date
+		this.getColumns().forEach(x -> x.isChanged = true);
+
 		this.translate();
 		this.evaluate(); // Evaluate
 		
@@ -379,7 +382,7 @@ public class Schema {
 			col.setDescriptor(descr_string);
 			
 			if(!col.isDerived()) { // Columns without formula (non-evalatable) are clean
-				col.setDirty(false);
+				col.setFormulaUpdate(false);
 			}
 
 			return col;
@@ -659,23 +662,13 @@ public class Schema {
 		while(nextColumns.size() > 0) {
 			for(Column col : nextColumns) {
 				if(col.getStatus() == null || col.getStatus().code == DcErrorCode.NONE) { // Only columns without problems can be evaluated
-					col.evaluate();
+					col.evaluate(); // This will update (clean) the dirty status of each individual column
 					readyColumns.add(col);
 				}
 			}
 			nextColumns = this.getNextColumns(readyColumns); // Next iteration
 		}
 
-		//
-		// Update ranges of all tables
-		//
-
-		for(Table tab : tables) {
-			if(tab.isPrimitive()) continue;
-			tab.markNewAsClean(); // Mark dirty as clean
-			tab.removeDelRange(); // Really remove old records
-		}
-		
 		this.setEvaluateTime(); // Store the time of evaluation
 	}
 	

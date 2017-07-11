@@ -55,19 +55,35 @@ public class Column {
 	}
 
 	//
-	// Data and access
+	// Data
 	//
 	
-	Object[] values;
-	long length = 0;
+	// Array with output values. Very first element corresponds to the oldest existing id. Very last element corresponds to the newest existing id.
+	// Note that some (oldest, in the beginning) elements can be marked for deletion, that is, it is garbage and they are stored with the only purpose to do evaluation by updating the state of other elements 
+	private Object[] values; 
+	private long length = 0; // It is a physical size allocated for storing output values
+	
+	//
+	// Data access
+	//
 	
 	public Object getValue(long row) {
 		return values[(int)row];
 	}
 	public void setValue(long row, Object value) {
 		values[(int)row] = value;
-		this.setDirtyDeep(true); // Mark as dirty
+		this.isChanged = true; // Mark column as dirty
 	}
+	// Convenience method. The first element in the path must be this column. 
+	protected Object getValue(List<Column> columns, long row) {
+		Object out = row;
+		for(Column col : columns) {
+			out = col.getValue((long)out);
+			if(out == null) break;
+		}
+		return out;
+	}
+
 	public long appendValue(Object value) {
 		// Cast the value to type of this column
 		if(this.getOutput().getName().equalsIgnoreCase("String")) {
@@ -81,28 +97,106 @@ public class Column {
 			}
 		}
 		
-		this.setDirtyDeep(true); // Mark as dirty
+		//
+		// Really append (after the last row) and mark as new
+		//
+		this.length++; // Physical storage
+		values[(int)this.newRange.end] = value;
+		this.newRange.end++;
 
-		// We append after the last row
-		Range mainRange = this.getInput().getNewRange(); // All dirty/new rows
-		long row = mainRange.end; 
-		values[(int)row] = value;
-		length++;
-		return row;
+
+		return this.newRange.end-1;
 	}
 
-	public void removeDelRange(Range delRange) {
-		// Currently, do not do anything. The deleted values are still there - they are not supposed to be accessed. The table knows about semantics of these intervals.
+	// They can be deleted either physically immediately or marked for deletion for future physical deletion (after evalution or gargabge collection)
+	// We delete only oldest records with lowest ids
+	public void remove(long count) { // Remove the oldest records with lowest ids
+		// TODO:
+	}
+	public void remove(Range range) { // Delete the specified range of input ids
+
+	}
+	public void remove() { // Delete all input ids
+		remove(this.getIdRange());
 	}
 
-	// Convenience method. The first element should be this column. 
-	protected Object getValue(List<Column> columns, long row) {
-		Object out = row;
-		for(Column col : columns) {
-			out = col.getValue((long)out);
-			if(out == null) break;
-		}
-		return out;
+	//
+	// Data dirty state.
+	//
+	
+	// Output value changes (change, set, reset).
+	// If some output values has been changed (manually) and hence evaluation of dependent columns might be needed.
+	public boolean isChanged = false;
+
+
+
+	// Input range changes (additions and deletions).
+	// 5,6,7,...,100,...,1000,1001,...
+	// [del)[clean)[new)
+	// [rowRange) - all records that physically exist and can be accessed including new, up-to-date and deleted
+
+	// Deleted but not evaluated (garbage): Some input elements have been marked for deletion but not deleted yet because the deletion operation needs to be evaluated before physical deletion
+	// Records to be deleted after the next re-evaluation
+	// Immediately after evaluation these records have to be physically deleted (otherwise the data state will be wrong)
+	// Deleted records are supposed to have lowest ids (by assuming that we delete only old records)
+	protected Range delRange = new Range();
+	public Range getDelRange() {
+		return new Range(delRange);
+	}
+
+	// Clean (evaluated): Input elements which store up-to-date outputs and hence need not to be evaluated
+	// These records have been already evaluated (clean)
+	// We need to store start and end rows
+	// Alternatively, we can compute this range as full range minus added and deleted
+	protected Range cleanRange = new Range();
+	public Range getCleanRange() {
+		return new Range(cleanRange);
+	}
+
+	// Added but not evaluated: Some input elements have been physically added but their output not evaluated (if formula defined) or not set (if output is set manually)
+	// Records added but not evaluated yet (dirty). They are supposed to be evaluated in the next iteration.
+	// Immediately after evaluation they need to be marked as clean
+	// New records have highest ids by assuming that they are newest records
+	protected Range newRange = new Range();
+	public Range getNewRange() {
+		return new Range(newRange);
+	}
+	
+
+
+	
+	// All currently existing (non-deleted) elements
+	public Range getIdRange() {
+		return new Range(getCleanRange().start, getNewRange().end);
+	}
+
+
+
+	// Mark clean records as dirty (new). Deleted range does not change (we cannot undelete them currently). It is a manual way to trigger re-evaluation.
+	private void markCleanAsNew() {
+		// [del)[clean)[new)
+		cleanRange.end = cleanRange.start; // No clean records
+		newRange.start = cleanRange.start; // All new range
+	}
+
+	// Mark dirty records as clean. It is supposed to be done by evaluation procedure.
+	private void markNewAsClean() {
+		// [del)[clean)[new)
+		cleanRange.end = newRange.end; // All clean records
+		newRange.start = newRange.end; // No new range
+	}
+
+	// Mark all records as deleted. Note that it is only marking - for real deletion use other methods.
+	private void markAllAsDel() {
+		// [del)[clean)[new)
+
+		delRange.end = newRange.end;
+		
+		cleanRange.start = newRange.end;
+		cleanRange.end = newRange.end;
+		
+		newRange.start = newRange.end;
+		newRange.end = newRange.end;
 	}
 
 	//
@@ -137,7 +231,7 @@ public class Column {
 	public void setFormula(String formula) {
 		if(this.formula != null && this.formula.equals(formula)) return; // Nothing to change
 		this.formula = formula;
-		this.setDirtyDeep(true);
+		this.setFormulaUpdate(true);
 	}
 	
 	//
@@ -151,7 +245,7 @@ public class Column {
 	public void setAccuformula(String accuformula) {
 		if(this.accuformula != null && this.accuformula.equals(accuformula)) return; // Nothing to change
 		this.accuformula = accuformula;
-		this.setDirtyDeep(true);
+		this.setFormulaUpdate(true);
 	}
 	
 	protected String accutable;
@@ -161,7 +255,7 @@ public class Column {
 	public void setAccutable(String accutable) {
 		if(this.accutable != null && this.accutable.equals(accutable)) return; // Nothing to change
 		this.accutable = accutable;
-		this.setDirtyDeep(true);
+		this.setFormulaUpdate(true);
 	}
 	
 	protected String accupath; // It leads from accutable to the input table of the column
@@ -171,7 +265,7 @@ public class Column {
 	public void setAccupath(String accupath) {
 		if(this.accupath != null && this.accupath.equals(accupath)) return; // Nothing to change
 		this.accupath = accupath;
-		this.setDirtyDeep(true);
+		this.setFormulaUpdate(true);
 	}
 	
 	// Determine if it is syntactically accumulation, that is, it seems to be intended for accumulation.
@@ -215,56 +309,52 @@ public class Column {
 	}
 
 	//
-	// Evaluation dirty status. Which outputs of the function need to be re-computed. 
+	// Formula dirty status 
 	//
 
 	/**
-	 * Status of the data: clean (up-to-date) or dirty.
-	 * Evaluation is the only method that cleans this status in the case of formula columns.
-	 * Data change (append, delete, update) or formula change make this status dirty.
-	 * Note that here we store own status which propagates through dependencies to other columns. 
+	 * Status of the data defined by this (and only this) column formula: clean (up-to-date) or dirty.
+	 * This status is cleaned by evaluating this column and it made dirty by setting (new), resetting (delete) or changing (updating) the formula.
+	 * It is an aggregated status for new, deleted or changed formulas.
+	 * It is own status of this columns only (not inherited/propagated).
 	 */
-	private boolean dirty = false; // Own status
-	public boolean isDirty() {
-		return this.dirty;
+	public boolean isFormulaDirty() {
+		return this.formulaUpdate || this.formulaNew || this.formulaDelete;
 	}
-	public void setDirty(boolean dirty) {
-		this.dirty = dirty;
+	public void setFormulaClean() {
+		this.formulaUpdate = false;
+		this.formulaNew = false;
+		this.formulaDelete = false;
 	}
 
-	public boolean isDirtyDeep() { // Own status and status of all preceding cols (propagated)
-		if(this.dirty) { // Own dirty
-			return true;
-		}
+	private boolean formulaUpdate = false; // Formula has been changed
+	public void setFormulaUpdate(boolean dirty) {
+		this.formulaUpdate = dirty;
+	}
+	private boolean formulaNew = false; // Formula has been added
+	public void setFormulaNew(boolean dirty) {
+		this.formulaNew = dirty;
+	}
+	private boolean formulaDelete = false; // Formula has been deleted
+	public void setFormulaDelete(boolean dirty) {
+		this.formulaDelete = dirty;
+	}
 
+	public boolean isDirtyPropagated() { // Own status and status of all preceding columns (propagated)
 		List<Column> deps = this.getSchema().getParentDependencies(this);
 		if(deps == null) return false;
 
+		// We check only direct dependencies by requesting their complete propagated status
 		for(Column dep : deps) {
 			if(dep.getStatus() == null || dep.getStatus().code == DcErrorCode.NONE) {
-				if(dep.isDirtyDeep()) return true; // Recursion. Find at least one parent column with dirty status (and hence this column will be also dirty)
+				if(isFormulaDirty() || dep.isDirtyPropagated()) return true; // Check both own status and (recursively) propagated status 
 			}
-			else { // If error then automatically dirty
+			else { // Error (translation) status is treated as dirty (also propagated errors)
 				return true;
 			}
 		}
 
 		return false; // All dependencies and this column are up-to-date
-	}
-	public void setDirtyDeep(boolean dirty) { // Set own status and status of all following columns (that is, propagate dirty status)
-		this.dirty = dirty;
-
-		if(!dirty) { // Cleaning is not propagated automatically
-			return;
-		}
-
-		List<Column> deps = this.getSchema().getChildDependencies(this);
-		if(deps == null) return;
-		for(Column dep : deps) {
-			if(dep.getStatus() == null || dep.getStatus().code == DcErrorCode.NONE) {
-				dep.setDirtyDeep(dirty); // Recursion to only non-error columns (actually we need to avoid cyclic columns only)
-			}
-		}
 	}
 
 	//
@@ -426,8 +516,6 @@ public class Column {
 	
 	public void evaluate() {
 		
-		this.setDirtyDeep(true); // Invalidate data
-		
 		if(this.getKind() == DcColumnKind.CLASS) {
 			;
 		}
@@ -437,7 +525,7 @@ public class Column {
 			// Step 1: Evaluate main formula to initialize the column. If it is empty then we need to init it with default values
 			//
 	
-			Range mainRange = this.getInput().getNewRange(); // All dirty/new rows
+			Range mainRange = this.getNewRange(); // All dirty/new rows
 			if(this.formula == null || this.formula.trim().isEmpty()) { // Initialize to default constant
 				Object defaultValue; // Depends on the column type
 				if(this.getOutput().isPrimitive()) {
@@ -462,10 +550,12 @@ public class Column {
 			//
 			
 			if(this.getKind() == DcColumnKind.ACCU) {
+				
+				Column accuLinkColumn = accuExpr.path.get(0);
 	
-				Range accuRange = accuExpr.table.getNewRange(); // All dirty/new rows
+				Range accuRange = accuLinkColumn.getIdRange(); // We use all existing rows for full re-evaluate
 				for(long i=accuRange.start; i<accuRange.end; i++) {
-					long g = (Long) accuExpr.path.get(0).getValue(accuExpr.path, i); // Find group element
+					long g = (Long) accuLinkColumn.getValue(accuExpr.path, i); // Find group element
 					accuExpr.evaluate(i);
 					this.setValue(g, accuExpr.result);
 				}
@@ -474,7 +564,10 @@ public class Column {
 
 		}
 
-		this.setDirty(false); // Validate own data (make up-to-date) if success
+		this.markNewAsClean(); // Mark dirty as clean
+
+		this.setFormulaClean(); // Mark up-to-date if successful
+
 		this.setEvaluateTime(); // Store the time of evaluation
 	}
 
@@ -611,7 +704,7 @@ public class Column {
 		if(evaluator == null) return;
 
 		// Evaluate for all rows in the (dirty, new) range
-		Range range = input.getNewRange();
+		Range range = this.getNewRange();
 		for(long i=range.start; i<range.end; i++) {
 			evaluator.evaluate(i);
 		}
@@ -635,7 +728,7 @@ public class Column {
 		String jout = "`output`: {" + joutid + "}";
 
 		String jstatus = "`status`: " + (this.getStatus() != null ? this.getStatus().toJson() : "undefined");
-		String jdirty = "`dirty`: " + (this.isDirtyDeep() ? "true" : "false"); // We transfer deep dirty
+		String jdirty = "`dirty`: " + (this.isDirtyPropagated() ? "true" : "false"); // We transfer deep dirty
 
 		String jkind = "`kind`:" + this.kind.getValue() + "";
 

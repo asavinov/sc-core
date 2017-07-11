@@ -62,71 +62,29 @@ public class Table {
 
 		this.maxLength = maxLength;
 	}
-
-	//
-	// Population dirty state.
-	//
-
-	// 0,1,2,...,100,...,1000,...
-	// [del)[clean)[new)
-	// [rowRange) - all records that physically exist and can be accessed
-	// |clean|+|new| <= maxLength
-	// New records have been physically added but this change of data state was not propagated
-	// Deleted records were marked for deletion but before physical deletion this change of state has to be propagated
-	// Clean records are records the addition of which has been already propagated through the schema
 	
-	// Records to be deleted after the next re-evaluation
-	// We need to store records marked for removal after they have been used for evaluating new records.
-	protected Range delRange = new Range();
-	public Range getDelRange() {
-		return new Range(delRange);
-	}
-	public Range getNonDelRange() {
-		return new Range(getCleanRange().start, getNewRange().end);
-	}
+	// Decide if deletion is needed and delete
+	public void autodelete() {
+		if(this.maxLength == 0) {
+			return;
+		}
 
-	// These records have been already evaluated (clean)
-	// We need to store start and end rows
-	protected Range cleanRange = new Range();
-	public Range getCleanRange() {
-		return new Range(cleanRange);
-	}
+		// length <= maxLength
+		long excess = idRange.getLength() - maxLength;
+		if(excess <= 0) {
+			return;
+		}
 
-	// Records added but not evaluated yet (dirty). They are supposed to be evaluated in the next iteration. 
-	// We need to store dirty interval. These are supposed to be new records.
-	protected Range newRange = new Range();
-	public Range getNewRange() {
-		return new Range(newRange);
-	}
-	
-
-	public void markCleanAsNew() { // Mark clean records as dirty (new). Deleted range does not change.
-		// [del)[clean)[new)
-		cleanRange.end = cleanRange.start; // No clean records
-		newRange.start = cleanRange.start; // All new range
-	}
-
-	public void markNewAsClean() { // Mark dirty records as clean
-		// [del)[clean)[new)
-		cleanRange.end = newRange.end; // All clean records
-		newRange.start = newRange.end; // No new range
-	}
-
-	public void markAllAsDel() { // Mark all records as deleted
-		// [del)[clean)[new)
-
-		delRange.end = newRange.end;
-		
-		cleanRange.start = newRange.end;
-		cleanRange.end = newRange.end;
-		
-		newRange.start = newRange.end;
-		newRange.end = newRange.end;
+		// There are more records than the maximum. Delete last records
+		Range delRange = new Range(this.idRange.start, this.idRange.start + excess);
+		this.remove(delRange);
 	}
 
 	//
 	// Operations with records
 	//
+
+	protected Range idRange = new Range(); // Full id range of records
 
 	Instant appendTime = Instant.now(); // Last time a record was (successfully) appended. It is equal to the time stamp of the last record.
 	public void setAppendTime() {
@@ -136,7 +94,7 @@ public class Table {
 		return Duration.between(this.appendTime, Instant.now());
 	}
 
-	public void append(Record record) {
+	public long append(Record record) {
 
 		// Get all outgoing columns
 		List<Column> columns = this.schema.getColumns(this.getName());
@@ -146,32 +104,18 @@ public class Table {
 			// Get value from the record
 			Object value = record.get(column.getName());
 			
-			// Append the value to the column (even if it is null)
+			// Append the value to the column (even if it is null). This will also update the dirty status of data (range).
 			column.appendValue(value);
 		}
 		
-		//
-		// Update ranges.
-		//
+		this.idRange.end++;
 
-		// Mark this record as dirty by adding it to the range of new records
-		newRange.end++;
-		
-		// If too many records then mark some of them (in the beginning) for deletion
-		if(maxLength >= 0) {
-			long excess = (cleanRange.getLength() + newRange.getLength()) - maxLength;
-			if(excess > 0) {
-				delRange.end += excess;
-				
-				cleanRange.start = delRange.end;
-				if(cleanRange.end < cleanRange.start) {
-					cleanRange.end = cleanRange.start;
-					newRange.start = cleanRange.end;
-				}
-			}
-		}
-		
 		setAppendTime(); // Store the time of append operation
+
+		// If too many records then mark some of them (in the beginning) for deletion (mark dirty)
+		//this.autodelete();
+		
+		return this.idRange.end - 1;
 	}
 	public void append(List<Record> records, Map<String, String> columnMapping) {
 		for(Record record : records) {
@@ -185,9 +129,9 @@ public class Table {
 		List<Object> values = names.stream().map(x -> record.get(x)).collect(Collectors.<Object>toList());
 		List<Column> columns = names.stream().map(x -> this.getSchema().getColumn(this.getName(), x)).collect(Collectors.<Column>toList());
 		
-		Range range = getNonDelRange();
+		Range searchRange = this.idRange;
 		long index = -1;
-		for(long i=range.start; i<range.end; i++) { // Scan all records and compare
+		for(long i=searchRange.start; i<searchRange.end; i++) { // Scan all records and compare
 
 			boolean found = true;
 			for(int j=0; j<names.size(); j++) {
@@ -212,41 +156,46 @@ public class Table {
 			}
 		}
 		
-		if(append && index < 0) {
-			append(record);
-			index = getNewRange().end - 1;
+		// If not found then append if requested
+		if(index < 0 && append) {
+			index = this.append(record);
 		}
 
 		return index;
 	}
 
-	public void remove() {
-		this.markAllAsDel();
-		this.removeDelRange();
-	}
-
-	public void removeDelRange() { // Physically remove records marked for deletion by freeing the resources
+	// Currently we assume that the deleted range can be only in the beginning (oldest records with smallest ids) - otherwise it will not work. Also, we assume that the deleted range is smaller than the number of records.
+	public void remove(long count) { // Remove the oldest records with lowest ids
 
 		// Get all outgoing columns
 		List<Column> columns = schema.getColumns(this.getName());
 
-		for(Column column : columns) { // We must append a new value to all columns even if it has not been provided (null)
-			// Remove initial elements of the column
-			column.removeDelRange(delRange);
+		for(Column column : columns) { // We must delete from all columns
+			column.remove(count);
 		}
-		
-		//
-		// Update ranges.
-		//
 
-		// Empty the old records range
-		delRange.start = delRange.end;
-		cleanRange.start = delRange.end;
+		// Update the id range of the table by assuming that the specified deleted range is in the beginning
+		this.idRange.start += count;
+	}
+	public void remove(Range range) { // Remove records in the specified range of ids
+
+		// Get all outgoing columns
+		List<Column> columns = schema.getColumns(this.getName());
+
+		for(Column column : columns) { // We must delete from all columns
+			column.remove(range);
+		}
+
+		// Update the id range of the table by assuming that the specified deleted range is in the beginning
+		this.idRange.start = range.end;
+	}
+	public void remove() { // Remove all records (full range of ids)
+		remove(idRange);
 	}
 
 	public List<Record> read(Range range) {
 		if(range == null) {
-			range = getNonDelRange();
+			range = this.idRange;
 		}
 
 		// Get all outgoing columns

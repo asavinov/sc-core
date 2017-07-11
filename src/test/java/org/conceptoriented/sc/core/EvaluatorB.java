@@ -55,7 +55,7 @@ public class EvaluatorB extends EvaluatorBase {
 	@Override
 	public void beginEvaluate() {
 		// Prepare variables
-		range = thisColumn.getInput().getCleanRange();
+		range = thisColumn.getCleanRange();
 		// We also can do some analysis by computing constants
 	}
 	

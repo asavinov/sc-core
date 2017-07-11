@@ -519,7 +519,8 @@ public class ExprNode {
 		}
 		else {
 			long g = (Long) this.path.get(0).getValue(this.path, i); // Find group element
-			outputValue = column.getValue(g);
+			outputValue = null;
+			if(g >= 0) outputValue = column.getValue(g);
 		}
 		if(outputValue == null) outputValue = Double.NaN;
 		try {
@@ -559,7 +560,7 @@ public class ExprNode {
 			}
 			else { // Arithmetic expression that needs to be evaluated
 				
-				setFormulaExpressionVariables(i); // For each input, read all necessary column values from fact table and the current output from the group table
+				this.setFormulaExpressionVariables(i); // For each input, read all necessary column values from fact table and the current output from the group table
 
 				// Build the final (native) expression
 				if(this.isExp4j()) {
