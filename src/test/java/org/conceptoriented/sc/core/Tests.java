@@ -198,7 +198,7 @@ public class Tests {
         columnB.translate();
         
         // Check correctness of dependencies
-        List<Column> depsB = schema.getParentDependencies(columnB);
+        List<Column> depsB = columnB.getDependencies();
         assertTrue( depsB.contains(columnA) );
 
         columnB.evaluate();
@@ -245,7 +245,7 @@ public class Tests {
         c5.translate();
 
         // Check correctness of dependencies
-        List<Column> depsC5 = schema.getParentDependencies(c5);
+        List<Column> depsC5 = c5.getDependencies();
         assertTrue( depsC5.contains(c3) );
         assertTrue( depsC5.contains(c4) );
 
@@ -287,7 +287,7 @@ public class Tests {
         // Check correctness of dependencies
         Column ta = schema.getColumn("T", "A");
 
-        List<Column> depsTa = schema.getParentDependencies(ta);
+        List<Column> depsTa = ta.getDependencies();
         assertTrue( depsTa.contains( schema.getColumn("T2", "Id") ) ); // Used in formula
         assertTrue( depsTa.contains( schema.getColumn("T2", "G") ) ); // Group path
 

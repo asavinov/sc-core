@@ -341,11 +341,10 @@ public class Column {
 	}
 
 	public boolean isDirtyPropagated() { // Own status and status of all preceding columns (propagated)
-		List<Column> deps = this.getSchema().getParentDependencies(this);
-		if(deps == null) return false;
+		if(this.getDependencies() == null) return false;
 
 		// We check only direct dependencies by requesting their complete propagated status
-		for(Column dep : deps) {
+		for(Column dep : this.getDependencies()) {
 			if(dep.getStatus() == null || dep.getStatus().code == DcErrorCode.NONE) {
 				if(isFormulaDirty() || dep.isDirtyPropagated()) return true; // Check both own status and (recursively) propagated status 
 			}
@@ -356,6 +355,26 @@ public class Column {
 
 		return false; // All dependencies and this column are up-to-date
 	}
+
+	//
+	// Column dependencies
+	//
+
+	/**
+	 * All other columns it directly depends on, that is, columns directly used in its formula to compute output
+	 */
+	protected List<Column> dependencies = new ArrayList<Column>();
+	public List<Column> getDependencies() {
+		return this.dependencies;
+	}
+	public void setDependencies(List<Column> deps) {
+		this.dependencies = deps;
+	}
+	public void resetDependencies() {
+		this.dependencies = new ArrayList<Column>();
+	}
+
+
 
 	//
 	// Translate
@@ -398,7 +417,7 @@ public class Column {
 			this.kind = determineAutoColumnKind();
 		}
 		if(!this.isDerived()) { // User column - no deps
-			this.schema.setParentDependencies(this, null);
+			this.resetDependencies();
 			return;
 		}
 
@@ -441,7 +460,7 @@ public class Column {
 		//
 		// Update dependence graph
 		//
-		this.schema.setParentDependencies(this, columns);
+		this.setDependencies(columns);
 	}
 
 	public ExprNode translateMain() {
@@ -595,11 +614,11 @@ public class Column {
 
 			columns = getEvaluatorDependencies();
 
-			schema.setParentDependencies(this, columns); // Update dependency graph
+			this.setDependencies(columns); // Update dependency graph
 			return;
 		}
 		else {
-			schema.setParentDependencies(this, null); // Non-evaluatable column for any reason
+			this.resetDependencies(); // Non-evaluatable column for any reason
 		}
 
 		// Here we might want to check the validity of the dependency graph (cycles, at least for this column)
@@ -682,8 +701,7 @@ public class Column {
 		
 		// Pass direct references to the required columns so that the evaluator can use them during evaluation. The first element has to be this (output) column
 		evaluator.setColumn(this);
-		List<Column> columns = schema.getParentDependencies(this);
-		evaluator.setColumns(columns);
+		evaluator.setColumns(this.getDependencies());
 		
 		evaluator.beginEvaluate();
 	}

@@ -492,12 +492,13 @@ public class Schema {
 	}
 
 	//
-	// Dependencies
+	// Schema dependencies
 	//
 	
 	/**
 	 * For each column, we store all other columns it directly depends on, that is, columns that it directly uses in its formula
 	 */
+/*
 	protected Map<Column,List<Column>> dependencies = new HashMap<Column,List<Column>>();
 	public List<Column> getParentDependencies(Column col) {
 		return this.dependencies.get(col);
@@ -505,16 +506,19 @@ public class Schema {
 	public void setParentDependencies(Column col, List<Column> deps) {
 		this.dependencies.put(col, deps);
 	}
+*/
+
 	public List<Column> getChildDependencies(Column col) {
 		// Return all columns which point to the specified column as a dependency, that is, which have this column in its deps
-		List<Column> res = this.columns.stream().filter(x -> this.getParentDependencies(x) != null && this.getParentDependencies(x).contains(col)).collect(Collectors.<Column>toList());
+		List<Column> res = this.columns.stream().filter(x -> x.getDependencies() != null && x.getDependencies().contains(col)).collect(Collectors.<Column>toList());
 		return res;
 	}
-	public void emptyDependencies() { // Reset. Normally before finding them.
-		this.dependencies = new HashMap<Column,List<Column>>();
+	public void emptyDependencies() { // Reset. Normally before generating them.
+		this.columns.forEach(x -> x.resetDependencies());
 	}
 
-	// Return all columns with no definition which therefore are supposed to be always clean and do not need evaluation
+	// Return all columns which do not depend on other columns. 
+	// They are starting nodes in the dependency graph
 	protected List<Column> getStartingColumns() {
 		List<Column> res = this.columns.stream().filter(x -> !x.isDerived()).collect(Collectors.<Column>toList());
 		return res;
@@ -527,9 +531,8 @@ public class Schema {
 	protected List<Column> getNextColumns(List<Column> previousColumns) {
 		List<Column> res = new ArrayList<Column>();
 		
-		for(Map.Entry<Column, List<Column>> entry : dependencies.entrySet()) {
-			Column col = entry.getKey();
-			List<Column> deps = entry.getValue();
+		for(Column col : this.columns) {
+			List<Column> deps = col.getDependencies();
 			if(deps == null) continue; // Non-evaluatable (no formula or error)
 			if(previousColumns.contains(col)) continue; // Skip already evaluated columns
 
@@ -553,9 +556,10 @@ public class Schema {
 	protected List<Column> getAllNextColumns(List<Column> previousColumns) {
 		List<Column> res = new ArrayList<Column>();
 		
-		for(Map.Entry<Column, List<Column>> entry : dependencies.entrySet()) {
-			Column col = entry.getKey();
-			List<Column> deps = entry.getValue();
+		for(Column col : this.columns) {
+		//for(Map.Entry<Column, List<Column>> entry : dependencies.entrySet()) {
+			//Column col = entry.getKey();
+			List<Column> deps = col.getDependencies();
 			if(deps == null) continue; // Non-evaluatable (no formula or error)
 			if(previousColumns.contains(col)) continue; // Skip already evaluated columns
 
@@ -597,7 +601,7 @@ public class Schema {
 			for(Column col : nextColumns) {
 				if(col.getStatus() == null || col.getStatus().code == DcErrorCode.NONE) {
 					// If there is at least one error in dependencies then mark this as propagated error
-					List<Column> deps = this.getParentDependencies(col);
+					List<Column> deps = col.getDependencies();
 					if(deps == null) { 
 						readyColumns.add(col);
 						continue;
@@ -652,8 +656,13 @@ public class Schema {
 	}
 	
 	/**
-	 * Evaluate all columns of the schema by (resetting and) re-computing their outputs for the full ranges (independent of dirty status).  
-	 * The result of evaluation is stored in the state property of each individual column.
+	 * Evaluate all columns of the schema.
+	 * 
+	 * The order of column evaluation is determined by the dependency graph. Currently dependencies do not involve ranges, that is, the full range of any dependent column must be up-to-date.
+	 * The input range for each evaluated column is determined by its own dirty status, that is, the evaluated inputs depend on this column dirty status. 
+	 * The dirty status involves involves two components: set population status (added and removed inputs), change status (updated outputs of inputs).
+	 * 
+	 * Evaluation results in cleaning this column status by computing the necessary outputs. 
 	 */
 	public void evaluate() {
 
