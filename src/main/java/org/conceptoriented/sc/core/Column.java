@@ -121,16 +121,20 @@ public class Column {
 	}
 
 	//
-	// Data dirty state.
+	// Data dirty state: added/removed inputs (set population), and change outputs (function updated)
 	//
 	
-	// Output value changes (change, set, reset).
+	// Output value changes (change, set, reset function output).
+
 	// If some output values has been changed (manually) and hence evaluation of dependent columns might be needed.
+	// Note that this flag does not change the dirty status of this column - it changes the dirty status of all columns that depend on it
 	public boolean isChanged = false;
+	// This flag can be set either directly from outside or by evaluation procedure from inside.
+	// So we need to understand how to use it for dependencies
 
 
 
-	// Input range changes (additions and deletions).
+	// Input range changes (additions and deletions of the input set).
 	// 5,6,7,...,100,...,1000,1001,...
 	// [del)[clean)[new)
 	// [rowRange) - all records that physically exist and can be accessed including new, up-to-date and deleted
@@ -359,6 +363,53 @@ public class Column {
 	//
 	// Column dependencies
 	//
+	
+	// Types of dependencies:
+	// - Formula dependencies: 
+	//   - this formula is changed/set/reset -> this means that the output have to be re-evaluated (even if dependent functions are the same)
+	//     - so essentially this formula change is equivalent to this function output change
+	//   - a dependent formula might have been changed -> effectively this is equivalent to changing all outputs of the dependent function (formula change leads to output change) 
+	// - Input set dependencies: 
+	//   - calc function has to be re-evaluated for its own added inputs, deleted inputs ignored.
+	//   - agg function has to be re-evaluated for added or removed agg table inputs
+	//   - link function
+	// - Output dependencies:
+	//   - calc: if dependent col updates its output for some input, then this function has to re-evaluate this same input (using the new new value of dependent column)
+	//   - agg:
+	//
+	// Evaluates results in:
+	// - calc: output changes -> all next functions have to take it into account
+	// - agg: output changes
+	// - link: output changes
+	// - append: output changes; if completely re-populated (with emptying) then added/removed; otherwise added. Note that theoretically, we can compute if there was an change (it is possible that no changes)
+	
+	// Formula (changes) is a mechanism for changing function outputs and/or set population in addition to direct (API) changes/population.
+	// We can assume that any formula change (set, reset etc.) leads to output reset and dirty status (need evaluation).
+	// Hence this dirty status (resulting from formula) is propagated to other columns by setting dirty status of other columns (induced or inherited).
+	// Thus, there are the following mechanisms:
+	// - Formula changes -> this column output is dirty (for the whole range)
+	// - Formula change -> output table add/delete status is dirty (for append columns)
+	// - API set value -> this column output is dirty (for specific input)
+	// - API append/remove record -> this table add/delete status is dirty
+	
+	// Goal: 
+	// Our current evaluation() has to correctly work with different statuses:
+	// - This and inherited formula changes and errors (during translation - compile-time)
+	// - This and inherited formula evaluation errors (an error can arise during evaluation - run-time)
+	// - This and inherited column changes (note that changes are supposed to be only for non-formula columns; note also change does not mean that the columns dirty - it is still up-to-date but it makes other columns dirty)
+	// - This and inherited column input changes (add/remove). It defines the horizontal scope which has to be propagated from this table (its input columns) to other columns.
+	// Goal:
+	// - Marking cycles, e.g., using a flag or getting a list of columns in a cycle.
+	
+	// Final goal:
+	// - We need to define several examples with auto-evaluation (also manual) evaluation and event feeds from different sources like kafka.
+	//   We want to publish these examples in open source by comparing them with kafka and other stream processing engines.
+	//   Scenario 1: using rest api to feed events
+	//   Scenario 2: subscribing to kafka topic and auto-evaluate
+	//   Scenario 3: subscribing to kafka topic and writing the result to another kafka topic.
+	//   Examples: word count, moving average/max/min (we need some domain specific interpretation like average prices for the last 24 hours),
+	//   Scenario 4: Batch processing by loading from csv, evaluation, and writing the result back to csv.
+	
 
 	/**
 	 * All other columns it directly depends on, that is, columns directly used in its formula to compute output
