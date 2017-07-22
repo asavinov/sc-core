@@ -22,17 +22,17 @@ import org.json.JSONObject;
 public class Column {
 	private Schema schema;
 	public Schema getSchema() {
-		return schema;
+		return this.schema;
 	}
 	
 	private final UUID id;
 	public UUID getId() {
-		return id;
+		return this.id;
 	}
 
 	private String name;
 	public String getName() {
-		return name;
+		return this.name;
 	}
 	public void setName(String name) {
 		this.name = name;
@@ -40,7 +40,7 @@ public class Column {
 	
 	private Table input;
 	public Table getInput() {
-		return input;
+		return this.input;
 	}
 	public void setInput(Table table) {
 		this.input = table;
@@ -48,7 +48,7 @@ public class Column {
 
 	private Table output;
 	public Table getOutput() {
-		return output;
+		return this.output;
 	}
 	public void setOutput(Table table) {
 		this.output = table;
@@ -57,151 +57,12 @@ public class Column {
 	//
 	// Data
 	//
-	
-	// Array with output values. Very first element corresponds to the oldest existing id. Very last element corresponds to the newest existing id.
-	// Note that some (oldest, in the beginning) elements can be marked for deletion, that is, it is garbage and they are stored with the only purpose to do evaluation by updating the state of other elements 
-	private Object[] values; 
-	private long length = 0; // It is a physical size allocated for storing output values
-	
-	//
-	// Data access
-	//
-	
-	public Object getValue(long row) {
-		return values[(int)row];
-	}
-	public void setValue(long row, Object value) {
-		values[(int)row] = value;
-		this.isChanged = true; // Mark column as dirty
-	}
-	// Convenience method. The first element in the path must be this column. 
-	protected Object getValue(List<Column> columns, long row) {
-		Object out = row;
-		for(Column col : columns) {
-			out = col.getValue((long)out);
-			if(out == null) break;
-		}
-		return out;
-	}
-
-	public long appendValue(Object value) {
-		// Cast the value to type of this column
-		if(this.getOutput().getName().equalsIgnoreCase("String")) {
-			try { value = value.toString(); } 
-			catch (Exception e) { value = ""; }
-		}
-		else if(this.getOutput().getName().equalsIgnoreCase("Double") || this.getOutput().getName().equalsIgnoreCase("Integer")) {
-			if(value instanceof String) {
-				try { value = NumberFormat.getInstance(Locale.US).parse(((String)value).trim()); } 
-				catch (ParseException e) { value = Double.NaN; }
-			}
-		}
-		
-		//
-		// Really append (after the last row) and mark as new
-		//
-		this.length++; // Physical storage
-		values[(int)this.newRange.end] = value;
-		this.newRange.end++;
-
-
-		return this.newRange.end-1;
-	}
-
-	// They can be deleted either physically immediately or marked for deletion for future physical deletion (after evalution or gargabge collection)
-	// We delete only oldest records with lowest ids
-	public void remove(long count) { // Remove the oldest records with lowest ids
-		// TODO:
-	}
-	public void remove(Range range) { // Delete the specified range of input ids
-
-	}
-	public void remove() { // Delete all input ids
-		remove(this.getIdRange());
-	}
-
-	//
-	// Data dirty state: added/removed inputs (set population), and change outputs (function updated)
-	//
-	
-	// Output value changes (change, set, reset function output).
-
-	// If some output values has been changed (manually) and hence evaluation of dependent columns might be needed.
-	// Note that this flag does not change the dirty status of this column - it changes the dirty status of all columns that depend on it
-	public boolean isChanged = false;
-	// This flag can be set either directly from outside or by evaluation procedure from inside.
-	// So we need to understand how to use it for dependencies
-
-
-
-	// Input range changes (additions and deletions of the input set).
-	// 5,6,7,...,100,...,1000,1001,...
-	// [del)[clean)[new)
-	// [rowRange) - all records that physically exist and can be accessed including new, up-to-date and deleted
-
-	// Deleted but not evaluated (garbage): Some input elements have been marked for deletion but not deleted yet because the deletion operation needs to be evaluated before physical deletion
-	// Records to be deleted after the next re-evaluation
-	// Immediately after evaluation these records have to be physically deleted (otherwise the data state will be wrong)
-	// Deleted records are supposed to have lowest ids (by assuming that we delete only old records)
-	protected Range delRange = new Range();
-	public Range getDelRange() {
-		return new Range(delRange);
-	}
-
-	// Clean (evaluated): Input elements which store up-to-date outputs and hence need not to be evaluated
-	// These records have been already evaluated (clean)
-	// We need to store start and end rows
-	// Alternatively, we can compute this range as full range minus added and deleted
-	protected Range cleanRange = new Range();
-	public Range getCleanRange() {
-		return new Range(cleanRange);
-	}
-
-	// Added but not evaluated: Some input elements have been physically added but their output not evaluated (if formula defined) or not set (if output is set manually)
-	// Records added but not evaluated yet (dirty). They are supposed to be evaluated in the next iteration.
-	// Immediately after evaluation they need to be marked as clean
-	// New records have highest ids by assuming that they are newest records
-	protected Range newRange = new Range();
-	public Range getNewRange() {
-		return new Range(newRange);
-	}
-	
-
-
-	
-	// All currently existing (non-deleted) elements
-	public Range getIdRange() {
-		return new Range(getCleanRange().start, getNewRange().end);
+	protected ColumnData data;
+	public ColumnData getData() {
+		return this.data;
 	}
 
 
-
-	// Mark clean records as dirty (new). Deleted range does not change (we cannot undelete them currently). It is a manual way to trigger re-evaluation.
-	private void markCleanAsNew() {
-		// [del)[clean)[new)
-		cleanRange.end = cleanRange.start; // No clean records
-		newRange.start = cleanRange.start; // All new range
-	}
-
-	// Mark dirty records as clean. It is supposed to be done by evaluation procedure.
-	private void markNewAsClean() {
-		// [del)[clean)[new)
-		cleanRange.end = newRange.end; // All clean records
-		newRange.start = newRange.end; // No new range
-	}
-
-	// Mark all records as deleted. Note that it is only marking - for real deletion use other methods.
-	private void markAllAsDel() {
-		// [del)[clean)[new)
-
-		delRange.end = newRange.end;
-		
-		cleanRange.start = newRange.end;
-		cleanRange.end = newRange.end;
-		
-		newRange.start = newRange.end;
-		newRange.end = newRange.end;
-	}
 
 	//
 	// Formula
@@ -595,7 +456,7 @@ public class Column {
 			// Step 1: Evaluate main formula to initialize the column. If it is empty then we need to init it with default values
 			//
 	
-			Range mainRange = this.getNewRange(); // All dirty/new rows
+			Range mainRange = this.data.getNewRange(); // All dirty/new rows
 			if(this.formula == null || this.formula.trim().isEmpty()) { // Initialize to default constant
 				Object defaultValue; // Depends on the column type
 				if(this.getOutput().isPrimitive()) {
@@ -605,13 +466,13 @@ public class Column {
 					defaultValue = null;
 				}
 				for(long i=mainRange.start; i<mainRange.end; i++) {
-					this.setValue(i, defaultValue);
+					this.data.setValue(i, defaultValue);
 				}
 			}
 			else if(mainExpr != null) { // Initialize to what formula returns
 				for(long i=mainRange.start; i<mainRange.end; i++) {
 					mainExpr.evaluate(i);
-					this.setValue(i, mainExpr.result);
+					this.data.setValue(i, mainExpr.result);
 				}
 			}
 	
@@ -623,18 +484,18 @@ public class Column {
 				
 				Column accuLinkColumn = accuExpr.path.get(0);
 	
-				Range accuRange = accuLinkColumn.getIdRange(); // We use all existing rows for full re-evaluate
+				Range accuRange = accuLinkColumn.getData().getIdRange(); // We use all existing rows for full re-evaluate
 				for(long i=accuRange.start; i<accuRange.end; i++) {
-					long g = (Long) accuLinkColumn.getValue(accuExpr.path, i); // Find group element
+					long g = (Long) accuLinkColumn.getData().getValue(accuExpr.path, i); // Find group element
 					accuExpr.evaluate(i);
-					this.setValue(g, accuExpr.result);
+					this.data.setValue(g, accuExpr.result);
 				}
 	
 			}
 
 		}
 
-		this.markNewAsClean(); // Mark dirty as clean
+		this.data.markNewAsClean(); // Mark dirty as clean
 
 		this.setFormulaClean(); // Mark up-to-date if successful
 
@@ -773,7 +634,7 @@ public class Column {
 		if(evaluator == null) return;
 
 		// Evaluate for all rows in the (dirty, new) range
-		Range range = this.getNewRange();
+		Range range = this.getData().getNewRange();
 		for(long i=range.start; i<range.end; i++) {
 			evaluator.evaluate(i);
 		}
@@ -839,8 +700,10 @@ public class Column {
 		this.input = schema.getTable(input);
 		this.output = schema.getTable(output);
 		
+		// Formula
 		this.kind = DcColumnKind.USER;
 
-		this.values = new Object[1000];
+		// Data
+		this.data = new ColumnData(this);
 	}
 }

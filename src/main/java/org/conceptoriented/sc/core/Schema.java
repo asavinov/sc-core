@@ -76,7 +76,7 @@ public class Schema {
 		//
 
 		// Mark all columns dirty (non-evaluated) - otherwise evaluation will not do anything because it thinks that the functions are up-ot-date
-		this.getColumns().forEach(x -> x.isChanged = true);
+		this.getColumns().forEach(x -> x.getData().isChanged = true);
 
 		this.translate();
 		this.evaluate(); // Evaluate

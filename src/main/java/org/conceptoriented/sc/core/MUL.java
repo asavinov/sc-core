@@ -21,15 +21,15 @@ public class MUL extends EvaluatorBase {
 
 	@Override
 	public void evaluate(long row) {
-		double value1 = ((Number)column1.getValue(row)).doubleValue();
-		double value2 = ((Number)column2.getValue(row)).doubleValue();
+		double value1 = ((Number)column1.getData().getValue(row)).doubleValue();
+		double value2 = ((Number)column2.getData().getValue(row)).doubleValue();
 
 		double result = Double.NaN;
 		if(!Double.isNaN(value1) && !Double.isNaN(value2)) {
 			result = value1 * value2;
 		}
 		
-		thisColumn.setValue(row, result);
+		thisColumn.getData().setValue(row, result);
 	}
 
 }

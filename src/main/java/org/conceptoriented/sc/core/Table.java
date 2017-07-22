@@ -105,7 +105,7 @@ public class Table {
 			Object value = record.get(column.getName());
 			
 			// Append the value to the column (even if it is null). This will also update the dirty status of data (range).
-			column.appendValue(value);
+			column.getData().appendValue(value);
 		}
 		
 		this.idRange.end++;
@@ -137,7 +137,7 @@ public class Table {
 			for(int j=0; j<names.size(); j++) {
 				// TODO: The same number in Double and Integer will not be equal. So we need cast to some common type at some level of the system or here.
 				Object recordValue = values.get(j);
-				Object columnValue = columns.get(j).getValue(i);
+				Object columnValue = columns.get(j).getData().getValue(i);
 
 				// Compare two values of different types
 				if(recordValue instanceof Number && columnValue instanceof Number) {
@@ -171,7 +171,7 @@ public class Table {
 		List<Column> columns = schema.getColumns(this.getName());
 
 		for(Column column : columns) { // We must delete from all columns
-			column.remove(count);
+			column.getData().remove(count);
 		}
 
 		// Update the id range of the table by assuming that the specified deleted range is in the beginning
@@ -183,7 +183,7 @@ public class Table {
 		List<Column> columns = schema.getColumns(this.getName());
 
 		for(Column column : columns) { // We must delete from all columns
-			column.remove(range);
+			column.getData().remove(range);
 		}
 
 		// Update the id range of the table by assuming that the specified deleted range is in the beginning
@@ -209,7 +209,7 @@ public class Table {
 
 			for(Column column : columns) {
 				// Get value from the record
-				Object value = column.getValue(row);
+				Object value = column.getData().getValue(row);
 				// Store the value in the record
 				record.set(column.getName(), value);
 			}

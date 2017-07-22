@@ -328,7 +328,7 @@ public class ExprNode {
 			return;
 		}
 
-		Schema schema = column.getSchema(); // Resolve against this schema
+		Schema schema = this.column.getSchema(); // Resolve against this schema
 
 		//
 		// Resolve table
@@ -367,7 +367,7 @@ public class ExprNode {
 			}
 
 			// Check the sequence: table-path-column. End of last path segment is start of column. 
-			if(this.path.get(this.path.size()-1).getOutput() != column.getInput()) {
+			if(this.path.get(this.path.size()-1).getOutput() != this.column.getInput()) {
 				this.status = new DcError(DcErrorCode.BIND_ERROR, "Wrong group path.", "Group path type has to be equal to the table where accumulation column is defined: " + this.pathName);
 				return;
 			}
@@ -377,7 +377,7 @@ public class ExprNode {
 	
 	// Replace all occurrences of column paths in the formula by variable names from the symbol table
 	private String transformFormula() {
-		StringBuffer buf = new StringBuffer(formula);
+		StringBuffer buf = new StringBuffer(this.formula);
 		for(int i = this.primExprDependencies.size()-1; i >= 0; i--) {
 			PrimExprDependency dep = this.primExprDependencies.get(i);
 			if(dep.start < 0 || dep.end < 0) continue; // Some dependencies are not from formula (e.g., group path)
@@ -497,7 +497,7 @@ public class ExprNode {
 
 		for(PrimExprDependency dep : this.primExprDependencies) {
 			if(dep.paramName == null || dep.paramName.trim().isEmpty()) continue;
-			Object value = dep.columns.get(0).getValue(dep.columns, i); // Read column value
+			Object value = dep.columns.get(0).getData().getValue(dep.columns, i); // Read column value
 			if(value == null) value = Double.NaN;
 			try {
 				if(this.isExp4j()) {
@@ -512,15 +512,18 @@ public class ExprNode {
 			}
 		}
 		
+		// Data
+		ColumnData data = this.column.getData();
+
 		// Set current output value as a special variable
 		Object outputValue;
 		if(this.path == null) {
-			outputValue = column.getValue(i);
+			outputValue = data.getValue(i);
 		}
 		else {
-			long g = (Long) this.path.get(0).getValue(this.path, i); // Find group element
+			long g = (Long) this.path.get(0).getData().getValue(this.path, i); // Find group element
 			outputValue = null;
-			if(g >= 0) outputValue = column.getValue(g);
+			if(g >= 0) outputValue = data.getValue(g);
 		}
 		if(outputValue == null) outputValue = Double.NaN;
 		try {
@@ -555,7 +558,7 @@ public class ExprNode {
 			if(!numericEvalution) { // No evaluation needed or possible for this formula
 				// Copy the value to the output (since no operations)
 				PrimExprDependency dep = this.primExprDependencies.get(0);
-				Object value = dep.columns.get(0).getValue(dep.columns, i); // Read column value
+				Object value = dep.columns.get(0).getData().getValue(dep.columns, i); // Read column value
 				result = value;
 			}
 			else { // Arithmetic expression that needs to be evaluated
@@ -580,7 +583,7 @@ public class ExprNode {
 			// After recursion, members are supposed to store result values
 			
 			// Combine child results into a tuple and find it in the output table
-			Table output = column.getOutput();
+			Table output = this.column.getOutput();
 			Record r = this.childrenToRecord(); // Output value is this record
 			long row = output.find(r, true); // But we store a record reference so find it
 			result = row; // We store id of the record - not the record itself

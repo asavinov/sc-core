@@ -203,9 +203,9 @@ public class Tests {
 
         columnB.evaluate();
 
-        assertEquals(11.0, (Double)columnB.getValue(0), 0.00001);
-        assertEquals(Double.NaN, columnB.getValue(1));
-        assertEquals(13.0, (Double)columnB.getValue(2), 0.00001);
+        assertEquals(11.0, (Double)columnB.getData().getValue(0), 0.00001);
+        assertEquals(Double.NaN, columnB.getData().getValue(1));
+        assertEquals(13.0, (Double)columnB.getData().getValue(2), 0.00001);
     }
 
     @Test
@@ -251,8 +251,8 @@ public class Tests {
 
         c5.evaluate();
 
-        assertEquals(0L, c5.getValue(0));
-        assertEquals(1L, c5.getValue(1));
+        assertEquals(0L, c5.getData().getValue(0));
+        assertEquals(1L, c5.getData().getValue(1));
     }
     
     @Test
@@ -293,9 +293,9 @@ public class Tests {
 
         schema.evaluate();
 
-        assertEquals(20.0, ta.getValue(0));
-        assertEquals(20.0, ta.getValue(1));
-        assertEquals(0.0, ta.getValue(2));
+        assertEquals(20.0, ta.getData().getValue(0));
+        assertEquals(20.0, ta.getData().getValue(1));
+        assertEquals(0.0, ta.getData().getValue(2));
     }
     Schema createAccuSchema() {
     	
