@@ -382,7 +382,7 @@ public class Schema {
 			col.setDescriptor(descr_string);
 			
 			if(!col.isDerived()) { // Columns without formula (non-evalatable) are clean
-				col.setFormulaUpdate(false);
+				col.setFormulaChange(false);
 			}
 
 			return col;

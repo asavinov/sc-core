@@ -96,7 +96,7 @@ public class Column {
 	public void setFormula(String formula) {
 		if(this.formula != null && this.formula.equals(formula)) return; // Nothing to change
 		this.formula = formula;
-		this.setFormulaUpdate(true);
+		this.setFormulaChange(true);
 	}
 	
 	//
@@ -110,7 +110,7 @@ public class Column {
 	public void setAccuformula(String accuformula) {
 		if(this.accuformula != null && this.accuformula.equals(accuformula)) return; // Nothing to change
 		this.accuformula = accuformula;
-		this.setFormulaUpdate(true);
+		this.setFormulaChange(true);
 	}
 	
 	protected String accutable;
@@ -120,7 +120,7 @@ public class Column {
 	public void setAccutable(String accutable) {
 		if(this.accutable != null && this.accutable.equals(accutable)) return; // Nothing to change
 		this.accutable = accutable;
-		this.setFormulaUpdate(true);
+		this.setFormulaChange(true);
 	}
 	
 	protected String accupath; // It leads from accutable to the input table of the column
@@ -130,7 +130,7 @@ public class Column {
 	public void setAccupath(String accupath) {
 		if(this.accupath != null && this.accupath.equals(accupath)) return; // Nothing to change
 		this.accupath = accupath;
-		this.setFormulaUpdate(true);
+		this.setFormulaChange(true);
 	}
 	
 	// Determine if it is syntactically accumulation, that is, it seems to be intended for accumulation.
@@ -184,17 +184,17 @@ public class Column {
 	 * It is own status of this columns only (not inherited/propagated).
 	 */
 	public boolean isFormulaDirty() {
-		return this.formulaUpdate || this.formulaNew || this.formulaDelete;
+		return this.formulaChange || this.formulaNew || this.formulaDelete;
 	}
 	public void setFormulaClean() {
-		this.formulaUpdate = false;
+		this.formulaChange = false;
 		this.formulaNew = false;
 		this.formulaDelete = false;
 	}
 
-	private boolean formulaUpdate = false; // Formula has been changed
-	public void setFormulaUpdate(boolean dirty) {
-		this.formulaUpdate = dirty;
+	private boolean formulaChange = false; // Formula has been changed
+	public void setFormulaChange(boolean dirty) {
+		this.formulaChange = dirty;
 	}
 	private boolean formulaNew = false; // Formula has been added
 	public void setFormulaNew(boolean dirty) {
@@ -222,7 +222,7 @@ public class Column {
 	}
 
 	//
-	// Column dependencies
+	// Column (definition) dependencies
 	//
 	
 	// Types of dependencies:
@@ -289,7 +289,8 @@ public class Column {
 
 
 	//
-	// Translate
+	// Translate formula
+	// Parse and bind. Generate an evaluator object. Produce new (error) status of translation.
 	//
 	
 	/**
@@ -319,7 +320,7 @@ public class Column {
 		return err;
 	}
 
-	public ExprNode mainExpr; // Either primitive or complex (tuple)
+	public ExprNode mainExpr; // Either primitive or complex (link)
 
 	public ExprNode accuExpr; // Additional values collected from a lesser table
 
@@ -328,50 +329,41 @@ public class Column {
 		if(this.kind == DcColumnKind.AUTO) {
 			this.kind = determineAutoColumnKind();
 		}
-		if(!this.isDerived()) { // User column - no deps
-			this.resetDependencies();
-			return;
-		}
 
-		// Dependencies
-		List<Column> columns = new ArrayList<Column>();
+		//
+		// Reset
+		//
+		this.resetDependencies();
+		this.mainExpr = null;
+		this.accuExpr = null;
 
 		//
 		// Step 1: Evaluate main formula to initialize the column. If it is empty then we need to init it with default values
 		//
 
-		List<Column> mainColumns = null; // Non-evaluatable column independent of the reason
-		this.mainExpr = null;
-
 		this.mainExpr = this.translateMain();
-		if(this.mainExpr != null) {
-			mainColumns = this.mainExpr.getDependencies();
-		}
-
-		if(mainColumns != null) columns.addAll(mainColumns);
 
 		//
 		// Step 2: Evaluate accu formula to update the column values (in the case of accu formula)
 		//
 		if(this.kind == DcColumnKind.ACCU) {
-
-			List<Column> accuColumns = null; // Non-evaluatable column independent of the reason
-			this.accuExpr = null;
-
-			if(this.determineAutoColumnKind() == DcColumnKind.ACCU) {
-				this.accuExpr = this.translateAccu();
-				if(this.accuExpr != null) {
-					accuColumns = this.accuExpr.getDependencies();
-				}
-			}
-			
-			if(accuColumns != null) columns.addAll(accuColumns);
+			this.accuExpr = this.translateAccu();
 		}
 
+		//
+		// Dependence graph
+		//
 
-		//
-		// Update dependence graph
-		//
+		List<Column> columns = new ArrayList<Column>();
+
+		if(this.mainExpr != null) {
+			columns.addAll(this.mainExpr.getDependencies());
+		}
+
+		if(this.accuExpr != null) {
+			columns.addAll(this.accuExpr.getDependencies());
+		}
+
 		this.setDependencies(columns);
 	}
 
@@ -431,7 +423,8 @@ public class Column {
 	}
 
 	//
-	// Evaluate
+	// Evaluate formula. 
+	// Use evaluator object and generate new function outputs for all or some inputs
 	//
 
 	Instant evaluateTime = Instant.MIN; // Last time the evaluation has been performed (successfully finished)
@@ -441,7 +434,7 @@ public class Column {
 	public void setEvaluateTime() {
 		this.evaluateTime = Instant.now();
 	}
-	public Duration durationFomrLastEvaluated() {
+	public Duration durationFromLastEvaluated() {
 		return Duration.between(this.evaluateTime, Instant.now());
 	}
 	
@@ -469,10 +462,10 @@ public class Column {
 					this.data.setValue(i, defaultValue);
 				}
 			}
-			else if(mainExpr != null) { // Initialize to what formula returns
+			else if(this.mainExpr != null) { // Initialize to what formula returns
 				for(long i=mainRange.start; i<mainRange.end; i++) {
-					mainExpr.evaluate(i);
-					this.data.setValue(i, mainExpr.result);
+					this.mainExpr.evaluate(i);
+					this.data.setValue(i, this.mainExpr.result);
 				}
 			}
 	
