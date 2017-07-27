@@ -93,8 +93,12 @@ public class ColumnData {
 	public void remove(long count) { // Remove the oldest records with lowest ids
 		// TODO:
 	}
-	public void remove(Range range) { // Delete the specified range of input ids
-
+	public void remove(Range range) { // Delete the specified range of input ids starting from clean range and then continue with new range by increasing the available del range (they must be the oldest records with lowest ids)
+		this.delRange = range.uniteWith(this.delRange);
+		this.cleanRange = this.delRange.delFromStartOf(this.cleanRange);
+		this.newRange = this.delRange.delFromStartOf(this.newRange);
+		
+		this.length = getIdRange().getLength();
 	}
 	public void remove() { // Delete all input ids
 		remove(this.getIdRange());
@@ -189,6 +193,12 @@ public class ColumnData {
 		this.column = column;
 		this.id = UUID.randomUUID();
 
+		// Initialize storage
 		this.values = new Object[1000];
+
+		// Initialize ranges according to the input table (all records new)
+		this.newRange = new Range(this.column.getInput().getIdRange());
+		this.delRange = new Range(this.newRange.start, this.newRange.start);
+		this.cleanRange = new Range(this.newRange.start, this.newRange.start);
 	}
 }

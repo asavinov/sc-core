@@ -14,6 +14,29 @@ public class Range {
 		return false;
 	}
 
+	public boolean isIn(Range r) { // Whether this range is completely covered by (is within) the specified range
+		if(this.start < r.start) return false;
+		if(this.end > r.end) return false;
+		return true;
+	}
+
+	public Range uniteWith(Range r) {
+		r.start = Long.min(this.start, r.start);
+		r.end = Long.max(this.end, r.end);
+		return r;
+	}
+
+	public Range addToEndOf(Range r) { // Add this range to the end of the specified range (by changing the argument). The argument can only become larger.
+		if(this.end > r.end) r.end = this.end;
+		return r;
+	}
+
+	public Range delFromStartOf(Range r) { // Remove this range from the start of the specified range (by changing the argument)
+		if(this.end > r.start) r.start = this.end;
+		if(r.start > r.end) r.end = r.start; // In the case the whole range is removed
+		return r;
+	}
+
 	@Override
     public String toString() {
       return String.format("[%s, %s)", start, end);

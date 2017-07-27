@@ -449,8 +449,9 @@ public class Column {
 			// Step 1: Evaluate main formula to initialize the column. If it is empty then we need to init it with default values
 			//
 	
-			Range mainRange = this.data.getNewRange(); // All dirty/new rows
-			if(this.formula == null || this.formula.trim().isEmpty()) { // Initialize to default constant
+			Range mainRange = this.data.getIdRange(); // All dirty/new rows
+
+			if(this.formula == null || this.formula.trim().isEmpty()) { // Initialize to default constant (for example, after deletig the formula)
 				Object defaultValue; // Depends on the column type
 				if(this.getOutput().isPrimitive()) {
 					defaultValue = 0.0;

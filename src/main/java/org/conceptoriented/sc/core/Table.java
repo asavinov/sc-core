@@ -33,6 +33,19 @@ public class Table {
 	}
 	
 	//
+	// Table as a set of ids. Iteration through this collection (table readers and writers).
+	//
+
+	protected Range idRange = new Range(); // Full id range of records from start to end
+	public Range getIdRange() {
+		return this.idRange;
+	}
+
+	public long getLength() {
+		return this.idRange.getLength();
+	}
+
+	//
 	// Rules for automatic population and de-population (similar to auto-evaluation)
 	//
 
@@ -43,7 +56,7 @@ public class Table {
 	// The real deletion happens only after evaluation.
 	protected long maxLength = -1;  
 	public long getMaxLength() {
-		return maxLength;
+		return this.maxLength;
 	}
 	public void setMaxLength(long maxLength) {
 		
@@ -70,7 +83,7 @@ public class Table {
 		}
 
 		// length <= maxLength
-		long excess = idRange.getLength() - maxLength;
+		long excess = this.idRange.getLength() - this.maxLength;
 		if(excess <= 0) {
 			return;
 		}
@@ -83,8 +96,6 @@ public class Table {
 	//
 	// Operations with records
 	//
-
-	protected Range idRange = new Range(); // Full id range of records
 
 	Instant appendTime = Instant.now(); // Last time a record was (successfully) appended. It is equal to the time stamp of the last record.
 	public void setAppendTime() {
