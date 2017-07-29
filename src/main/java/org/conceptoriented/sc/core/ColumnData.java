@@ -37,9 +37,18 @@ public class ColumnData {
 	
 	// Array with output values. Very first element corresponds to the oldest existing id. Very last element corresponds to the newest existing id.
 	// Note that some (oldest, in the beginning) elements can be marked for deletion, that is, it is garbage and they are stored with the only purpose to do evaluation by updating the state of other elements 
-	private Object[] values; 
+	private Object[] values;
+	
+	// Id of the very first element in the array with 0th offset
+	private long startId = 0;
+	public int id2offset(long id) {
+		return (int) (id - this.startId);
+	}
 
-	private long length = 0; // It is a physical size allocated for storing output values
+	// It is physical size of all values including deleted, clean and new. It must be equal to the table size
+	public long getLength() {
+		return this.delRange.getLength() + this.cleanRange.getLength() + this.newRange.getLength();
+	}
 	
 
 
@@ -47,16 +56,16 @@ public class ColumnData {
 	// Data access
 	//
 	
-	public Object getValue(long row) {
-		return values[(int)row];
+	public Object getValue(long id) {
+		return this.values[id2offset(id)];
 	}
-	public void setValue(long row, Object value) {
-		values[(int)row] = value;
+	public void setValue(long id, Object value) {
+		this.values[id2offset(id)] = value;
 		this.isChanged = true; // Mark column as dirty
 	}
 	// Convenience method. The first element in the path must be this column. 
-	protected Object getValue(List<Column> columns, long row) {
-		Object out = row;
+	protected Object getValue(List<Column> columns, long id) {
+		Object out = id;
 		for(Column col : columns) {
 			out = col.getData().getValue((long)out);
 			if(out == null) break;
@@ -80,10 +89,8 @@ public class ColumnData {
 		//
 		// Really append (after the last row) and mark as new
 		//
-		this.length++; // Physical storage
-		values[(int)this.newRange.end] = value;
+		this.values[id2offset(this.newRange.end)] = value;
 		this.newRange.end++;
-
 
 		return this.newRange.end-1;
 	}
@@ -97,11 +104,26 @@ public class ColumnData {
 		this.delRange = range.uniteWith(this.delRange);
 		this.cleanRange = this.delRange.delFromStartOf(this.cleanRange);
 		this.newRange = this.delRange.delFromStartOf(this.newRange);
-		
-		this.length = getIdRange().getLength();
+
+		// Optimize
+		this.gc(); 
 	}
 	public void remove() { // Delete all input ids
 		remove(this.getIdRange());
+	}
+
+	public void gc() { // Physically remove del range
+		// Remove del range (it might require evaluation)
+		delRange.start = delRange.end;
+
+		// Determine (free, unnecessary) interval to moved
+		long offset = delRange.start - this.startId;
+
+		// New offset
+		this.startId += offset;
+
+		// Move cells backward
+		System.arraycopy(this.values, (int)offset, this.values, 0, (int)this.getLength());
 	}
 
 	//
