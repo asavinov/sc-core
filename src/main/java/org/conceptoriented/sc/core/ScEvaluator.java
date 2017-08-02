@@ -160,3 +160,46 @@ public interface ScEvaluator {
 	public void endEvaluate();
 
 }
+
+interface EvaluatorExpr {
+
+	/**
+	 * Each parameter has a description which can be retrived by means of this method. 
+	 * It is not the best approach because these descriptions are language specific.
+	 */
+	public List<String> getParamDescriptions();
+
+	/**
+	 * For each instance, its parameters are bound to certain column paths (normally primitive).
+	 * This information is used by the evaluation procedure to retrieve the values and pass them as parameters to this evaluator. This procedure gets this list, retrieve these path values given the current input, and passes these values to the evaluator.
+	 * Each instance has to be bound to certain paths by an external procedure. Typically, it is done by translating a formula.
+	 */
+	public void setParamPaths(List<String> paths);
+	public List<String> getParamPaths();
+
+	/**
+	 * Compute output value using the provide input values. 
+	 * The first parameter is the current output value (or null).
+	 * Note that all parameters are output values of different paths for one and the same input id.
+	 */
+	public Object evaluate(List<Object>[] params);
+}
+
+interface EvaluatorComplex {
+
+	/**
+	 * The system will get these paths as strings from the instance, resolve them and pass the column references to the evaluate method (previously, it also retrieved the outputs of these columns and passed them instead).
+	 * Typically, these paths are provided in the descriptor.
+	 */
+	public void setParamPaths(List<String> paths);
+	public List<String> getParamPaths();
+
+	/**
+	 * Compute output value using provided input paths, one input id and the current output. 
+	 * All input paths belong to the same table but consist of many column segments.
+	 * The first path is a column this method belongs to, that is, it computes the output for. This column can be also used to retrieve the current output if necessary.
+	 * The method gets an input id for which it has to compute new output.
+	 */
+	public Object evaluate(List<List<Column>>[] paths, long id);
+
+}
