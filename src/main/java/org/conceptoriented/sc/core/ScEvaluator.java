@@ -3,85 +3,7 @@ package org.conceptoriented.sc.core;
 import java.util.List;
 
 /**
- * There are two major approaches to user-defined functions which differ in what parameters they get and use to get data:
  * 
- * 1) An evaluator gets only values which are needed for computing the output value. It is unaware of column objects these values were retrieved from and will be written to.
- * Essentially, it has minimum or no at all knowledge about the system and its data API. 
- * Note that although it can get input ids as parameters, they are quite useless because they have no semantics, therefore, we can assume that only primitive values are used.
- * An advantage of this approach is simplicity and it can be used for simple formulas. 
- * Limitations:
- * - not possible iterating through records
- * - not possible to use for link columns (but maybe for individual 
- * API design. Since it is unaware of input id it is a simple expression manipulating single values. The system has to know only column names (paths) for two purposes: dependencies at translation time and parameterizing for input at evaluation time.
- * The instance gets all primitive values for each invocation and returns one value as output.
- * The instance has to declare the column (paths) it needs and then it will get their values in the same order.
- * For accumulation, a special variable will be passed in parameters with the current output.
- * 
- * 2) An evaluator instance gets a list of column objects (column or column data or whatever like column id) which are resolved by the system according to this class or instance declaration. 
- * This declaration of the necessary columns can be provided in meta-information of the class like descriptor, by the static methods of the class, or by the instance itself.
- * The evaluator then uses these columns to access the necessary data. Normally, it gets also some input id for which it has to produce computations. 
- * And it should know also the column object it belongs to. As a consequence, this class must know how to read/write values using functions, that is, it has to know this API (like column data).
- * One advantage of this approach is that the function knows about input ids and can vary them by essentially retrieving arbitrary data. For example, it is needed for time series analysis like moving average.
- * Another property is that theoretically, the evaluator can find and use the necessary columns itself, for example, during the initialization of the instance. However, explicit declaration is needed for dependency management.
- * API Design. The class must know data API (at least read output given input). It also must know how to deal with input ids, particularly, validity ranges.
- * The evaluator gets only input id as parameter (not column output values) and uses then column references to read the necessary values.
- * Do we need to work with subsets/groups by using inverse functions? Conceptually not because this means physically producing a new collection. 
- * How to implement link/append columns? To search/append or not to search.
- * - !!! One option is that it returns a list of (expression) expression outputs so essentially it is a list of normal expressions. And then the system does search and append. This system knows that it is a link function and it will return a list of values for certain columns (as declared) to be searched/appended. A column evaluator in this case is defined as a list of normal columns which can be calculated or link columns, and they can be evaluated individually.
- *   Note that in this case, the system has to write outputs itself (for all functions), that is, evaluators cannot change columns.
- * - Another option is that functions are able to inverse search/append by returning id (rather than list of values). The system uses this function precisely as any other function by simply storing its output (or the function itself stores the found id).
- *  
- * Possible principles:
- * - evaluators can only read and not write
- * - the system gets the output or a list of outputs (for link evaluators) and then writes it or resolved/appended id to the function.
- * - for accu evaluators, an additional parameter is passed and the evaluator has to know how to use it. In fact, it is the only difference from normal evaluators so we always can assume the existence of this parameter (and the system can even always pass it even for calc columns).
- * 
- * Tasks and alternatives:
- * - iterating through input ids, for example, for moving average or for searching. This requires having a reference to a function object like ColumnData.
- * - if the algorithm uses arbitrary input ids then it depends on the corresponding range, so this dependency has to be taken into account, for example, the class could declare that it will use ALL range or previous N range or whatever.
- * - inverse functions for getting input(s) given output(s) might be needed for link columns or for look ups and search.
- * - updating function: by the function or by the system? If by the function then it breaks the conception somewhat if it can update many outputs. So initially we could prohibit updates. In this case, we need to split API into reading and writing. Note that read-only functions can be optimized, for example, a (in-memory) copy could be created with the necessary range or otherwise optimized for this function.
- * - updating function for many inputs. We do not have a use case for this (new values could overwrite previous outputs) but if it is possible then the system might need to know this range for dependency management. Also, we could prohibit from writing/updating outputs.
- * - appending new records might be needed for link/append columns: by the function or by the system?
- * - reuse of an evaluator implementation (formula) for different columns declaratively without hard-coding column names.
- *   For example, we implemented some complex algorithm and want to provide it as a plug-in where the user can apply it to different columns.
- *   The evaluator has to use its interval/local parameters while column references are specified declaratively and resolved at initialization.
- *   Note that the column parameters could be different paths and not only simple columns. For the algorithm on the other hand it is important to retrieve values and maybe iterative through input ids (like previous or next).
- *   So we need to introduce the notion of local columns and then bind them to externally provide columns with real data.
- * 
- * 
- * OLD:
- * A user-defined evaluator knows input columns by name by declaring its dependence on these input columns (and their types).
- * Therefore, each such evaluator class is intended for certain input column names only because these names are encoded into it as dependencies.
- * Thus each class cannot be reused for other columns. It is a drawback because we cannot develop generic functions which could be applied to arbitrary columns.
- * Note that the output column name is not encoded into the class.
- * One possible solution to this problem is to use additional specification along with each user defined evaluator. This specification provides dependencies and essentially binds one instance to specific columns by name.
- * In this case, a user defined evaluator implements a generic function for certain input column types but it can be applied to different columns in a schema and this information is provided in the evaluator descriptor.
- * A descriptor (dependencies) could be hard-coded or provided as a separate file, e.g., json file with the same name as the class.
- * Alternatively, dependencies (descriptor) could be provided programmatically for each column like setDependencies. An evaluator class then implements its functions in terms of abstract column numbers.
- * A user-defined evaluator is developed as name-independent function which can be bound to different columns by name using a separate descriptor provided to the column.
- * The descriptor is used for dependency management (computing the graph) and for providing direct column data to the evaluator by using integer column identifiers.
- * An advantage is that evaluators are then reusable functions, for example, we could develop a generic evaluator for arithmetic operations.
- * 
- * The next step would be to allow for nested evaluators. This can be implemented by explicitly creating columns but this means materialization of intermediate results.
- * But what if an evaluator wants to reuse another evaluator by applying its function to the current inputs?
- * We need to take into account that any including nested evaluators can access also other records in their input columns.
- * Also, they could require some additional input columns the parent evaluator does not have. The dependency manager has to know about such uses.
- * One approach to declare in the descriptor that this (parent) evaluator will consume data from a child evaluator. 
- * And the child evaluator will consume some columns (by name). 
- * If the parent is consuming some value from a child evaluator then it is equivalent to consuming a value from a column.
- * In this case however, the parent cannot move along the evaluator by reading inputs - it can only compute one single value.
- * Alternatively, a parent could change inputs (if they are values) and evaluate the child many times.
- * Note that evaluator can change integer row identifiers and retrieve arbitrary outputs from a column where a column is viewed as a function.
- * Probably, the same could be done with child evaluators: set inputs and compute output (instead of retrieving it).
- * In fact, we have an alternative: either a function gets input values or it gets inputs of functions with the functions themselves (so that the inputs can be varied).
- * So a (child) evaluator gets either input values or functions with current inputs.
- * 
- * - Evaluator does not deal with and does not rely on column names (of course, it can get them but it is illegal)
- * - Evaluator uses column objects as (primitive or material) functions which return output for certain input (maybe we need an interface for that purpose which is similar to generic functions/evaluator concept)
- * - Since evaluator uses functions, it has to be able to get validity ranges for them by retrieving various ranges like new, old, or all (so maybe it could be part of generic function/evaluator interface)
- * - Evaluator can vary inputs of the functions it needs, for example, to compute moving average or to shift them. So it can generate new (local) iterations and loops similar to an external driver like the central evaluator which provides the main loop.  
- * - Generic evaluator/function has two alternative interpretations: computing single output for certain input values provided from outside, and computing a range of outputs for a range of inputs provided from outside. 
  */
 public interface ScEvaluator {
 
@@ -158,48 +80,5 @@ public interface ScEvaluator {
 	// We could also find a record in the output/type table instead of pushing it.
 
 	public void endEvaluate();
-
-}
-
-interface EvaluatorExpr {
-
-	/**
-	 * Each parameter has a description which can be retrived by means of this method. 
-	 * It is not the best approach because these descriptions are language specific.
-	 */
-	public List<String> getParamDescriptions();
-
-	/**
-	 * For each instance, its parameters are bound to certain column paths (normally primitive).
-	 * This information is used by the evaluation procedure to retrieve the values and pass them as parameters to this evaluator. This procedure gets this list, retrieve these path values given the current input, and passes these values to the evaluator.
-	 * Each instance has to be bound to certain paths by an external procedure. Typically, it is done by translating a formula.
-	 */
-	public void setParamPaths(List<String> paths);
-	public List<String> getParamPaths();
-
-	/**
-	 * Compute output value using the provide input values. 
-	 * The first parameter is the current output value (or null).
-	 * Note that all parameters are output values of different paths for one and the same input id.
-	 */
-	public Object evaluate(List<Object>[] params);
-}
-
-interface EvaluatorComplex {
-
-	/**
-	 * The system will get these paths as strings from the instance, resolve them and pass the column references to the evaluate method (previously, it also retrieved the outputs of these columns and passed them instead).
-	 * Typically, these paths are provided in the descriptor.
-	 */
-	public void setParamPaths(List<String> paths);
-	public List<String> getParamPaths();
-
-	/**
-	 * Compute output value using provided input paths, one input id and the current output. 
-	 * All input paths belong to the same table but consist of many column segments.
-	 * The first path is a column this method belongs to, that is, it computes the output for. This column can be also used to retrieve the current output if necessary.
-	 * The method gets an input id for which it has to compute new output.
-	 */
-	public Object evaluate(List<List<Column>>[] paths, long id);
 
 }

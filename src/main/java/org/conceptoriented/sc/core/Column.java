@@ -289,6 +289,109 @@ public class Column {
 
 
 	//
+	// Translate formula NEW
+	// Parse and bind. Generate dependencies. Generate necessary evaluators. Produce new (error) status of translation.
+	//
+	
+	// Calc evaluator
+	EvaluatorExpr calcEvaluator;
+
+	// Link evaluators
+	List<EvaluatorExpr> linkEvaluators;
+
+	// Accu evaluators
+	EvaluatorExpr initEvaluator;
+	EvaluatorExpr accuEvaluator;
+	EvaluatorExpr finEvaluator;
+
+	public void translate_new() {
+
+		if(this.kind == DcColumnKind.AUTO) {
+			this.kind = determineAutoColumnKind();
+		}
+
+		//
+		// Reset
+		//
+
+		this.linkEvaluators = null;
+		this.initEvaluator = null;
+		this.accuEvaluator = null;
+		this.finEvaluator = null;
+
+		this.resetDependencies();
+		List<Column> columns = new ArrayList<Column>();
+
+		if(this.kind == DcColumnKind.CALC) {
+			this.calcEvaluator = null;
+			if(this.formula == null || this.formula.isEmpty()) {
+				return;
+			}
+
+			ExprNode2 expr = new ExprNode2();
+
+			// Parse: check correct syntax, find all symbols and store them in dependencies
+			expr.formula = this.formula;
+			expr.tableName = this.getInput().getName();
+			expr.name = this.name;
+			expr.parse();
+
+			// Bind (check if all the symbols can be resolved)
+			expr.table = this.getInput();
+			expr.column = this;
+			expr.bind();
+			
+			this.calcEvaluator = expr;
+
+			// Extract deps from the main evaluator
+			// TODO: We need to exclude dep from itself (output column)
+			List<Column> deps = new ArrayList<Column>();
+			List<QName> paths = this.calcEvaluator.getParamPaths();
+			paths.forEach(p -> deps.addAll(p.resolveColumns(this.getInput())));
+			columns.addAll(deps); 
+		}
+		else if(this.kind == DcColumnKind.LINK) {
+			this.linkEvaluators = null;
+		}
+		else if(this.kind == DcColumnKind.ACCU) {
+			this.initEvaluator = null;
+			this.accuEvaluator = null;
+			this.finEvaluator = null;
+			if(this.accuformula == null || this.accuformula.isEmpty()) {
+				return;
+			}
+
+			// TODO: Automate creation of ExprNode object for calc, init, accu, fin exprssions and possible link member expression
+			// - What to if no expression? Set default by the parser or later by the evaluator?
+			// - How to parameterize link member evaluators? Where to use right hand side of the assignment? In the expression or outside? Rhs will be used by the finder/appender only?
+
+			ExprNode2 expr = new ExprNode2();
+
+			// Parse: check correct syntax, find all symbols and store them in dependencies
+			expr.formula = this.accuformula;
+			expr.tableName = this.accutable;
+			expr.name = this.name;
+			expr.parse();
+
+			// Bind (check if all the symbols can be resolved)
+			expr.column = this;
+			expr.bind();
+
+			this.calcEvaluator = expr;
+
+			// Extract deps from the main evaluator
+			// TODO:
+			// Note that one dependency is group path. It has to be resolved (to check existence, bind) and included in deps
+
+		}
+
+		this.setDependencies(columns);
+	}
+
+
+
+
+	//
 	// Translate formula
 	// Parse and bind. Generate an evaluator object. Produce new (error) status of translation.
 	//
