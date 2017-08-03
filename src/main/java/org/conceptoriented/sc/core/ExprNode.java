@@ -13,6 +13,328 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
+ * 
+ */
+class ExprNode2 implements EvaluatorExpr {
+	public static String OUT_VARIABLE_NAME = "out";
+	
+	public boolean isExp4j() { return true; }
+	public boolean isEvalex() { return false; }
+	
+	// Any expression is associated with some column and it is defined in terms of its input table (other) column paths.
+	public Column column;
+	
+	// Formula
+	protected String formula;
+
+	// Native expressions produced during translation and used during evaluation
+	protected net.objecthunter.exp4j.Expression exp4jExpression;
+	protected com.udojava.evalex.Expression evalexExpression = null;
+
+	//
+	// EvaluatorExpr interface
+	//
+	@Override
+	public void setParamPaths(List<String> paths) {
+		; // TODO
+	}
+	@Override
+	public List<QName> getParamPaths() { // TODO: Ensure that the first path is this column itself
+		List<QName> paths = new ArrayList<QName>();
+		for(PrimExprDependency dep : this.primExprDependencies) {
+			paths.add(dep.qname);
+		}
+		return paths;
+	}
+	@Override
+	public void translate(String formula) {
+		this.formula = formula;
+		this.parse();
+		this.bind();
+		this.build();
+	}
+	@Override
+	public Object evaluate(Object[] params) {
+		
+		//
+		// Set parameters in native expressions
+		//
+		int paramNo = 0;
+		for(PrimExprDependency dep : this.primExprDependencies) {
+			Object value = params[paramNo];
+			try {
+				if(this.isExp4j()) {
+					this.exp4jExpression.setVariable(dep.paramName, ((Number)value).doubleValue());
+				}
+				else if(this.isEvalex()) {
+					
+				}
+			}
+			catch(Exception e) {
+				;
+			}
+			finally {
+				paramNo++;
+			}
+		}
+
+		//
+		// Evaluate the final (native) expression
+		//
+		Object ret = null;
+		if(this.isExp4j()) {
+			ret = this.exp4jExpression.evaluate();
+		}
+		else if(this.isEvalex()) {
+			ret = this.evalexExpression.eval();
+		}
+		
+		return ret;
+	}
+
+	//
+	// Status of the previous operation performed
+	//
+	public DcError status;
+	public ExprNode2 getErrorNode() { // Find first node with an error and return it. Otherwise, null
+		if(this.status != null && this.status.code != DcErrorCode.NONE) {
+			return this;
+		}
+		return null;
+	}
+
+	//
+	// Dependencies of this expression from other columns
+	//
+	protected List<PrimExprDependency> primExprDependencies = new ArrayList<PrimExprDependency>(); // Will be filled by parser and then augmented by binder
+	
+	public List<Column> getDependencies() { // Extract all unique column objects used (must be bound)
+		List<Column> columns = new ArrayList<Column>();
+		for(PrimExprDependency dep : this.primExprDependencies) {
+			if(dep.columns == null) continue; // Probably not yet resolved
+			dep.columns.forEach(x -> { if(!columns.contains(x)) columns.add(x); }); // Each dependency is a path and different paths can included same segments
+		}
+		return columns;
+	}
+
+	//
+	// Parse
+	//
+
+	/**
+	 * Parse formulas by possibly building a tree of expressions with primitive expressions in the leaves.
+	 * The result of parsing is a list of symbols.
+	 */
+	protected void parse() {
+		if(this.formula == null || this.formula.isEmpty()) return;
+
+		this.primExprDependencies.clear();
+
+		//
+		// Find all occurrences of columns names (in square brackets or otherwise syntactically identified)
+		//
+		String ex =  "\\[(.*?)\\]";
+		//String ex = "[\\[\\]]";
+		Pattern p = Pattern.compile(ex,Pattern.DOTALL);
+		Matcher matcher = p.matcher(this.formula);
+
+		List<PrimExprDependency> names = new ArrayList<PrimExprDependency>();
+		while(matcher.find())
+		{
+			int s = matcher.start();
+			int e = matcher.end();
+			String name = matcher.group();
+			PrimExprDependency entry = new PrimExprDependency();
+			entry.start = s;
+			entry.end = e;
+			names.add(entry);
+		}
+		
+		//
+		// Create paths by concatenating dot separated column name sequences
+		//
+		for(int i = 0; i < names.size(); i++) {
+			if(i == names.size()-1) { // Last element does not have continuation
+				this.primExprDependencies.add(names.get(i));
+				break;
+			}
+			
+			int thisEnd = names.get(i).end;
+			int nextStart = names.get(i+1).start;
+			
+			if(this.formula.substring(thisEnd, nextStart).trim().equals(".")) { // There is continuation.
+				names.get(i+1).start = names.get(i).start; // Attach this name to the next name as a prefix
+			}
+			else { // No continuation. Ready to copy as path.
+				this.primExprDependencies.add(names.get(i));
+			}
+		}
+
+    	//
+		// Process the paths
+		//
+		QNameBuilder parser = new QNameBuilder();
+
+		for(PrimExprDependency dep : this.primExprDependencies) {
+			dep.pathName = this.formula.substring(dep.start, dep.end);
+			dep.qname = parser.buildQName(dep.pathName); // TODO: There might be errors here, e.g., wrong characters in names
+		}
+		
+		this.status = new DcError(DcErrorCode.NONE, "Parsed successfully.", "");
+	}
+
+	//
+	// Bind
+	//
+
+	// Resolve all symbols found after parsing relative to the input table
+	public void bind() {
+		//
+		// Resolve each column path in the formula relative to the input table
+		//
+		for(PrimExprDependency dep : this.primExprDependencies) {
+
+			dep.columns = dep.qname.resolveColumns(this.column.getInput()); // Try to really resolve symbol
+
+			if(dep.columns == null || dep.columns.size() < dep.qname.names.size()) {
+				this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve columns.", "Error resolving columns " + dep.pathName);
+				return;
+			}
+		}
+	}
+
+	//
+	// Build (native expression that can be evaluated)
+	//
+
+	public void build() {
+		// Build the final (native) expression
+		if(this.isExp4j()) {
+			this.exp4jExpression = this.buildExp4jExpression();
+		}
+		else if(this.isEvalex()) {
+			this.evalexExpression = this.buildEvalexExpression();
+		}
+	}
+	
+	// Build exp4j expression
+	protected net.objecthunter.exp4j.Expression buildExp4jExpression() {
+
+		String transformedFormula = this.transformFormula();
+
+		//
+		// Create a list of variables used in the expression
+		//
+		Set<String> vars = new HashSet<String>();
+		Map<String, Double> vals = new HashMap<String, Double>();
+		for(PrimExprDependency dep : this.primExprDependencies) {
+			if(dep.paramName == null || dep.paramName.trim().isEmpty()) continue;
+			vars.add(dep.paramName);
+			vals.put(dep.paramName, 0.0);
+		}
+		// Set<String> vars = this.primExprDependencies.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
+		
+		// Add the current output value as a special (reserved) variable
+		if(!vars.contains(OUT_VARIABLE_NAME)) vars.add(OUT_VARIABLE_NAME);
+		vals.put(OUT_VARIABLE_NAME, 0.0);
+
+		//
+		// Create expression object with the transformed formula
+		//
+		net.objecthunter.exp4j.Expression exp = null;
+		try {
+			net.objecthunter.exp4j.ExpressionBuilder builder = new net.objecthunter.exp4j.ExpressionBuilder(transformedFormula);
+			builder.variables(vars);
+			exp = builder.build(); // Here we get parsing exceptions which might need be caught and processed
+		}
+		catch(Exception e) {
+			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Expression error.", e.getMessage());
+			return null;
+		}
+
+		//
+		// Validate
+		//
+		exp.setVariables(vals); // Validation requires variables to be set
+		net.objecthunter.exp4j.ValidationResult res = exp.validate(); // Boolean argument can be used to ignore unknown variables
+		if(!res.isValid()) {
+			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Expression error.", res.getErrors() != null && res.getErrors().size() > 0 ? res.getErrors().get(0) : "");
+			return null;
+		}
+
+		return exp;
+	}
+
+	// Build Evalex expression
+	protected com.udojava.evalex.Expression buildEvalexExpression() {
+
+		String transformedFormula = this.transformFormula();
+
+		//
+		// Create a list of variables used in the expression
+		//
+		Set<String> vars = new HashSet<String>();
+		Map<String, Double> vals = new HashMap<String, Double>();
+		for(PrimExprDependency dep : this.primExprDependencies) {
+			if(dep.paramName == null || dep.paramName.trim().isEmpty()) continue;
+			vars.add(dep.paramName);
+			vals.put(dep.paramName, 0.0);
+		}
+		// Set<String> vars = this.primExprDependencies.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
+		
+		// Add the current output value as a special (reserved) variable
+		if(!vars.contains(OUT_VARIABLE_NAME)) vars.add(OUT_VARIABLE_NAME);
+		vals.put(OUT_VARIABLE_NAME, 0.0);
+
+		//
+		// Create expression object with the transformed formula
+		//
+		final com.udojava.evalex.Expression exp;
+		try {
+			exp = new com.udojava.evalex.Expression(transformedFormula);
+		}
+		catch(Exception e) {
+			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Expression error.", e.getMessage());
+			return null;
+		}
+
+		//
+		// Validate
+		//
+		vars.forEach(x -> exp.setVariable(x, new BigDecimal(1.0)));
+    	try {
+    		exp.toRPN(); // Generates prefixed representation but can be used to check errors (variables have to be set in order to correctly determine parse errors)
+    	}
+    	catch(com.udojava.evalex.Expression.ExpressionException ee) {
+			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Expression error.", ee.getMessage());
+			return null;
+    	}
+
+		return exp;
+	}
+
+	// Replace all occurrences of column paths in the formula by variable names from the symbol table
+	private String transformFormula() {
+		StringBuffer buf = new StringBuffer(this.formula);
+		for(int i = this.primExprDependencies.size()-1; i >= 0; i--) {
+			PrimExprDependency dep = this.primExprDependencies.get(i);
+			if(dep.start < 0 || dep.end < 0) continue; // Some dependencies are not from formula (e.g., group path)
+			dep.paramName = "__p__"+i;
+			buf.replace(dep.start, dep.end, dep.paramName);
+		}
+		return buf.toString();
+	}
+
+	public ExprNode2(Column column) {
+		this.column = column;
+	}
+}
+
+
+
+
+
+/**
  * It is a function definition with function name, function type and function formula. 
  * The formula can be a primitive expression or a tuple which is a combination of function formulas. 
  */
@@ -594,395 +916,6 @@ public class ExprNode {
 	public ExprNode() {
 	}
 }
-
-
-
-
-
-/**
- * 
- */
-class ExprNode2 implements EvaluatorExpr {
-	public static String OUT_VARIABLE_NAME = "out";
-	
-	public boolean isExp4j() { return true; }
-	public boolean isEvalex() { return false; }
-	
-	//
-	// Formula and its parameters
-	//
-	public String formula; // Function with column path always relative to the table
-
-	public String tableName; // Table where we define a new (aggregated) column
-	public Table table;
-
-	public String name; // Column name for which the result is computed (not necessarily starts from the table)
-	public Column column;
-
-	//
-	// EvaluatorExpr
-	//
-	public void setParamPaths(List<String> paths) {
-		; // TODO
-	}
-	public List<QName> getParamPaths() { // TODO: Ensure that the first path is this column itself
-		List<QName> paths = new ArrayList<QName>();
-		for(PrimExprDependency dep : this.primExprDependencies) {
-			paths.add(dep.qname);
-		}
-		return paths;
-	}
-	public Object evaluate(List<Object>[] params) {
-		return null; // TODO
-	}
-
-	//
-	// Status of the previous operation performed
-	//
-	public DcError status;
-	public ExprNode2 getErrorNode() { // Find first node with an error and return it. Otherwise, null
-		if(this.status != null && this.status.code != DcErrorCode.NONE) {
-			return this;
-		}
-		return null;
-	}
-
-	protected List<PrimExprDependency> primExprDependencies = new ArrayList<PrimExprDependency>(); // Will be filled by parser and then augmented by binder
-	
-	public List<Column> getDependencies() { // Extract all unique column objects used (must be bound)
-		List<Column> columns = new ArrayList<Column>();
-		for(PrimExprDependency dep : this.primExprDependencies) {
-			if(dep.columns == null) continue; // Probably not yet resolved
-			dep.columns.forEach(x -> { if(!columns.contains(x)) columns.add(x); }); // Each dependency is a path and different paths can included same segments
-		}
-		return columns;
-	}
-
-	//
-	// Parse
-	//
-
-	/**
-	 * Parse formulas by possibly building a tree of expressions with primitive expressions in the leaves.
-	 * Any assignment has well defined structure QName=( {sequence of assignments} | expression)
-	 * The result of parsing is a list of symbols.
-	 */
-	public void parse() {
-		if(this.formula == null || this.formula.isEmpty()) return;
-
-		this.primExprDependencies = new ArrayList<PrimExprDependency>();
-
-		this.parsePrimExpr(this.formula);
-	}
-
-	// Find all occurrences of column paths in the primitive expression
-	public void parsePrimExpr(String frml) {
-		if(frml == null || frml.isEmpty()) return;
-		
-		//
-		// Find all occurrences of individual columns names in square brackets
-		//
-		String ex =  "\\[(.*?)\\]";
-		//String ex = "[\\[\\]]";
-		Pattern p = Pattern.compile(ex,Pattern.DOTALL);
-		Matcher matcher = p.matcher(frml);
-
-		List<PrimExprDependency> names = new ArrayList<PrimExprDependency>();
-		while(matcher.find())
-		{
-			int s = matcher.start();
-			int e = matcher.end();
-			String name = matcher.group();
-			PrimExprDependency entry = new PrimExprDependency();
-			entry.start = s;
-			entry.end = e;
-			names.add(entry);
-		}
-		
-		//
-		// Create paths by concatenating dot separated name sequences
-		//
-		for(int i = 0; i < names.size(); i++) {
-			if(i == names.size()-1) { // Last element does not have continuation
-				this.primExprDependencies.add(names.get(i));
-				break;
-			}
-			
-			int thisEnd = names.get(i).end;
-			int nextStart = names.get(i+1).start;
-			
-			if(frml.substring(thisEnd, nextStart).trim().equals(".")) { // There is continuation.
-				names.get(i+1).start = names.get(i).start; // Attach this name to the next name as a prefix
-			}
-			else { // No continuation. Ready to copy as path.
-				this.primExprDependencies.add(names.get(i));
-			}
-		}
-
-    	//
-		// Process the paths
-		//
-		QNameBuilder parser = new QNameBuilder();
-
-		for(PrimExprDependency dep : this.primExprDependencies) {
-			dep.pathName = frml.substring(dep.start, dep.end);
-			dep.qname = parser.buildQName(dep.pathName); // TODO: There might be errors here, e.g., wrong characters in names
-		}
-		
-		this.status = new DcError(DcErrorCode.NONE, "Parsed successfully.", "");
-	}
-	
-	//
-	// Bind
-	//
-
-	// Resolve all symbols found after parsing and store them in dependency graph or in this expression fields
-	public void bind() {
-		
-		this.bindPrimExpr(); // Resolve symbols used in the formula relative to the main table
-
-		// Build the final (native) expression
-		if(this.isExp4j()) {
-			this.exp4jExpression = this.buildExp4jExpression();
-		}
-		else if(this.isEvalex()) {
-			this.evalexExpression = this.buildEvalexExpression();
-		}
-	}
-
-	public void bindPrimExpr() {
-
-		if(this.primExprDependencies == null) { // Here we store all symbols in the formula that need to be resolved
-			return;
-		}
-
-		Schema schema = this.column.getSchema(); // Resolve against this schema
-
-		//
-		// Resolve table
-		//
-		this.table = schema.getTable(this.tableName); // Resolve table name
-		
-		if(this.table == null) {
-			this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve table.", "Error resolving table " + this.tableName);
-			return;
-		}
-		
-		//
-		// Resolve each column path in the formula relative to the table. Group path is also in this list.
-		//
-		for(PrimExprDependency dep : this.primExprDependencies) {
-
-			dep.columns = dep.qname.resolveColumns(this.table); // Try to really resolve symbol
-
-			if(dep.columns == null || dep.columns.size() < dep.qname.names.size()) {
-				this.status = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve columns.", "Error resolving columns " + dep.pathName);
-				return;
-			}
-		}
-
-	}
-	
-	// Replace all occurrences of column paths in the formula by variable names from the symbol table
-	private String transformFormula() {
-		StringBuffer buf = new StringBuffer(this.formula);
-		for(int i = this.primExprDependencies.size()-1; i >= 0; i--) {
-			PrimExprDependency dep = this.primExprDependencies.get(i);
-			if(dep.start < 0 || dep.end < 0) continue; // Some dependencies are not from formula (e.g., group path)
-			dep.paramName = "__p__"+i;
-			buf.replace(dep.start, dep.end, dep.paramName);
-		}
-		return buf.toString();
-	}
-
-	//
-	// Evaluate
-	//
-
-	// Expression that is used during evaluation
-	protected net.objecthunter.exp4j.Expression exp4jExpression;
-	protected com.udojava.evalex.Expression evalexExpression = null;
-
-	// Build exp4j expression
-	protected net.objecthunter.exp4j.Expression buildExp4jExpression() {
-
-		String transformedFormula = this.transformFormula();
-
-		//
-		// Create a list of variables used in the expression
-		//
-		Set<String> vars = new HashSet<String>();
-		Map<String, Double> vals = new HashMap<String, Double>();
-		for(PrimExprDependency dep : this.primExprDependencies) {
-			if(dep.paramName == null || dep.paramName.trim().isEmpty()) continue;
-			vars.add(dep.paramName);
-			vals.put(dep.paramName, 0.0);
-		}
-		// Set<String> vars = this.primExprDependencies.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
-		
-		// Add the current output value as a special (reserved) variable
-		if(!vars.contains(OUT_VARIABLE_NAME)) vars.add(OUT_VARIABLE_NAME);
-		vals.put(OUT_VARIABLE_NAME, 0.0);
-
-		//
-		// Create expression object with the transformed formula
-		//
-		net.objecthunter.exp4j.Expression exp = null;
-		try {
-			net.objecthunter.exp4j.ExpressionBuilder builder = new net.objecthunter.exp4j.ExpressionBuilder(transformedFormula);
-			builder.variables(vars);
-			exp = builder.build(); // Here we get parsing exceptions which might need be caught and processed
-		}
-		catch(Exception e) {
-			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Expression error.", e.getMessage());
-			return null;
-		}
-
-		//
-		// Validate
-		//
-		exp.setVariables(vals); // Validation requires variables to be set
-		net.objecthunter.exp4j.ValidationResult res = exp.validate(); // Boolean argument can be used to ignore unknown variables
-		if(!res.isValid()) {
-			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Expression error.", res.getErrors() != null && res.getErrors().size() > 0 ? res.getErrors().get(0) : "");
-			return null;
-		}
-
-		return exp;
-	}
-
-	// Build Evalex expression
-	protected com.udojava.evalex.Expression buildEvalexExpression() {
-
-		String transformedFormula = this.transformFormula();
-
-		//
-		// Create a list of variables used in the expression
-		//
-		Set<String> vars = new HashSet<String>();
-		Map<String, Double> vals = new HashMap<String, Double>();
-		for(PrimExprDependency dep : this.primExprDependencies) {
-			if(dep.paramName == null || dep.paramName.trim().isEmpty()) continue;
-			vars.add(dep.paramName);
-			vals.put(dep.paramName, 0.0);
-		}
-		// Set<String> vars = this.primExprDependencies.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
-		
-		// Add the current output value as a special (reserved) variable
-		if(!vars.contains(OUT_VARIABLE_NAME)) vars.add(OUT_VARIABLE_NAME);
-		vals.put(OUT_VARIABLE_NAME, 0.0);
-
-		//
-		// Create expression object with the transformed formula
-		//
-		final com.udojava.evalex.Expression exp;
-		try {
-			exp = new com.udojava.evalex.Expression(transformedFormula);
-		}
-		catch(Exception e) {
-			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Expression error.", e.getMessage());
-			return null;
-		}
-
-		//
-		// Validate
-		//
-		vars.forEach(x -> exp.setVariable(x, new BigDecimal(1.0)));
-    	try {
-    		exp.toRPN(); // Generates prefixed representation but can be used to check errors (variables have to be set in order to correctly determine parse errors)
-    	}
-    	catch(com.udojava.evalex.Expression.ExpressionException ee) {
-			this.status = new DcError(DcErrorCode.PARSE_ERROR, "Expression error.", ee.getMessage());
-			return null;
-    	}
-
-		return exp;
-	}
-
-	public Object result; // Result of evaluation: either primitive value or record id
-
-	protected void setFormulaExpressionVariables(long i) { // Pass all variable values for the specified input to the compute expression
-
-		for(PrimExprDependency dep : this.primExprDependencies) {
-			if(dep.paramName == null || dep.paramName.trim().isEmpty()) continue;
-			Object value = dep.columns.get(0).getData().getValue(dep.columns, i); // Read column value
-			if(value == null) value = Double.NaN;
-			try {
-				if(this.isExp4j()) {
-					this.exp4jExpression.setVariable(dep.paramName, ((Number)value).doubleValue());
-				}
-				else if(this.isEvalex()) {
-					
-				}
-			}
-			catch(Exception e) {
-				;
-			}
-		}
-		
-		// Data
-		ColumnData data = this.column.getData();
-
-		// Set current output value as a special variable
-		Object outputValue = null; // TODO: 
-
-		try {
-			if(this.isExp4j()) {
-				this.exp4jExpression.setVariable(OUT_VARIABLE_NAME, ((Number)outputValue).doubleValue());
-			}
-			else if(this.isEvalex()) {
-				
-			}
-		}
-		catch(Exception e) {
-			;
-		}
-	}
-
-	public void evaluate(long i) {
-		
-		// Determine if the formula can be and has to be evaluated
-		boolean numericEvalution = true;
-		if(this.primExprDependencies.size() == 1) {
-			PrimExprDependency dep = this.primExprDependencies.get(0);
-			
-			// Check if param name is equal to the whole formula (there are no operations)
-			// Alternatively, check if expression tree has one node with parameter
-			if(this.formula.trim().equals(dep.pathName.trim())) {
-				numericEvalution = false;
-			}
-		}
-		
-		if(!numericEvalution) { // No evaluation needed or possible for this formula
-			// Copy the value to the output (since no operations)
-			PrimExprDependency dep = this.primExprDependencies.get(0);
-			Object value = dep.columns.get(0).getData().getValue(dep.columns, i); // Read column value
-			result = value;
-		}
-		else { // Arithmetic expression that needs to be evaluated
-			
-			this.setFormulaExpressionVariables(i); // For each input, read all necessary column values from fact table and the current output from the group table
-
-			// Build the final (native) expression
-			if(this.isExp4j()) {
-				result = this.exp4jExpression.evaluate();
-			}
-			else if(this.isEvalex()) {
-				result = this.evalexExpression.eval();
-			}
-
-		}
-
-	}
-
-	
-	public ExprNode2() {
-	}
-}
-
-
-
-
 
 class PrimExprDependency {
 	public int start;

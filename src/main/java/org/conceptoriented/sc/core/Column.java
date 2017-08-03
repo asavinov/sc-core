@@ -16,6 +16,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -96,6 +97,19 @@ public class Column {
 	public void setFormula(String formula) {
 		if(this.formula != null && this.formula.equals(formula)) return; // Nothing to change
 		this.formula = formula;
+		this.setFormulaChange(true);
+	}
+	
+	//
+	// Link formula
+	//
+	
+	protected List<Pair<String,String>> linkFormulas;
+	public List<Pair<String,String>> getLinkFormulas() {
+		return this.linkFormulas;
+	}
+	public void setFormula(List<Pair<String,String>> linkFormulas) {
+		this.linkFormulas = linkFormulas;
 		this.setFormulaChange(true);
 	}
 	
@@ -287,7 +301,6 @@ public class Column {
 	}
 
 
-
 	//
 	// Translate formula NEW
 	// Parse and bind. Generate dependencies. Generate necessary evaluators. Produce new (error) status of translation.
@@ -297,14 +310,14 @@ public class Column {
 	EvaluatorExpr calcEvaluator;
 
 	// Link evaluators
-	List<EvaluatorExpr> linkEvaluators;
+	List<Pair<Column,EvaluatorExpr>> linkEvaluators = new ArrayList<Pair<Column,EvaluatorExpr>>();
 
 	// Accu evaluators
 	EvaluatorExpr initEvaluator;
 	EvaluatorExpr accuEvaluator;
 	EvaluatorExpr finEvaluator;
 
-	public void translate_new() {
+	public void translate2() {
 
 		if(this.kind == DcColumnKind.AUTO) {
 			this.kind = determineAutoColumnKind();
@@ -314,7 +327,8 @@ public class Column {
 		// Reset
 		//
 
-		this.linkEvaluators = null;
+		this.calcEvaluator = null;
+		this.linkEvaluators.clear();;
 		this.initEvaluator = null;
 		this.accuEvaluator = null;
 		this.finEvaluator = null;
@@ -328,21 +342,9 @@ public class Column {
 				return;
 			}
 
-			ExprNode2 expr = new ExprNode2();
-
-			// Parse: check correct syntax, find all symbols and store them in dependencies
-			expr.formula = this.formula;
-			expr.tableName = this.getInput().getName();
-			expr.name = this.name;
-			expr.parse();
-
-			// Bind (check if all the symbols can be resolved)
-			expr.table = this.getInput();
-			expr.column = this;
-			expr.bind();
+			this.calcEvaluator = new ExprNode2(this);
+			this.calcEvaluator.translate(this.formula);
 			
-			this.calcEvaluator = expr;
-
 			// Extract deps from the main evaluator
 			// TODO: We need to exclude dep from itself (output column)
 			List<Column> deps = new ArrayList<Column>();
@@ -351,7 +353,20 @@ public class Column {
 			columns.addAll(deps); 
 		}
 		else if(this.kind == DcColumnKind.LINK) {
-			this.linkEvaluators = null;
+
+			// - Do we need to initialize? Or we get something like null in any case?
+			// - How to parameterize link member evaluators? Where to use right hand side of the assignment? In the expression or outside? Rhs will be used by the finder/appender only?
+
+			for(Pair<String,String> assign : linkFormulas) { // For each tuple member (assignment) create an expression
+				ExprNode2 expr = new ExprNode2(this);
+				expr.translate(assign.getRight());
+				
+				Column assignColumn = this.schema.getColumn(this.getOutput().getName(), assign.getLeft());
+				this.linkEvaluators.add(Pair.of(assignColumn,expr));
+
+				// TODO: Collect dependencies
+				
+			}
 		}
 		else if(this.kind == DcColumnKind.ACCU) {
 			this.initEvaluator = null;
@@ -361,35 +376,145 @@ public class Column {
 				return;
 			}
 
-			// TODO: Automate creation of ExprNode object for calc, init, accu, fin exprssions and possible link member expression
-			// - What to if no expression? Set default by the parser or later by the evaluator?
-			// - How to parameterize link member evaluators? Where to use right hand side of the assignment? In the expression or outside? Rhs will be used by the finder/appender only?
+			// TODO: Process init expression. We can assume that it must exist but if not specified by the user them is set as a default expression like constant).
 
-			ExprNode2 expr = new ExprNode2();
-
-			// Parse: check correct syntax, find all symbols and store them in dependencies
-			expr.formula = this.accuformula;
-			expr.tableName = this.accutable;
-			expr.name = this.name;
-			expr.parse();
-
-			// Bind (check if all the symbols can be resolved)
-			expr.column = this;
-			expr.bind();
-
-			this.calcEvaluator = expr;
+			Column accuLinkColumn = this.schema.getColumn(this.accutable, this.accupath);
+			this.accuEvaluator = new ExprNode2(accuLinkColumn); // TODO: it has to be resolved from the group column name (not path)
+			this.accuEvaluator.translate(this.accuformula);
 
 			// Extract deps from the main evaluator
 			// TODO:
 			// Note that one dependency is group path. It has to be resolved (to check existence, bind) and included in deps
 
 		}
+		else if(this.getKind() == DcColumnKind.CLASS) {
+			;
+		}
 
 		this.setDependencies(columns);
 	}
 
+	//
+	// Evaluate column NEW
+	//
+	public void evaluate2() {
+		
+		if(this.getKind() == DcColumnKind.CALC) {
+			// Evaluate calc expression
+			if(this.formula == null || this.formula.trim().isEmpty() || this.calcEvaluator == null) { // Default
+				evaluateSimpleDefault();
+			}
+			else {
+				evaluateSimple(this.calcEvaluator);
+			}
+		}
+		if(this.getKind() == DcColumnKind.LINK) {
+			
+		}
+		else if(this.getKind() == DcColumnKind.ACCU) {
+			// Evaluate init expression
+			if(this.formula == null || this.formula.trim().isEmpty() || this.initEvaluator == null) { // Default
+				evaluateSimpleDefault();
+			}
+			else {
+				evaluateSimple(this.initEvaluator);
+			}
+			
+			//
+			// Evaluate accu expression
+			//
+			
+			// Params:
+			// - accu table is used to resolve normal params and for getting range
+			Table accuTable;
+			// - accu column (link column) is used to find g (it must be in dependencies, but it is not explicitly in expression as a param)
+			Column accuLinkColumn = this.schema.getColumn(this.accutable, this.accupath);
+
+			// - normal parameters as paths obtained from accu expr and resolved relative to accu table
+
+			// - this column is used to read out param value using g (also used for finalizer using i)
+			// - this column is used to store the result
+			//
+			
+			
+			Range accuRange = accuLinkColumn.getData().getIdRange(); // We use all existing rows for full re-evaluate
 
 
+			List<Column> paramNames = new ArrayList<Column>();
+
+			Object[] params = new Object[paramNames.size()];
+
+			Object out;
+			for(long i=accuRange.start; i<accuRange.end; i++) {
+				// Find group
+				long g = (Long) accuLinkColumn.getData().getValue(i); // Find group element to be updated
+				// Read the current out value
+
+				// Read parameter values
+
+				// Evaluate
+				out = this.accuEvaluator.evaluate(params); // Evaluate
+
+				// Update output
+				this.data.setValue(g, out);
+			}
+
+			// Evaluate fin expression
+			if(this.formula == null || this.formula.trim().isEmpty() || this.finEvaluator == null) { // Default
+				; // Do nothing
+			}
+			else {
+				evaluateSimple(this.finEvaluator);
+			}
+		}
+
+		this.data.markNewAsClean(); // Mark dirty as clean
+
+		this.setFormulaClean(); // Mark up-to-date if successful
+
+		this.setEvaluateTime(); // Store the time of evaluation
+	}
+	
+	private void evaluateSimple(EvaluatorExpr evalExpr) {
+		List<QName> paths = evalExpr.getParamPaths();
+		List<Column> paramNames = new ArrayList<Column>(); // TODO Resolve paths into function objects
+		
+		Range mainRange = this.data.getIdRange();
+
+		Object[] params = new Object[paramNames.size()]; // Will store values for all params
+		Object out;
+		for(long i=mainRange.start; i<mainRange.end; i++) {
+			// Read parameter values
+			int paramNo = 0;
+			for(Column paramName : paramNames) {
+				params[paramNo] = paramName; // TODO: Read param name from the data function object
+			}
+			
+			// Evaluate
+			out = evalExpr.evaluate(params);
+
+			// Update output
+			this.data.setValue(i, out);
+		}
+	}
+	private void evaluateSimpleDefault() {
+		Range mainRange = this.data.getIdRange(); // All dirty/new rows
+		Object defaultValue = getDefaultValue();
+		for(long i=mainRange.start; i<mainRange.end; i++) {
+			this.data.setValue(i, defaultValue);
+		}
+	}
+
+	private Object getDefaultValue() { // Depends on the column type
+		Object defaultValue;
+		if(this.getOutput().isPrimitive()) {
+			defaultValue = 0.0;
+		}
+		else {
+			defaultValue = null;
+		}
+		return defaultValue;
+	}
 
 	//
 	// Translate formula

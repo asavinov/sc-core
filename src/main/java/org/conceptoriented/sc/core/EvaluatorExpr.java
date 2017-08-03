@@ -43,12 +43,14 @@ public interface EvaluatorExpr {
 	//public List<String> getParamDescriptions();
 
 
+	public void translate(String formula);
+
 	/**
 	 * Compute output value using the provide input values. 
 	 * The first parameter is the current output value (or null).
 	 * Note that all parameters are output values of different paths for one and the same input id.
 	 */
-	public Object evaluate(List<Object>[] params);
+	public Object evaluate(Object[] params);
 }
 
 
