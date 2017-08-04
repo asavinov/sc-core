@@ -11,6 +11,8 @@ import java.util.List;
  */
 public class QName {
 	
+	private static QNameBuilder parser = new QNameBuilder();
+
 	public List<String> names = new ArrayList<String>();
 	
 	// Assume that it is a column path, resolve all individual columns relative to the specified table
@@ -35,7 +37,7 @@ public class QName {
 	// Assume that the sequence is a fully qualified name of a column
 	public Column resolveColumn(Schema schema, Table table) { // Table is used only if no table name is available
 		
-		String tableName = getTableName();
+		String tableName = this.getTableName();
 		if(tableName == null) {
 			if(table != null)
 				tableName = table.getName();
@@ -61,4 +63,8 @@ public class QName {
 		return names.get(names.size()-1); // Last segment
 	}
 
+	public static QName parse(String path) {
+		QName ret = parser.buildQName(path); // TODO: There might be errors here, e.g., wrong characters in names
+		return ret;
+	}
 }

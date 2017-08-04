@@ -193,7 +193,7 @@ public class Tests {
         table.append(record);
         
         columnB.setKind(DcColumnKind.CALC);
-        columnB.setFormula("2 * [A] + 1");
+        columnB.setCalcFormula("2 * [A] + 1");
 
         columnB.translate();
         
@@ -240,7 +240,7 @@ public class Tests {
         t2.append(Record.fromJson("{ A: 10.0, B: \"ccc\" }"));
 
         c5.setKind(DcColumnKind.LINK);
-        c5.setFormula(" { [A] = [A]; [B] = [B] } ");
+        c5.setCalcFormula(" { [A] = [A]; [B] = [B] } ");
 
         c5.translate();
 
@@ -311,10 +311,10 @@ public class Tests {
         // Define accu column
         Column ta = schema.createColumn("T", "A", "Double");
         ta.setKind(DcColumnKind.ACCU);
-        ta.setFormula(""); // Init to default
-        ta.setAccutable("T2");
-        ta.setAccuformula(" out + 2.0 * [Id] ");
-        ta.setAccupath("[G]");
+        ta.setCalcFormula(""); // Init to default
+        ta.setAccuTable("T2");
+        ta.setAccuFormula(" out + 2.0 * [Id] ");
+        ta.setAccuPath("[G]");
 
         //
         // Table 2 (fact table)
@@ -326,7 +326,7 @@ public class Tests {
         // Define group column
         Column t2g = schema.createColumn("T2", "G", "T");
         t2g.setKind(DcColumnKind.LINK);
-        t2g.setFormula(" { [Id] = [Id] } ");
+        t2g.setCalcFormula(" { [Id] = [Id] } ");
         
         return schema;
     }

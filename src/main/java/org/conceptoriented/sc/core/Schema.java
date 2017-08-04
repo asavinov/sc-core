@@ -373,11 +373,11 @@ public class Schema {
 
 			col.setKind(kind);
 
-			col.setFormula(formula);
+			col.setCalcFormula(formula);
 
-			col.setAccuformula(accuformula);
-			col.setAccutable(accutable);
-			col.setAccupath(accupath);
+			col.setAccuFormula(accuformula);
+			col.setAccuTable(accutable);
+			col.setAccuPath(accupath);
 
 			col.setDescriptor(descr_string);
 			
@@ -452,11 +452,11 @@ public class Schema {
 
 		if(obj.has("kind")) column.setKind(kind);
 
-		if(obj.has("formula")) column.setFormula(formula);
+		if(obj.has("formula")) column.setCalcFormula(formula);
 
-		if(obj.has("accuformula")) column.setAccuformula(accuformula);
-		if(obj.has("accutable")) column.setAccutable(accutable);
-		if(obj.has("accupath")) column.setAccupath(accupath);
+		if(obj.has("accuformula")) column.setAccuFormula(accuformula);
+		if(obj.has("accutable")) column.setAccuTable(accutable);
+		if(obj.has("accupath")) column.setAccuPath(accupath);
 
 		if(obj.has("descriptor")) column.setDescriptor(descr_string);
 	}

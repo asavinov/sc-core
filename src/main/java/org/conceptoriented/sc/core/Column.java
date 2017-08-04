@@ -5,6 +5,7 @@ import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -66,7 +67,7 @@ public class Column {
 
 
 	//
-	// Formula
+	// Formula kind
 	//
 	
 	protected DcColumnKind kind;
@@ -76,27 +77,24 @@ public class Column {
 	public void setKind(DcColumnKind kind) {
 		this.kind = kind;
 	}
-
 	public boolean isDerived() {
-		DcColumnKind k = this.kind;
-		if(this.kind == DcColumnKind.AUTO) {
-			k = this.determineAutoColumnKind();
-		}
-
-		if(k == DcColumnKind.CALC || k == DcColumnKind.ACCU || k == DcColumnKind.LINK || k == DcColumnKind.CLASS) {
+		if(this.kind == DcColumnKind.CALC || this.kind == DcColumnKind.ACCU || this.kind == DcColumnKind.LINK || this.kind == DcColumnKind.CLASS) {
 			return true;
 		}
-
 		return false;
 	}
 
-	protected String formula;
-	public String getFormula() {
-		return this.formula;
+	//
+	// Calc formula
+	//
+	
+	protected String calcFormula;
+	public String getCalcFormula() {
+		return this.calcFormula;
 	}
-	public void setFormula(String formula) {
-		if(this.formula != null && this.formula.equals(formula)) return; // Nothing to change
-		this.formula = formula;
+	public void setCalcFormula(String frml) {
+		if(this.calcFormula != null && this.calcFormula.equals(frml)) return; // Nothing to change
+		this.calcFormula = frml;
 		this.setFormulaChange(true);
 	}
 	
@@ -104,12 +102,13 @@ public class Column {
 	// Link formula
 	//
 	
-	protected List<Pair<String,String>> linkFormulas;
+	protected List<Pair<String,String>> linkFormulas = new ArrayList<Pair<String,String>>();
 	public List<Pair<String,String>> getLinkFormulas() {
 		return this.linkFormulas;
 	}
 	public void setFormula(List<Pair<String,String>> linkFormulas) {
-		this.linkFormulas = linkFormulas;
+		this.linkFormulas.clear();;
+		this.linkFormulas.addAll(linkFormulas);
 		this.setFormulaChange(true);
 	}
 	
@@ -117,74 +116,56 @@ public class Column {
 	// Accumulation formula
 	//
 	
-	protected String accuformula; // It is applied to accutable
-	public String getAccuformula() {
-		return this.accuformula;
+	protected String accuFormula; // It is applied to accutable
+	public String getAccuFormula() {
+		return this.accuFormula;
 	}
-	public void setAccuformula(String accuformula) {
-		if(this.accuformula != null && this.accuformula.equals(accuformula)) return; // Nothing to change
-		this.accuformula = accuformula;
+	public void setAccuFormula(String accuFrml) {
+		if(this.accuFormula != null && this.accuFormula.equals(accuFrml)) return; // Nothing to change
+		this.accuFormula = accuFrml;
 		this.setFormulaChange(true);
 	}
 	
-	protected String accutable;
-	public String getAccutable() {
-		return this.accutable;
+	protected String accuTable;
+	public String getAccuTable() {
+		return this.accuTable;
 	}
-	public void setAccutable(String accutable) {
-		if(this.accutable != null && this.accutable.equals(accutable)) return; // Nothing to change
-		this.accutable = accutable;
+	public void setAccuTable(String accuTbl) {
+		if(this.accuTable != null && this.accuTable.equals(accuTbl)) return; // Nothing to change
+		this.accuTable = accuTbl;
 		this.setFormulaChange(true);
 	}
 	
-	protected String accupath; // It leads from accutable to the input table of the column
-	public String getAccupath() {
-		return this.accupath;
+	protected String accuPath; // It leads from accutable to the input table of the column
+	public String getAccuPath() {
+		return this.accuPath;
 	}
-	public void setAccupath(String accupath) {
-		if(this.accupath != null && this.accupath.equals(accupath)) return; // Nothing to change
-		this.accupath = accupath;
+	public void setAccuPath(String accupath) {
+		if(this.accuPath != null && this.accuPath.equals(accupath)) return; // Nothing to change
+		this.accuPath = accupath;
 		this.setFormulaChange(true);
 	}
 	
-	// Determine if it is syntactically accumulation, that is, it seems to be intended for accumulation.
-	// In fact, it can be viewed as a syntactic check of validity and can be called isValidAccumulation
-	public boolean isAccumulatedColumnKind() {
-		if(this.accuformula == null || this.accuformula.trim().isEmpty()) return false;
-		if(this.accutable == null || this.accutable.trim().isEmpty()) return false;
-		if(this.accupath == null || this.accupath.trim().isEmpty()) return false;
-
-		if(this.accutable.equalsIgnoreCase(this.getInput().getName())) return false;
-
-		return true;
+	// Initialize
+	protected String initFormula;
+	public String getInitFormula() {
+		return this.initFormula;
 	}
-
-	// Try to auto determine what is the formula type and hence how it has to be translated and evaluated
-	public DcColumnKind determineAutoColumnKind() {
-
-		if((this.formula == null || this.formula.trim().isEmpty()) 
-				&& (this.accuformula == null || this.accuformula.trim().isEmpty())
-				&& (this.descriptor == null || this.descriptor.trim().isEmpty())) {
-			return DcColumnKind.NONE;
-		}
-		
-		if(this.descriptor != null && !this.descriptor.trim().isEmpty()) {
-			return DcColumnKind.CLASS;
-		}
-
-		if(this.getOutput().isPrimitive()) { // Either calc or accu
-			
-			if(this.accuformula == null || this.accuformula.trim().isEmpty()) {
-				return DcColumnKind.CALC;
-			}
-			else {
-				return DcColumnKind.ACCU;
-			}
-
-		}
-		else { // Only tuple
-			return DcColumnKind.LINK;
-		}
+	public void setInitFormula(String frml) {
+		if(this.initFormula != null && this.initFormula.equals(frml)) return; // Nothing to change
+		this.initFormula = frml;
+		this.setFormulaChange(true);
+	}
+	
+	// Finalize
+	protected String finFormula;
+	public String getFinFormula() {
+		return this.finFormula;
+	}
+	public void setFinFormula(String frml) {
+		if(this.finFormula != null && this.finFormula.equals(frml)) return; // Nothing to change
+		this.finFormula = frml;
+		this.setFormulaChange(true);
 	}
 
 	//
@@ -294,12 +275,12 @@ public class Column {
 		return this.dependencies;
 	}
 	public void setDependencies(List<Column> deps) {
-		this.dependencies = deps;
+		resetDependencies();
+		this.dependencies.addAll(deps);
 	}
 	public void resetDependencies() {
-		this.dependencies = new ArrayList<Column>();
+		this.dependencies.clear();
 	}
-
 
 	//
 	// Translate formula NEW
@@ -307,85 +288,79 @@ public class Column {
 	//
 	
 	// Calc evaluator
-	EvaluatorExpr calcEvaluator;
+	Evaluator calcEvaluator;
 
 	// Link evaluators
-	List<Pair<Column,EvaluatorExpr>> linkEvaluators = new ArrayList<Pair<Column,EvaluatorExpr>>();
+	List<Pair<Column,Evaluator>> linkEvaluators = new ArrayList<Pair<Column,Evaluator>>();
 
 	// Accu evaluators
-	EvaluatorExpr initEvaluator;
-	EvaluatorExpr accuEvaluator;
-	EvaluatorExpr finEvaluator;
+	Evaluator initEvaluator;
+	Evaluator accuEvaluator;
+	Evaluator finEvaluator;
+	List<Column> accuPathColumns;
 
 	public void translate2() {
 
-		if(this.kind == DcColumnKind.AUTO) {
-			this.kind = determineAutoColumnKind();
-		}
-
-		//
 		// Reset
-		//
-
 		this.calcEvaluator = null;
+
 		this.linkEvaluators.clear();;
+
 		this.initEvaluator = null;
 		this.accuEvaluator = null;
 		this.finEvaluator = null;
 
 		this.resetDependencies();
 		List<Column> columns = new ArrayList<Column>();
+		
+		Table inputTable = this.getInput();
+		Table outputTable = this.getOutput();
 
+		// Translate depending on the formula kind
 		if(this.kind == DcColumnKind.CALC) {
-			this.calcEvaluator = null;
-			if(this.formula == null || this.formula.isEmpty()) {
-				return;
-			}
+			if(this.calcFormula == null || this.calcFormula.isEmpty()) return;
 
-			this.calcEvaluator = new ExprNode2(this);
-			this.calcEvaluator.translate(this.formula);
-			
-			// Extract deps from the main evaluator
-			// TODO: We need to exclude dep from itself (output column)
-			List<Column> deps = new ArrayList<Column>();
-			List<QName> paths = this.calcEvaluator.getParamPaths();
-			paths.forEach(p -> deps.addAll(p.resolveColumns(this.getInput())));
-			columns.addAll(deps); 
+			this.calcEvaluator = new EvaluatorExpr(inputTable);
+			this.calcEvaluator.translate(this.calcFormula);
+			columns.addAll(this.calcEvaluator.getDependencies());
 		}
 		else if(this.kind == DcColumnKind.LINK) {
+			for(Pair<String,String> mmbr : this.linkFormulas) { // For each tuple member (assignment) create an expression
 
-			// - Do we need to initialize? Or we get something like null in any case?
-			// - How to parameterize link member evaluators? Where to use right hand side of the assignment? In the expression or outside? Rhs will be used by the finder/appender only?
-
-			for(Pair<String,String> assign : linkFormulas) { // For each tuple member (assignment) create an expression
-				ExprNode2 expr = new ExprNode2(this);
-				expr.translate(assign.getRight());
+				// Right hand side
+				EvaluatorExpr expr = new EvaluatorExpr(inputTable);
+				expr.translate(mmbr.getRight());
+				columns.addAll(expr.getDependencies());
 				
-				Column assignColumn = this.schema.getColumn(this.getOutput().getName(), assign.getLeft());
+				// Left hand side (column of the type table)
+				Column assignColumn = this.schema.getColumn(outputTable.getName(), mmbr.getLeft());
 				this.linkEvaluators.add(Pair.of(assignColumn,expr));
-
-				// TODO: Collect dependencies
-				
+				columns.add(assignColumn);
 			}
 		}
 		else if(this.kind == DcColumnKind.ACCU) {
-			this.initEvaluator = null;
-			this.accuEvaluator = null;
-			this.finEvaluator = null;
-			if(this.accuformula == null || this.accuformula.isEmpty()) {
-				return;
-			}
+			if(this.accuFormula == null || this.accuFormula.isEmpty()) return;
 
-			// TODO: Process init expression. We can assume that it must exist but if not specified by the user them is set as a default expression like constant).
+			// Initialization
+			this.initEvaluator = new EvaluatorExpr(inputTable);
+			this.initEvaluator.translate(this.calcFormula);
+			columns.addAll(this.initEvaluator.getDependencies());
 
-			Column accuLinkColumn = this.schema.getColumn(this.accutable, this.accupath);
-			this.accuEvaluator = new ExprNode2(accuLinkColumn); // TODO: it has to be resolved from the group column name (not path)
-			this.accuEvaluator.translate(this.accuformula);
+			// Accu table and link (group) path
+			Table accuTable = this.schema.getTable(this.getAccuTable());
+			QName accuLinkPath = QName.parse(this.accuPath);
+			this.accuPathColumns = accuLinkPath.resolveColumns(accuTable);
+			columns.addAll(this.accuPathColumns);
 
-			// Extract deps from the main evaluator
-			// TODO:
-			// Note that one dependency is group path. It has to be resolved (to check existence, bind) and included in deps
+			// Accu expression
+			this.accuEvaluator = new EvaluatorExpr(accuTable);
+			this.accuEvaluator.translate(this.accuFormula);
+			columns.addAll(this.accuEvaluator.getDependencies());
 
+			// Finalization
+			this.finEvaluator = new EvaluatorExpr(inputTable);
+			this.finEvaluator.translate(this.finFormula);
+			columns.addAll(this.finEvaluator.getDependencies());
 		}
 		else if(this.getKind() == DcColumnKind.CLASS) {
 			;
@@ -401,70 +376,73 @@ public class Column {
 		
 		if(this.getKind() == DcColumnKind.CALC) {
 			// Evaluate calc expression
-			if(this.formula == null || this.formula.trim().isEmpty() || this.calcEvaluator == null) { // Default
-				evaluateSimpleDefault();
+			if(this.calcFormula == null || this.calcFormula.trim().isEmpty() || this.calcEvaluator == null) { // Default
+				this.evaluateSimpleDefault();
 			}
 			else {
-				evaluateSimple(this.calcEvaluator);
+				this.evaluateSimple(this.calcEvaluator);
 			}
 		}
 		if(this.getKind() == DcColumnKind.LINK) {
+
+			// Prepare for each rhs expression
+			List<List<Column>>[] rhsParamPaths = null;
+			Object[][] rhsParamValues = null;
+			Object[] rhsResults = null;
+			
+			// Resolve paths into functions for each member
+
+
+
+
+			Table mainTable = this.getInput();
+			// Currently we make full scan by re-evaluating all existing input ids
+			Range mainRange = this.data.getIdRange();
+
+			for(long i=mainRange.start; i<mainRange.end; i++) {
+				
+				// Evaluate ALL child rhs expressions by producing an array of their results 
+				int mmbrNo = 0;
+				for(Pair<Column,Evaluator> mmbr : this.linkEvaluators) {
+
+					List<List<Column>> paramPaths = rhsParamPaths[mmbrNo]; // Functions for this expression parameters
+					Object[] paramValues = rhsParamValues[mmbrNo];
+					
+					// Read parameters
+
+
+					// Evaluate this expression
+					rhsResults[mmbrNo] = mmbr.getRight().evaluate(paramValues);
+				}
+
+				// Use rhsResults[childNo] to find/append this tuple of results in the type table (instead of storing) by using lhs[i]=rhs[i]
+				Table typeTable = this.getOutput();
+				long out = 0;
+
+				// Store the found/appended id in the output of this column
+				this.data.setValue(i, out);
+			}
+			
 			
 		}
 		else if(this.getKind() == DcColumnKind.ACCU) {
 			// Evaluate init expression
-			if(this.formula == null || this.formula.trim().isEmpty() || this.initEvaluator == null) { // Default
-				evaluateSimpleDefault();
+			if(this.initFormula == null || this.initFormula.trim().isEmpty() || this.initEvaluator == null) { // Default
+				this.evaluateSimpleDefault();
 			}
 			else {
-				evaluateSimple(this.initEvaluator);
+				this.evaluateSimple(this.initEvaluator);
 			}
 			
-			//
 			// Evaluate accu expression
-			//
-			
-			// Params:
-			// - accu table is used to resolve normal params and for getting range
-			Table accuTable;
-			// - accu column (link column) is used to find g (it must be in dependencies, but it is not explicitly in expression as a param)
-			Column accuLinkColumn = this.schema.getColumn(this.accutable, this.accupath);
-
-			// - normal parameters as paths obtained from accu expr and resolved relative to accu table
-
-			// - this column is used to read out param value using g (also used for finalizer using i)
-			// - this column is used to store the result
-			//
-			
-			
-			Range accuRange = accuLinkColumn.getData().getIdRange(); // We use all existing rows for full re-evaluate
-
-
-			List<Column> paramNames = new ArrayList<Column>();
-
-			Object[] params = new Object[paramNames.size()];
-
-			Object out;
-			for(long i=accuRange.start; i<accuRange.end; i++) {
-				// Find group
-				long g = (Long) accuLinkColumn.getData().getValue(i); // Find group element to be updated
-				// Read the current out value
-
-				// Read parameter values
-
-				// Evaluate
-				out = this.accuEvaluator.evaluate(params); // Evaluate
-
-				// Update output
-				this.data.setValue(g, out);
-			}
+			this.evaluateAccu(this.accuEvaluator, accuPathColumns);
 
 			// Evaluate fin expression
-			if(this.formula == null || this.formula.trim().isEmpty() || this.finEvaluator == null) { // Default
+			if(this.calcFormula == null || this.calcFormula.trim().isEmpty() || this.finEvaluator == null) { // Default
 				; // Do nothing
 			}
 			else {
-				evaluateSimple(this.finEvaluator);
+				this.evaluateSimple(this.finEvaluator);
 			}
 		}
 
@@ -475,26 +453,67 @@ public class Column {
 		this.setEvaluateTime(); // Store the time of evaluation
 	}
 	
-	private void evaluateSimple(EvaluatorExpr evalExpr) {
-		List<QName> paths = evalExpr.getParamPaths();
-		List<Column> paramNames = new ArrayList<Column>(); // TODO Resolve paths into function objects
-		
+	private void evaluateSimple(Evaluator evalExpr) {
+		Table mainTable = this.getInput();
+		// Currently we make full scan by re-evaluating all existing input ids
 		Range mainRange = this.data.getIdRange();
 
-		Object[] params = new Object[paramNames.size()]; // Will store values for all params
-		Object out;
+		// Get all necessary parameters and prepare (resolve) the corresponding data (function) objects for reading values
+		List<List<Column>> paramPaths = this.resolveParameterPaths(mainTable, evalExpr.getParamPaths());
+		Object[] paramValues = new Object[paramPaths.size()]; // Will store values for all params
+		Object result; // Will be written to output for each input
+
 		for(long i=mainRange.start; i<mainRange.end; i++) {
-			// Read parameter values
+
+			// Read all parameter values including this column output
 			int paramNo = 0;
-			for(Column paramName : paramNames) {
-				params[paramNo] = paramName; // TODO: Read param name from the data function object
+			for(List<Column> paramPath : paramPaths) {
+				if(paramPath.get(0) == this) {
+					paramValues[paramNo] = this.data.getValue(i);
+				}
+				else {
+					paramValues[paramNo] = paramPath.get(0).data.getValue(paramPath, i);
+				}
 			}
 			
 			// Evaluate
-			out = evalExpr.evaluate(params);
+			result = evalExpr.evaluate(paramValues);
 
 			// Update output
-			this.data.setValue(i, out);
+			this.data.setValue(i, result);
+		}
+	}
+	private void evaluateAccu(Evaluator evalExpr, List<Column> accuLinkColumns) {
+		Table mainTable = accuLinkColumns.get(0).getInput(); // [ACCU-specific]
+		// The optimal approach is to apply negative accu function for removed elements and then positive accu function for added elements
+		// Currently we do full re-evaluate by resetting the accu column outputs and then making full scan through all existing facts
+		Range mainRange = mainTable.getIdRange();
+
+		// Get all necessary parameters and prepare (resolve) the corresponding data (function) objects for reading values
+		List<List<Column>> paramPaths = this.resolveParameterPaths(mainTable, evalExpr.getParamPaths());
+		Object[] paramValues = new Object[paramPaths.size()]; // Will store values for all params
+		Object result; // Will be written to output for each input
+
+		for(long i=mainRange.start; i<mainRange.end; i++) {
+			// Find group [ACCU-specific]
+			long g = (Long) accuLinkColumns.get(0).getData().getValue(accuLinkColumns, i); // Find group element for this fact
+
+			// Read all parameter values including this column output
+			int paramNo = 0;
+			for(List<Column> paramPath : paramPaths) {
+				if(paramPath.get(0) == this) {
+					paramValues[paramNo] = this.data.getValue(g); // [ACCU-specific]
+				}
+				else {
+					paramValues[paramNo] = paramPath.get(0).data.getValue(paramPath, i);
+				}
+			}
+
+			// Evaluate
+			result = this.accuEvaluator.evaluate(paramValues);
+
+			// Update output
+			this.data.setValue(g, result);
 		}
 	}
 	private void evaluateSimpleDefault() {
@@ -503,6 +522,33 @@ public class Column {
 		for(long i=mainRange.start; i<mainRange.end; i++) {
 			this.data.setValue(i, defaultValue);
 		}
+	}
+
+	// Resolve the specified path names into data (function) objects taking into account a possible special (out) parameter
+	private List<List<Column>> resolveParameterPaths(Table pathTable, List<QName> paramPathNames) {
+		List<List<Column>> paramPaths = new ArrayList<List<Column>>();
+		for(QName n : paramPathNames) {
+			if(this.isOutputParameter(n)) {
+				paramPaths.add(Arrays.asList(this)); // Single element in path (this column)
+			}
+			else {
+				paramPaths.add(n.resolveColumns(pathTable)); // Multi-segment paths from the iterated table
+			}
+		}
+		return paramPaths;
+	}
+	private boolean isOutputParameter(QName qname) {
+		if(qname.names.size() != 1) return false;
+		return isOutputParameter(qname.names.get(0));
+	}
+	private boolean isOutputParameter(String paramName) {
+		if(paramName.equalsIgnoreCase(ExprNode.OUT_VARIABLE_NAME)) {
+			return true;
+		}
+		else if(paramName.equalsIgnoreCase(this.getName())) {
+			return true;
+		}
+		return false;
 	}
 
 	private Object getDefaultValue() { // Depends on the column type
@@ -554,10 +600,6 @@ public class Column {
 
 	public void translate() {
 
-		if(this.kind == DcColumnKind.AUTO) {
-			this.kind = determineAutoColumnKind();
-		}
-
 		//
 		// Reset
 		//
@@ -596,7 +638,7 @@ public class Column {
 	}
 
 	public ExprNode translateMain() {
-		if(this.formula == null || this.formula.isEmpty()) {
+		if(this.calcFormula == null || this.calcFormula.isEmpty()) {
 			return null;
 		}
 
@@ -605,7 +647,7 @@ public class Column {
 		//
 		// Parse: check correct syntax, find all symbols and store them in dependencies
 		//
-		expr.formula = this.formula;
+		expr.formula = this.calcFormula;
 		expr.tableName = this.getInput().getName();
 		expr.pathName = "";
 		expr.name = this.name;
@@ -624,7 +666,7 @@ public class Column {
 	}
 		
 	public ExprNode translateAccu() {
-		if(this.accuformula == null || this.accuformula.isEmpty()) {
+		if(this.accuFormula == null || this.accuFormula.isEmpty()) {
 			return null;
 		}
 
@@ -633,9 +675,9 @@ public class Column {
 		//
 		// Parse: check correct syntax, find all symbols and store them in dependencies
 		//
-		expr.formula = this.accuformula;
-		expr.tableName = this.accutable;
-		expr.pathName = this.accupath;
+		expr.formula = this.accuFormula;
+		expr.tableName = this.accuTable;
+		expr.pathName = this.accuPath;
 		expr.name = this.name;
 		
 		expr.parse();
@@ -679,7 +721,7 @@ public class Column {
 	
 			Range mainRange = this.data.getIdRange(); // All dirty/new rows
 
-			if(this.formula == null || this.formula.trim().isEmpty()) { // Initialize to default constant (for example, after deletig the formula)
+			if(this.calcFormula == null || this.calcFormula.trim().isEmpty()) { // Initialize to default constant (for example, after deletig the formula)
 				Object defaultValue; // Depends on the column type
 				if(this.getOutput().isPrimitive()) {
 					defaultValue = 0.0;
@@ -735,7 +777,7 @@ public class Column {
 	public void setDescriptor(String descriptor) {
 		this.descriptor = descriptor;
 		
-		if(this.formula != null && !this.formula.isEmpty()) {
+		if(this.calcFormula != null && !this.calcFormula.isEmpty()) {
 			return; // If there is formula then descriptor is not used for dependencies
 		}
 
@@ -884,11 +926,11 @@ public class Column {
 
 		String jkind = "`kind`:" + this.kind.getValue() + "";
 
-		String jfmla = "`formula`: " + JSONObject.valueToString(this.getFormula()) + "";
+		String jfmla = "`formula`: " + JSONObject.valueToString(this.getCalcFormula()) + "";
 
-		String jafor = "`accuformula`: " + JSONObject.valueToString(this.getAccuformula()) + "";
-		String jatbl = "`accutable`: " + JSONObject.valueToString(this.getAccutable()) + "";
-		String japath = "`accupath`: " + JSONObject.valueToString(this.getAccupath()) + "";
+		String jafor = "`accuformula`: " + JSONObject.valueToString(this.getAccuFormula()) + "";
+		String jatbl = "`accutable`: " + JSONObject.valueToString(this.getAccuTable()) + "";
+		String japath = "`accupath`: " + JSONObject.valueToString(this.getAccuPath()) + "";
 
 		//String jdescr = "`descriptor`: " + (this.getDescriptor() != null ? "`"+this.getDescriptor()+"`" : "null");
 		String jdescr = "`descriptor`: " + JSONObject.valueToString(this.getDescriptor()) + "";
