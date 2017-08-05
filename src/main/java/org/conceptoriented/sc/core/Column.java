@@ -22,6 +22,29 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+
+// NEW REFACTORING:
+
+// Goal: 
+// Our current evaluation() has to correctly work with different statuses:
+// - This and inherited formula changes and errors (during translation - compile-time)
+// - This and inherited formula evaluation errors (an error can arise during evaluation - run-time)
+// - This and inherited column changes (note that changes are supposed to be only for non-formula columns; note also change does not mean that the columns dirty - it is still up-to-date but it makes other columns dirty)
+// - This and inherited column input changes (add/remove). It defines the horizontal scope which has to be propagated from this table (its input columns) to other columns.
+// Goal:
+// - Marking cycles, e.g., using a flag or getting a list of columns in a cycle.
+
+// Final goal:
+// - We need to define several examples with auto-evaluation (also manual) evaluation and event feeds from different sources like kafka.
+//   We want to publish these examples in open source by comparing them with kafka and other stream processing engines.
+//   Scenario 1: using rest api to feed events
+//   Scenario 2: subscribing to kafka topic and auto-evaluate
+//   Scenario 3: subscribing to kafka topic and writing the result to another kafka topic.
+//   Examples: word count, moving average/max/min (we need some domain specific interpretation like average prices for the last 24 hours),
+//   Scenario 4: Batch processing by loading from csv, evaluation, and writing the result back to csv.
+
+
+
 public class Column {
 	private Schema schema;
 	public Schema getSchema() {
@@ -65,8 +88,6 @@ public class Column {
 		return this.data;
 	}
 
-
-
 	//
 	// Formula kind
 	//
@@ -107,10 +128,84 @@ public class Column {
 	public Map<String,String> getLinkFormulas() {
 		return this.linkFormula;
 	}
-	public void setFormula(Map<String,String> linkFormulas) {
-		this.linkFormula.clear();;
-		this.linkFormula.putAll(linkFormulas);
+	public void setLinkFormula(Map<String,String> linkFormulas) {
+		this.linkFormula.clear();
 		this.setFormulaChange(true);
+		if(linkFormulas == null) return;
+		this.linkFormula.putAll(linkFormulas);
+	}
+	public void resetLinkFormula() {
+		this.linkFormula.clear();
+		this.setFormulaChange(true);
+	}
+	DcError tupleTranslateStatus;
+	public void setLinkFormula(String frml) { // Convenience method. Parse tuple {...} and fill member assignments
+		this.tupleTranslateStatus = null;
+		this.linkFormula.clear();
+
+		Map<String,String> mmbrs = new HashMap<String,String>();
+
+		//
+		// Check correct enclosure (curly brackets)
+		//
+		int open = frml.indexOf("{");
+		int close = frml.lastIndexOf("}");
+
+		if(open < 0 || close < 0 || open >= close) {
+			this.tupleTranslateStatus = new DcError(DcErrorCode.PARSE_ERROR, "Parse error.", "Problem with curly braces. Tuple expression is a list of assignments in curly braces.");
+			return;
+		}
+
+		String sequence = frml.substring(open+1, close).trim();
+
+		//
+		// Build a list of members from comma separated list
+		//
+		List<String> members = new ArrayList<String>();
+		int previousSeparator = -1;
+		int level = 0; // Work only on level 0
+		for(int i=0; i<sequence.length(); i++) {
+			if(sequence.charAt(i) == '{') {
+				level++;
+			}
+			else if(sequence.charAt(i) == '}') {
+				level--;
+			}
+			
+			if(level > 0) { // We are in a nested block. More closing parentheses are expected to exit from this block.
+				continue;
+			}
+			else if(level < 0) {
+				this.tupleTranslateStatus = new DcError(DcErrorCode.PARSE_ERROR, "Parse error.", "Problem with curly braces. Opening and closing curly braces must match.");
+				return;
+			}
+			
+			// Check if it is a member separator
+			if(sequence.charAt(i) == ';') {
+				members.add(sequence.substring(previousSeparator+1, i));
+				previousSeparator = i;
+			}
+		}
+		members.add(sequence.substring(previousSeparator+1, sequence.length()));
+
+		//
+		// Create child tuples from members and parse them
+		//
+		for(String member : members) {
+			int eq = member.indexOf("=");
+			if(eq < 0) {
+				this.tupleTranslateStatus = new DcError(DcErrorCode.PARSE_ERROR, "Parse error.", "No equality sign. Tuple expression is a list of assignments.");
+				return;
+			}
+			String lhs = member.substring(0, eq).trim();
+			if(lhs.startsWith("[")) lhs = lhs.substring(1);
+			if(lhs.endsWith("]")) lhs = lhs.substring(0,lhs.length()-1);
+			String rhs = member.substring(eq+1).trim();
+
+			mmbrs.put(lhs, rhs);
+		}
+
+		this.setLinkFormula(mmbrs);
 	}
 	
 	//
@@ -170,7 +265,7 @@ public class Column {
 	}
 
 	//
-	// Formula dirty status 
+	// Formula dirty status (own or inherited)
 	//
 
 	/**
@@ -206,7 +301,7 @@ public class Column {
 
 		// We check only direct dependencies by requesting their complete propagated status
 		for(Column dep : this.getDependencies()) {
-			if(dep.getStatus() == null || dep.getStatus().code == DcErrorCode.NONE) {
+			if(dep.getTranslateError() == null || dep.getTranslateError().code == DcErrorCode.NONE) {
 				if(isFormulaDirty() || dep.isDirtyPropagated()) return true; // Check both own status and (recursively) propagated status 
 			}
 			else { // Error (translation) status is treated as dirty (also propagated errors)
@@ -218,56 +313,9 @@ public class Column {
 	}
 
 	//
-	// Column (definition) dependencies
+	// Formula (translate) dependencies
 	//
 	
-	// Types of dependencies:
-	// - Formula dependencies: 
-	//   - this formula is changed/set/reset -> this means that the output have to be re-evaluated (even if dependent functions are the same)
-	//     - so essentially this formula change is equivalent to this function output change
-	//   - a dependent formula might have been changed -> effectively this is equivalent to changing all outputs of the dependent function (formula change leads to output change) 
-	// - Input set dependencies: 
-	//   - calc function has to be re-evaluated for its own added inputs, deleted inputs ignored.
-	//   - agg function has to be re-evaluated for added or removed agg table inputs
-	//   - link function
-	// - Output dependencies:
-	//   - calc: if dependent col updates its output for some input, then this function has to re-evaluate this same input (using the new new value of dependent column)
-	//   - agg:
-	//
-	// Evaluates results in:
-	// - calc: output changes -> all next functions have to take it into account
-	// - agg: output changes
-	// - link: output changes
-	// - append: output changes; if completely re-populated (with emptying) then added/removed; otherwise added. Note that theoretically, we can compute if there was an change (it is possible that no changes)
-	
-	// Formula (changes) is a mechanism for changing function outputs and/or set population in addition to direct (API) changes/population.
-	// We can assume that any formula change (set, reset etc.) leads to output reset and dirty status (need evaluation).
-	// Hence this dirty status (resulting from formula) is propagated to other columns by setting dirty status of other columns (induced or inherited).
-	// Thus, there are the following mechanisms:
-	// - Formula changes -> this column output is dirty (for the whole range)
-	// - Formula change -> output table add/delete status is dirty (for append columns)
-	// - API set value -> this column output is dirty (for specific input)
-	// - API append/remove record -> this table add/delete status is dirty
-	
-	// Goal: 
-	// Our current evaluation() has to correctly work with different statuses:
-	// - This and inherited formula changes and errors (during translation - compile-time)
-	// - This and inherited formula evaluation errors (an error can arise during evaluation - run-time)
-	// - This and inherited column changes (note that changes are supposed to be only for non-formula columns; note also change does not mean that the columns dirty - it is still up-to-date but it makes other columns dirty)
-	// - This and inherited column input changes (add/remove). It defines the horizontal scope which has to be propagated from this table (its input columns) to other columns.
-	// Goal:
-	// - Marking cycles, e.g., using a flag or getting a list of columns in a cycle.
-	
-	// Final goal:
-	// - We need to define several examples with auto-evaluation (also manual) evaluation and event feeds from different sources like kafka.
-	//   We want to publish these examples in open source by comparing them with kafka and other stream processing engines.
-	//   Scenario 1: using rest api to feed events
-	//   Scenario 2: subscribing to kafka topic and auto-evaluate
-	//   Scenario 3: subscribing to kafka topic and writing the result to another kafka topic.
-	//   Examples: word count, moving average/max/min (we need some domain specific interpretation like average prices for the last 24 hours),
-	//   Scenario 4: Batch processing by loading from csv, evaluation, and writing the result back to csv.
-	
-
 	/**
 	 * All other columns it directly depends on, that is, columns directly used in its formula to compute output
 	 */
@@ -284,8 +332,42 @@ public class Column {
 	}
 
 	//
+	// Translation status
+	// Translation errors are produced and stored in different objects like many evaluators or local fields (e.g., for links) so the final status is collected
+	//
+
+	public DcError getTranslateError() { // Get single (the first) error (there could be many errors detected)
+		List<DcError> errors = this.getTranslateErrors();
+		if(errors == null || errors.size() == 0) return null;
+		return errors.get(0);
+	}
+	public List<DcError> getTranslateErrors() { // Empty list in the case of no errors
+		List<DcError> errors = new ArrayList<DcError>();
+		if(this.kind == DcColumnKind.CALC) {
+			if(this.calcEvaluator != null) errors.add(this.calcEvaluator.getTranslateError());
+		}
+		else if(this.kind == DcColumnKind.LINK) {
+			if(this.tupleTranslateStatus != null) errors.add(this.tupleTranslateStatus);
+			for(Pair<Column,Evaluator> mmbr : this.linkEvaluators) {
+				if(mmbr.getRight() != null) errors.add(mmbr.getRight().getTranslateError());
+			}
+		}
+		else if(this.kind == DcColumnKind.ACCU) {
+			if(this.initEvaluator != null) errors.add(this.initEvaluator.getTranslateError());
+			if(this.accuEvaluator != null) errors.add(this.accuEvaluator.getTranslateError());
+			if(this.finEvaluator != null) errors.add(this.accuEvaluator.getTranslateError());
+		}
+
+		return null;
+	}
+	public boolean hasTranslateErrors() { // Is successfully translated and can be used for evaluation
+		if(getTranslateErrors().size() == 0) return false;
+		else return true;
+	}
+
+	//
 	// Translate formula
-	// Parse and bind. Generate dependencies. Generate necessary evaluators. Produce new (error) status of translation.
+	// Parse (formulas), bind (columns), build (evaluators). Generate dependencies. Produce new (translate) status.
 	//
 	
 	// Calc evaluator
@@ -300,12 +382,12 @@ public class Column {
 	Evaluator finEvaluator;
 	List<Column> accuPathColumns;
 
-	public void translate2() {
+	public void translate() {
 
 		// Reset
 		this.calcEvaluator = null;
 
-		this.linkEvaluators.clear();;
+		this.linkEvaluators.clear();
 
 		this.initEvaluator = null;
 		this.accuEvaluator = null;
@@ -371,9 +453,54 @@ public class Column {
 	}
 
 	//
+	// Evaluation status
+	// Translation errors are produced and stored in different objects like many evaluators or local fields (e.g., for links) so the final status is collected
+	//
+
+	public DcError getEvaluateError() { // Get single (the first) error (there could be many errors detected)
+		List<DcError> errors = this.getEvaluateErrors();
+		if(errors == null || errors.size() == 0) return null;
+		return errors.get(0);
+	}
+	public List<DcError> getEvaluateErrors() { // Empty list in the case of no errors
+		List<DcError> errors = new ArrayList<DcError>();
+		if(this.kind == DcColumnKind.CALC) {
+			if(this.calcEvaluator != null) errors.add(this.calcEvaluator.getEvaluateError());
+		}
+		else if(this.kind == DcColumnKind.LINK) {
+			for(Pair<Column,Evaluator> mmbr : this.linkEvaluators) {
+				if(mmbr.getRight() != null) errors.add(mmbr.getRight().getEvaluateError());
+			}
+		}
+		else if(this.kind == DcColumnKind.ACCU) {
+			if(this.initEvaluator != null) errors.add(this.initEvaluator.getEvaluateError());
+			if(this.accuEvaluator != null) errors.add(this.accuEvaluator.getEvaluateError());
+			if(this.finEvaluator != null) errors.add(this.accuEvaluator.getEvaluateError());
+		}
+
+		return null;
+	}
+	public boolean hasEvaluateErrors() { // Is successfully evaluated
+		if(getEvaluateErrors().size() == 0) return false;
+		else return true;
+	}
+
+	//
 	// Evaluate column
 	//
-	public void evaluate2() {
+
+	Instant evaluateTime = Instant.MIN; // Last time the evaluation has been performed (successfully finished)
+	public Instant getEvaluateTime() {
+		return this.evaluateTime;
+	}
+	public void setEvaluateTime() {
+		this.evaluateTime = Instant.now();
+	}
+	public Duration durationFromLastEvaluated() {
+		return Duration.between(this.evaluateTime, Instant.now());
+	}
+	
+	public void evaluate() {
 		
 		if(this.getKind() == DcColumnKind.CALC) {
 			// Evaluate calc expression
@@ -561,12 +688,8 @@ public class Column {
 	// Translate formula
 	// Parse and bind. Generate an evaluator object. Produce new (error) status of translation.
 	//
-	
-	/**
-	 * Status of the column translation. 
-	 * It includes its own formulas status as well as status inherited from dependencies.
-	 */
-	public DcError getStatus() {
+/*
+	public DcError getStatus_OLD() {
 		DcError err = null;
 		if(this.mainExpr != null) {
 			ExprNode errorNode = this.mainExpr.getErrorNode();
@@ -593,7 +716,7 @@ public class Column {
 
 	public ExprNode accuExpr; // Additional values collected from a lesser table
 
-	public void translate() {
+	public void translate_OLD() {
 
 		//
 		// Reset
@@ -686,24 +809,14 @@ public class Column {
 		
 		return expr;
 	}
+*/
 
 	//
 	// Evaluate formula. 
 	// Use evaluator object and generate new function outputs for all or some inputs
 	//
-
-	Instant evaluateTime = Instant.MIN; // Last time the evaluation has been performed (successfully finished)
-	public Instant getEvaluateTime() {
-		return this.evaluateTime;
-	}
-	public void setEvaluateTime() {
-		this.evaluateTime = Instant.now();
-	}
-	public Duration durationFromLastEvaluated() {
-		return Duration.between(this.evaluateTime, Instant.now());
-	}
-	
-	public void evaluate() {
+/*
+	public void evaluate_OLD() {
 		
 		if(this.getKind() == DcColumnKind.CLASS) {
 			;
@@ -760,11 +873,12 @@ public class Column {
 
 		this.setEvaluateTime(); // Store the time of evaluation
 	}
+*/
 
 	//
 	// Descriptor (if column is computed via Java class and not formula)
 	//
-	
+
 	private String descriptor;
 	public String getDescriptor() {
 		return descriptor;
@@ -772,6 +886,7 @@ public class Column {
 	public void setDescriptor(String descriptor) {
 		this.descriptor = descriptor;
 		
+/*
 		if(this.calcFormula != null && !this.calcFormula.isEmpty()) {
 			return; // If there is formula then descriptor is not used for dependencies
 		}
@@ -791,10 +906,10 @@ public class Column {
 		else {
 			this.resetDependencies(); // Non-evaluatable column for any reason
 		}
-
+*/
 		// Here we might want to check the validity of the dependency graph (cycles, at least for this column)
 	}
-
+/*
 	public List<Column> getEvaluatorDependencies() {
 		List<Column> columns = new ArrayList<Column>();
 
@@ -881,9 +996,6 @@ public class Column {
 		evaluator.endEvaluate();
 	}
 
-	/**
-	 * Evaluate class. 
-	 */
 	public void evaluateDescriptor() {
 		
 		if(descriptor == null || descriptor.isEmpty()) return; 
@@ -900,6 +1012,7 @@ public class Column {
 
 		this.endEvaluate(); // De-initialize (evaluator, computational resources etc.)
 	}
+*/
 
 	//
 	// Serialization and construction
@@ -916,7 +1029,7 @@ public class Column {
 		String joutid = "`id`: `" + this.getOutput().getId() + "`";
 		String jout = "`output`: {" + joutid + "}";
 
-		String jstatus = "`status`: " + (this.getStatus() != null ? this.getStatus().toJson() : "undefined");
+		String jstatus = "`status`: " + (this.getTranslateError() != null ? this.getTranslateError().toJson() : "undefined");
 		String jdirty = "`dirty`: " + (this.isDirtyPropagated() ? "true" : "false"); // We transfer deep dirty
 
 		String jkind = "`kind`:" + this.kind.getValue() + "";

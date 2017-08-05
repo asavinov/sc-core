@@ -495,19 +495,6 @@ public class Schema {
 	// Schema dependencies
 	//
 	
-	/**
-	 * For each column, we store all other columns it directly depends on, that is, columns that it directly uses in its formula
-	 */
-/*
-	protected Map<Column,List<Column>> dependencies = new HashMap<Column,List<Column>>();
-	public List<Column> getParentDependencies(Column col) {
-		return this.dependencies.get(col);
-	}
-	public void setParentDependencies(Column col, List<Column> deps) {
-		this.dependencies.put(col, deps);
-	}
-*/
-
 	public List<Column> getChildDependencies(Column col) {
 		// Return all columns which point to the specified column as a dependency, that is, which have this column in its deps
 		List<Column> res = this.columns.stream().filter(x -> x.getDependencies() != null && x.getDependencies().contains(col)).collect(Collectors.<Column>toList());
@@ -537,12 +524,12 @@ public class Schema {
 			if(previousColumns.contains(col)) continue; // Skip already evaluated columns
 
 			// If it has errors then exclude it (cannot be evaluated)
-			if(col.getStatus() != null && col.getStatus().code != DcErrorCode.NONE) {
+			if(col.getTranslateError() != null && col.getTranslateError().code != DcErrorCode.NONE) {
 				continue;
 			}
 
 			// If one of its dependencies has errors then exclude it (cannot be evaluated)
-			Column errCol = deps.stream().filter(x -> x.getStatus() != null && x.getStatus().code != DcErrorCode.NONE).findAny().orElse(null);
+			Column errCol = deps.stream().filter(x -> x.getTranslateError() != null && x.getTranslateError().code != DcErrorCode.NONE).findAny().orElse(null);
 			if(errCol != null) continue;
 			
 			if(previousColumns.containsAll(deps)) { // All deps have to be evaluated (non-dirty)
@@ -581,6 +568,25 @@ public class Schema {
 	 * The updated result of translation is stored in individual columns.
 	 */
 	public void translate() {
+		// TODO:
+		// Problems:
+		// - finding/storing/getting inherited errors/status:
+		//   - inherited formula dirty/change
+		//   - inherited data dirty/change
+		//   - inherited translation errors
+		//   - inherited evaluation errors
+		//   - self-dependence - it is viewed as formula error, it cannot be evaluated and hence all next column inherit this status
+		
+		// Inherited status is produced from a dependency graph which requires translation of all formulas
+		// We might need display inherited status so it could be set in each column as a real property like InheritedTranslationError (the first one)
+		// If not needed for visualization then it can be computed on demand (but then each time expansion tree of this column has to be built (down to free/primitive columns).
+		// If we assume that own errors have higher priority then inherited errors can be returned only if there are no own errors.
+		// If we change a formula (or data) then this action has to invalidate all next derived columns
+		
+		// UI shows two statuses:
+		// - canEvaluate - translation errors of this (error, cycle) or previous (warning) columns
+		// - needEvaluate/isUptodate - dirty status of this (formula changed) or inherited (previous formulas changed)
+		
 		
 		//
 		// Translate individual columns and build dependency graph
@@ -593,13 +599,15 @@ public class Schema {
 		
 		//
 		// Propagate translation status (errors) through dependency graph
+		// Goal is to see inherited status directly in column status. 
+		// Alternatively, the inherited status could be retrieved dynamically, which is good if something changes in previous columns.
 		//
 		
 		List<Column> readyColumns = new ArrayList<Column>(); // Already evaluated
 		List<Column> nextColumns = this.getStartingColumns(); // Initialize. First iteration with column with no dependency formulas. 
 		while(nextColumns.size() > 0) {
 			for(Column col : nextColumns) {
-				if(col.getStatus() == null || col.getStatus().code == DcErrorCode.NONE) {
+				if(col.getTranslateError() == null || col.getTranslateError().code == DcErrorCode.NONE) {
 					// If there is at least one error in dependencies then mark this as propagated error
 					List<Column> deps = col.getDependencies();
 					if(deps == null) { 
@@ -607,16 +615,16 @@ public class Schema {
 						continue;
 					}
 					// If at least one dependency has errors then this column is not suitable for propagation
-					Column errCol = deps.stream().filter(x -> x.getStatus() != null && x.getStatus().code != DcErrorCode.NONE).findAny().orElse(null);
+					Column errCol = deps.stream().filter(x -> x.getTranslateError() != null && x.getTranslateError().code != DcErrorCode.NONE).findAny().orElse(null);
 					if(errCol != null) { // Mark this column as having propagated error
-						if(errCol.getStatus().code == DcErrorCode.PARSE_ERROR || errCol.getStatus().code == DcErrorCode.PARSE_PROPAGATION_ERROR)
-							col.mainExpr.status = new DcError(DcErrorCode.PARSE_PROPAGATION_ERROR, "Propagated parse error.", "Error in the column: '" + errCol.getName() + "'");
-						else if(errCol.getStatus().code == DcErrorCode.BIND_ERROR || errCol.getStatus().code == DcErrorCode.BIND_PROPAGATION_ERROR)
-							col.mainExpr.status = new DcError(DcErrorCode.BIND_PROPAGATION_ERROR, "Propagated bind error.", "Error in the column: '" + errCol.getName() + "'");
-						else if(errCol.getStatus().code == DcErrorCode.EVALUATE_ERROR || errCol.getStatus().code == DcErrorCode.EVALUATE_PROPAGATION_ERROR)
-							col.mainExpr.status = new DcError(DcErrorCode.EVALUATE_PROPAGATION_ERROR, "Propagated evaluation error.", "Error in the column: '" + errCol.getName() + "'");
+						if(errCol.getTranslateError().code == DcErrorCode.PARSE_ERROR || errCol.getTranslateError().code == DcErrorCode.PARSE_PROPAGATION_ERROR)
+							;//col.mainExpr.status = new DcError(DcErrorCode.PARSE_PROPAGATION_ERROR, "Propagated parse error.", "Error in the column: '" + errCol.getName() + "'");
+						else if(errCol.getTranslateError().code == DcErrorCode.BIND_ERROR || errCol.getTranslateError().code == DcErrorCode.BIND_PROPAGATION_ERROR)
+							;//col.mainExpr.status = new DcError(DcErrorCode.BIND_PROPAGATION_ERROR, "Propagated bind error.", "Error in the column: '" + errCol.getName() + "'");
+						else if(errCol.getTranslateError().code == DcErrorCode.EVALUATE_ERROR || errCol.getTranslateError().code == DcErrorCode.EVALUATE_PROPAGATION_ERROR)
+							;//col.mainExpr.status = new DcError(DcErrorCode.EVALUATE_PROPAGATION_ERROR, "Propagated evaluation error.", "Error in the column: '" + errCol.getName() + "'");
 						else
-							col.mainExpr.status = new DcError(DcErrorCode.GENERAL, "Propagated error.", "Error in the column: '" + errCol.getName() + "'");
+							;//col.mainExpr.status = new DcError(DcErrorCode.GENERAL, "Propagated error.", "Error in the column: '" + errCol.getName() + "'");
 					}
 				}
 				readyColumns.add(col);
@@ -632,9 +640,9 @@ public class Schema {
 			
 			// If a column has not been covered during propagation then it belongs to a cycle. The cycle itself is not found by this procedure. 
 
-			if(col.getStatus() == null || col.getStatus().code == DcErrorCode.NONE) {
-				if(col.mainExpr == null) col.mainExpr = new ExprNode(); // Wrong use. Should not happen.
-				col.mainExpr.status = new DcError(DcErrorCode.DEPENDENCY_CYCLE_ERROR, "Cyclic dependency.", "This column formula depends on itself by using other columns which depend on it.");
+			if(col.getTranslateError() == null || col.getTranslateError().code == DcErrorCode.NONE) {
+				//if(col.mainExpr == null) col.mainExpr = new ExprNode(); // Wrong use. Should not happen.
+				//col.mainExpr.status = new DcError(DcErrorCode.DEPENDENCY_CYCLE_ERROR, "Cyclic dependency.", "This column formula depends on itself by using other columns which depend on it.");
 			}
 		}
 
@@ -670,7 +678,7 @@ public class Schema {
 		List<Column> nextColumns = this.getStartingColumns(); // Initialize. First iteration with column with no dependency formulas. 
 		while(nextColumns.size() > 0) {
 			for(Column col : nextColumns) {
-				if(col.getStatus() == null || col.getStatus().code == DcErrorCode.NONE) { // Only columns without problems can be evaluated
+				if(col.getTranslateError() == null || col.getTranslateError().code == DcErrorCode.NONE) { // Only columns without problems can be evaluated
 					col.evaluate(); // This will update (clean) the dirty status of each individual column
 					readyColumns.add(col);
 				}
