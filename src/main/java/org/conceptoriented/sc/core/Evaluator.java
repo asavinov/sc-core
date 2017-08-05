@@ -242,7 +242,7 @@ class EvaluatorExpr implements Evaluator {
 		; // TODO
 	}
 	@Override
-	public List<QName> getParamPaths() { // TODO: Ensure that the first path is this column itself
+	public List<QName> getParamPaths() {
 		List<QName> paths = new ArrayList<QName>();
 		for(ExprDependency dep : this.exprDependencies) {
 			paths.add(dep.qname);

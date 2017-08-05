@@ -11,6 +11,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -102,13 +103,13 @@ public class Column {
 	// Link formula
 	//
 	
-	protected List<Pair<String,String>> linkFormulas = new ArrayList<Pair<String,String>>();
-	public List<Pair<String,String>> getLinkFormulas() {
-		return this.linkFormulas;
+	protected Map<String, String> linkFormula = new HashMap<String, String>();
+	public Map<String,String> getLinkFormulas() {
+		return this.linkFormula;
 	}
-	public void setFormula(List<Pair<String,String>> linkFormulas) {
-		this.linkFormulas.clear();;
-		this.linkFormulas.addAll(linkFormulas);
+	public void setFormula(Map<String,String> linkFormulas) {
+		this.linkFormula.clear();;
+		this.linkFormula.putAll(linkFormulas);
 		this.setFormulaChange(true);
 	}
 	
@@ -283,7 +284,7 @@ public class Column {
 	}
 
 	//
-	// Translate formula NEW
+	// Translate formula
 	// Parse and bind. Generate dependencies. Generate necessary evaluators. Produce new (error) status of translation.
 	//
 	
@@ -325,16 +326,16 @@ public class Column {
 			columns.addAll(this.calcEvaluator.getDependencies());
 		}
 		else if(this.kind == DcColumnKind.LINK) {
-			for(Pair<String,String> mmbr : this.linkFormulas) { // For each tuple member (assignment) create an expression
+			for(Entry<String,String> mmbr : this.linkFormula.entrySet()) { // For each tuple member (assignment) create an expression
 
 				// Right hand side
 				EvaluatorExpr expr = new EvaluatorExpr(inputTable);
-				expr.translate(mmbr.getRight());
+				expr.translate(mmbr.getValue());
 				columns.addAll(expr.getDependencies());
 				
 				// Left hand side (column of the type table)
-				Column assignColumn = this.schema.getColumn(outputTable.getName(), mmbr.getLeft());
-				this.linkEvaluators.add(Pair.of(assignColumn,expr));
+				Column assignColumn = this.schema.getColumn(outputTable.getName(), mmbr.getKey());
+				this.linkEvaluators.add(Pair.of(assignColumn, expr));
 				columns.add(assignColumn);
 			}
 		}
@@ -352,7 +353,7 @@ public class Column {
 			this.accuPathColumns = accuLinkPath.resolveColumns(accuTable);
 			columns.addAll(this.accuPathColumns);
 
-			// Accu expression
+			// Accumulation
 			this.accuEvaluator = new EvaluatorExpr(accuTable);
 			this.accuEvaluator.translate(this.accuFormula);
 			columns.addAll(this.accuEvaluator.getDependencies());
@@ -370,79 +371,41 @@ public class Column {
 	}
 
 	//
-	// Evaluate column NEW
+	// Evaluate column
 	//
 	public void evaluate2() {
 		
 		if(this.getKind() == DcColumnKind.CALC) {
 			// Evaluate calc expression
 			if(this.calcFormula == null || this.calcFormula.trim().isEmpty() || this.calcEvaluator == null) { // Default
-				this.evaluateSimpleDefault();
+				this.evaluateExprDefault();
 			}
 			else {
-				this.evaluateSimple(this.calcEvaluator);
+				this.evaluateExpr(this.calcEvaluator, null);
 			}
 		}
 		if(this.getKind() == DcColumnKind.LINK) {
-
-			// Prepare for each rhs expression
-			List<List<Column>>[] rhsParamPaths = null;
-			Object[][] rhsParamValues = null;
-			Object[] rhsResults = null;
-			
-			// Resolve paths into functions for each member
-
-
-
-
-			Table mainTable = this.getInput();
-			// Currently we make full scan by re-evaluating all existing input ids
-			Range mainRange = this.data.getIdRange();
-
-			for(long i=mainRange.start; i<mainRange.end; i++) {
-				
-				// Evaluate ALL child rhs expressions by producing an array of their results 
-				int mmbrNo = 0;
-				for(Pair<Column,Evaluator> mmbr : this.linkEvaluators) {
-
-					List<List<Column>> paramPaths = rhsParamPaths[mmbrNo]; // Functions for this expression parameters
-					Object[] paramValues = rhsParamValues[mmbrNo];
-					
-					// Read parameters
-
-
-					// Evaluate this expression
-					rhsResults[mmbrNo] = mmbr.getRight().evaluate(paramValues);
-				}
-
-				// Use rhsResults[childNo] to find/append this tuple of results in the type table (instead of storing) by using lhs[i]=rhs[i]
-				Table typeTable = this.getOutput();
-				long out = 0;
-
-				// Store the found/appended id in the output of this column
-				this.data.setValue(i, out);
-			}
-			
-			
+			// Link
+			this.evaluateLink();
 		}
 		else if(this.getKind() == DcColumnKind.ACCU) {
-			// Evaluate init expression
+			// Initialization
 			if(this.initFormula == null || this.initFormula.trim().isEmpty() || this.initEvaluator == null) { // Default
-				this.evaluateSimpleDefault();
+				this.evaluateExprDefault();
 			}
 			else {
-				this.evaluateSimple(this.initEvaluator);
+				this.evaluateExpr(this.initEvaluator, null);
 			}
 			
-			// Evaluate accu expression
-			this.evaluateAccu(this.accuEvaluator, accuPathColumns);
+			// Accumulation
+			this.evaluateExpr(this.accuEvaluator, accuPathColumns);
 
-			// Evaluate fin expression
+			// Finalization
 			if(this.calcFormula == null || this.calcFormula.trim().isEmpty() || this.finEvaluator == null) { // Default
-				; // Do nothing
+				; // No finalization if not specified
 			}
 			else {
-				this.evaluateSimple(this.finEvaluator);
+				this.evaluateExpr(this.finEvaluator, null);
 			}
 		}
 
@@ -453,70 +416,102 @@ public class Column {
 		this.setEvaluateTime(); // Store the time of evaluation
 	}
 	
-	private void evaluateSimple(Evaluator evalExpr) {
-		Table mainTable = this.getInput();
-		// Currently we make full scan by re-evaluating all existing input ids
-		Range mainRange = this.data.getIdRange();
+	private void evaluateExpr(Evaluator eval, List<Column> accuLinkPath) {
+		Table mainTable = accuLinkPath == null ? this.getInput() : accuLinkPath.get(0).getInput(); // Loop/scan table
 
-		// Get all necessary parameters and prepare (resolve) the corresponding data (function) objects for reading values
-		List<List<Column>> paramPaths = this.resolveParameterPaths(mainTable, evalExpr.getParamPaths());
-		Object[] paramValues = new Object[paramPaths.size()]; // Will store values for all params
-		Object result; // Will be written to output for each input
-
-		for(long i=mainRange.start; i<mainRange.end; i++) {
-
-			// Read all parameter values including this column output
-			int paramNo = 0;
-			for(List<Column> paramPath : paramPaths) {
-				if(paramPath.get(0) == this) {
-					paramValues[paramNo] = this.data.getValue(i);
-				}
-				else {
-					paramValues[paramNo] = paramPath.get(0).data.getValue(paramPath, i);
-				}
-			}
-			
-			// Evaluate
-			result = evalExpr.evaluate(paramValues);
-
-			// Update output
-			this.data.setValue(i, result);
-		}
-	}
-	private void evaluateAccu(Evaluator evalExpr, List<Column> accuLinkColumns) {
-		Table mainTable = accuLinkColumns.get(0).getInput(); // [ACCU-specific]
-		// The optimal approach is to apply negative accu function for removed elements and then positive accu function for added elements
-		// Currently we do full re-evaluate by resetting the accu column outputs and then making full scan through all existing facts
+		// ACCU: Currently we do full re-evaluate by resetting the accu column outputs and then making full scan through all existing facts
+		// ACCU: The optimal approach is to apply negative accu function for removed elements and then positive accu function for added elements
 		Range mainRange = mainTable.getIdRange();
 
 		// Get all necessary parameters and prepare (resolve) the corresponding data (function) objects for reading values
-		List<List<Column>> paramPaths = this.resolveParameterPaths(mainTable, evalExpr.getParamPaths());
+		List<List<Column>> paramPaths = this.resolveParameterPaths(mainTable, eval.getParamPaths());
 		Object[] paramValues = new Object[paramPaths.size()]; // Will store values for all params
 		Object result; // Will be written to output for each input
 
 		for(long i=mainRange.start; i<mainRange.end; i++) {
 			// Find group [ACCU-specific]
-			long g = (Long) accuLinkColumns.get(0).getData().getValue(accuLinkColumns, i); // Find group element for this fact
+			Long g = accuLinkPath == null ? i : (Long) accuLinkPath.get(0).getData().getValue(accuLinkPath, i);
 
 			// Read all parameter values including this column output
 			int paramNo = 0;
 			for(List<Column> paramPath : paramPaths) {
 				if(paramPath.get(0) == this) {
-					paramValues[paramNo] = this.data.getValue(g); // [ACCU-specific]
+					paramValues[paramNo] = this.data.getValue(g); // [ACCU-specific] [FIN-specific]
 				}
 				else {
 					paramValues[paramNo] = paramPath.get(0).data.getValue(paramPath, i);
 				}
+				paramNo++;
 			}
 
 			// Evaluate
-			result = this.accuEvaluator.evaluate(paramValues);
+			result = eval.evaluate(paramValues);
 
 			// Update output
 			this.data.setValue(g, result);
 		}
 	}
-	private void evaluateSimpleDefault() {
+	private void evaluateLink() {
+
+		Table typeTable = this.getOutput();
+
+		Table mainTable = this.getInput();
+		// Currently we make full scan by re-evaluating all existing input ids
+		Range mainRange = this.data.getIdRange();
+
+		// Each item in this lists is for one member expression 
+		// We use lists and not map because want to use common index (faster) for access and not key (slower) which is important for frequent accesses in a long loop.
+		List< List<List<Column>> > rhsParamPaths = new ArrayList< List<List<Column>> >();
+		List< Object[] > rhsParamValues = new ArrayList< Object[] >();
+		List< Object > rhsResults = new ArrayList< Object >();
+		Record outRecord = new Record(); // All output values for all expressions along with column names (is used by the search)
+
+		// Initialize items of these lists for each member expression
+		for(Pair<Column,Evaluator> mmbr : this.linkEvaluators) {
+			Evaluator eval = mmbr.getRight();
+			int paramCount = eval.getParamPaths().size();
+
+			rhsParamPaths.add( this.resolveParameterPaths(mainTable, eval.getParamPaths()) );
+			rhsParamValues.add( new Object[ paramCount ] );
+			rhsResults.add( null );
+		}
+
+		for(long i=mainRange.start; i<mainRange.end; i++) {
+			
+			outRecord.fields.clear();
+			
+			// Evaluate ALL child rhs expressions by producing an array of their results 
+			int mmbrNo = 0;
+			for(Pair<Column,Evaluator> mmbr : this.linkEvaluators) {
+
+				List<List<Column>> paramPaths = rhsParamPaths.get(mmbrNo);
+				Object[] paramValues = rhsParamValues.get(mmbrNo);
+				
+				// Read all parameter values (assuming that this column output is not used in link columns)
+				int paramNo = 0;
+				for(List<Column> paramPath : paramPaths) {
+					paramValues[paramNo] = paramPath.get(0).data.getValue(paramPath, i);
+					paramNo++;
+				}
+
+				// Evaluate this member expression
+				Object result = mmbr.getRight().evaluate(paramValues);
+				rhsResults.set(mmbrNo, result);
+				outRecord.set(mmbr.getLeft().getName(), result);
+				
+				mmbrNo++; // Iterate
+			}
+
+			// Find element in the type table which corresponds to these expression results (can be null if not found and not added)
+			Object out = typeTable.find(outRecord, true);
+			
+			// Update output
+			this.data.setValue(i, out);
+		}
+
+	}
+
+	private void evaluateExprDefault() {
 		Range mainRange = this.data.getIdRange(); // All dirty/new rows
 		Object defaultValue = getDefaultValue();
 		for(long i=mainRange.start; i<mainRange.end; i++) {
