@@ -22,29 +22,6 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-
-// NEW REFACTORING:
-
-// Goal: 
-// Our current evaluation() has to correctly work with different statuses:
-// - This and inherited formula changes and errors (during translation - compile-time)
-// - This and inherited formula evaluation errors (an error can arise during evaluation - run-time)
-// - This and inherited column changes (note that changes are supposed to be only for non-formula columns; note also change does not mean that the columns dirty - it is still up-to-date but it makes other columns dirty)
-// - This and inherited column input changes (add/remove). It defines the horizontal scope which has to be propagated from this table (its input columns) to other columns.
-// Goal:
-// - Marking cycles, e.g., using a flag or getting a list of columns in a cycle.
-
-// Final goal:
-// - We need to define several examples with auto-evaluation (also manual) evaluation and event feeds from different sources like kafka.
-//   We want to publish these examples in open source by comparing them with kafka and other stream processing engines.
-//   Scenario 1: using rest api to feed events
-//   Scenario 2: subscribing to kafka topic and auto-evaluate
-//   Scenario 3: subscribing to kafka topic and writing the result to another kafka topic.
-//   Examples: word count, moving average/max/min (we need some domain specific interpretation like average prices for the last 24 hours),
-//   Scenario 4: Batch processing by loading from csv, evaluation, and writing the result back to csv.
-
-
-
 public class Column {
 	private Schema schema;
 	public Schema getSchema() {
@@ -123,91 +100,16 @@ public class Column {
 	//
 	// Link formula
 	//
-	
-	protected Map<String, String> linkFormula = new HashMap<String, String>();
-	public Map<String,String> getLinkFormulas() {
+	protected String linkFormula;
+	public String getLinkFormula() {
 		return this.linkFormula;
 	}
-	public void setLinkFormula(Map<String,String> linkFormulas) {
-		this.linkFormula.clear();
-		this.setFormulaChange(true);
-		if(linkFormulas == null) return;
-		this.linkFormula.putAll(linkFormulas);
-	}
-	public void resetLinkFormula() {
-		this.linkFormula.clear();
+	public void setLinkFormula(String frml) {
+		if(this.linkFormula != null && this.linkFormula.equals(frml)) return; // Nothing to change
+		this.linkFormula = frml;
 		this.setFormulaChange(true);
 	}
-	DcError tupleTranslateStatus;
-	public void setLinkFormula(String frml) { // Convenience method. Parse tuple {...} and fill member assignments
-		this.tupleTranslateStatus = null;
-		this.linkFormula.clear();
 
-		Map<String,String> mmbrs = new HashMap<String,String>();
-
-		//
-		// Check correct enclosure (curly brackets)
-		//
-		int open = frml.indexOf("{");
-		int close = frml.lastIndexOf("}");
-
-		if(open < 0 || close < 0 || open >= close) {
-			this.tupleTranslateStatus = new DcError(DcErrorCode.PARSE_ERROR, "Parse error.", "Problem with curly braces. Tuple expression is a list of assignments in curly braces.");
-			return;
-		}
-
-		String sequence = frml.substring(open+1, close).trim();
-
-		//
-		// Build a list of members from comma separated list
-		//
-		List<String> members = new ArrayList<String>();
-		int previousSeparator = -1;
-		int level = 0; // Work only on level 0
-		for(int i=0; i<sequence.length(); i++) {
-			if(sequence.charAt(i) == '{') {
-				level++;
-			}
-			else if(sequence.charAt(i) == '}') {
-				level--;
-			}
-			
-			if(level > 0) { // We are in a nested block. More closing parentheses are expected to exit from this block.
-				continue;
-			}
-			else if(level < 0) {
-				this.tupleTranslateStatus = new DcError(DcErrorCode.PARSE_ERROR, "Parse error.", "Problem with curly braces. Opening and closing curly braces must match.");
-				return;
-			}
-			
-			// Check if it is a member separator
-			if(sequence.charAt(i) == ';') {
-				members.add(sequence.substring(previousSeparator+1, i));
-				previousSeparator = i;
-			}
-		}
-		members.add(sequence.substring(previousSeparator+1, sequence.length()));
-
-		//
-		// Create child tuples from members and parse them
-		//
-		for(String member : members) {
-			int eq = member.indexOf("=");
-			if(eq < 0) {
-				this.tupleTranslateStatus = new DcError(DcErrorCode.PARSE_ERROR, "Parse error.", "No equality sign. Tuple expression is a list of assignments.");
-				return;
-			}
-			String lhs = member.substring(0, eq).trim();
-			if(lhs.startsWith("[")) lhs = lhs.substring(1);
-			if(lhs.endsWith("]")) lhs = lhs.substring(0,lhs.length()-1);
-			String rhs = member.substring(eq+1).trim();
-
-			mmbrs.put(lhs, rhs);
-		}
-
-		this.setLinkFormula(mmbrs);
-	}
-	
 	//
 	// Accumulation formula
 	//
@@ -296,22 +198,6 @@ public class Column {
 		this.formulaDelete = dirty;
 	}
 
-	public boolean isDirtyPropagated() { // Own status and status of all preceding columns (propagated)
-		if(this.getDependencies() == null) return false;
-
-		// We check only direct dependencies by requesting their complete propagated status
-		for(Column dep : this.getDependencies()) {
-			if(dep.getTranslateError() == null || dep.getTranslateError().code == DcErrorCode.NONE) {
-				if(isFormulaDirty() || dep.isDirtyPropagated()) return true; // Check both own status and (recursively) propagated status 
-			}
-			else { // Error (translation) status is treated as dirty (also propagated errors)
-				return true;
-			}
-		}
-
-		return false; // All dependencies and this column are up-to-date
-	}
-
 	//
 	// Formula (translate) dependencies
 	//
@@ -331,6 +217,70 @@ public class Column {
 		this.dependencies.clear();
 	}
 
+	public List<Column> getDependencies(List<Column> cols) { // Get all unique dependencies of the specified columns (expand dependence tree nodes)
+		List<Column> ret = new ArrayList<Column>();
+		for(Column col : cols) {
+			List<Column> deps = col.getDependencies();
+			for(Column d : deps) {
+				if(!ret.contains(d)) ret.add(d);
+			}
+		}
+		return ret;
+	}
+
+	public boolean isStartingColumn() { // True if this column has no dependencies (e.g., constant expression) or is free (user, non-derived) column
+		if(!this.isDerived()) {
+			return true;
+		}
+		else if(this.dependencies.isEmpty()) {
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+
+	public DcError getDependenceError() { // =canEvaluate. Return one error in the dependencies (recursively) including cyclic dependency error
+		for(List<Column> deps = this.getDependencies(); deps.size() > 0; deps = this.getDependencies(deps)) { // Loop on expansion layers of dependencies
+			for(Column dep : deps) {
+				if(dep == this) {
+					return new DcError(DcErrorCode.DEPENDENCY_CYCLE_ERROR, "Cyclic dependency.", "This column formula depends on itself directly or indirectly.");
+				}
+				DcError de = dep.getTranslateError();
+				if(de != null && de.code != DcErrorCode.NONE) {
+					return de;
+				}
+			}
+		}
+		return null;
+	}
+	public DcError getThisOrDependenceError() {
+		DcError ret = this.getTranslateError();
+		if(ret != null && ret.code != DcErrorCode.NONE) {
+			return ret; // Error in this column
+		}
+		return this.getDependenceError();
+	}
+
+	public boolean isDependenceDirty() { // =needEvaluate. True if one of the dependencies (recursively) is dirty (formula change)
+		for(List<Column> deps = this.getDependencies(); deps.size() > 0; deps = this.getDependencies(deps)) { // Loop on expansion layers of dependencies
+			for(Column dep : deps) {
+				if(dep == this) {
+					return true; // Cyclic dependency is also an error and hence dirty
+				}
+				DcError de = dep.getTranslateError();
+				if(de != null && de.code != DcErrorCode.NONE) {
+					return true; // Any error must be treated as dirty status (propagated further down)
+				}
+				if(dep.isFormulaDirty()) return true;
+			}
+		}
+		return false; // All dependencies are up-to-date
+	}
+	public boolean isThisOrDependenceDirty() {
+		return this.isFormulaDirty() || this.isDependenceDirty();
+	}
+
 	//
 	// Translation status
 	// Translation errors are produced and stored in different objects like many evaluators or local fields (e.g., for links) so the final status is collected
@@ -347,7 +297,7 @@ public class Column {
 			if(this.calcEvaluator != null) errors.add(this.calcEvaluator.getTranslateError());
 		}
 		else if(this.kind == DcColumnKind.LINK) {
-			if(this.tupleTranslateStatus != null) errors.add(this.tupleTranslateStatus);
+			if(this.linkTranslateStatus != null) errors.add(this.linkTranslateStatus);
 			for(Pair<Column,Evaluator> mmbr : this.linkEvaluators) {
 				if(mmbr.getRight() != null) errors.add(mmbr.getRight().getTranslateError());
 			}
@@ -375,6 +325,8 @@ public class Column {
 
 	// Link evaluators
 	List<Pair<Column,Evaluator>> linkEvaluators = new ArrayList<Pair<Column,Evaluator>>();
+	DcError linkTranslateStatus;
+	protected Map<String, String> linkMembers = new HashMap<String, String>();
 
 	// Accu evaluators
 	Evaluator initEvaluator;
@@ -408,7 +360,13 @@ public class Column {
 			columns.addAll(this.calcEvaluator.getDependencies());
 		}
 		else if(this.kind == DcColumnKind.LINK) {
-			for(Entry<String,String> mmbr : this.linkFormula.entrySet()) { // For each tuple member (assignment) create an expression
+
+			this.translateLinkFormula(this.linkFormula);
+			if(this.linkTranslateStatus != null && this.linkTranslateStatus.code != DcErrorCode.NONE) {
+				return; // Tuple translation error
+			}
+			
+			for(Entry<String,String> mmbr : this.linkMembers.entrySet()) { // For each tuple member (assignment) create an expression
 
 				// Right hand side
 				EvaluatorExpr expr = new EvaluatorExpr(inputTable);
@@ -452,6 +410,75 @@ public class Column {
 		this.setDependencies(columns);
 	}
 
+	protected void translateLinkFormula(String frml) { // Parse tuple {...} into a list of member assignments and set error
+		this.linkTranslateStatus = null;
+		this.linkMembers.clear();
+
+		Map<String,String> mmbrs = new HashMap<String,String>();
+
+		//
+		// Check correct enclosure (curly brackets)
+		//
+		int open = frml.indexOf("{");
+		int close = frml.lastIndexOf("}");
+
+		if(open < 0 || close < 0 || open >= close) {
+			this.linkTranslateStatus = new DcError(DcErrorCode.PARSE_ERROR, "Parse error.", "Problem with curly braces. Tuple expression is a list of assignments in curly braces.");
+			return;
+		}
+
+		String sequence = frml.substring(open+1, close).trim();
+
+		//
+		// Build a list of members from comma separated list
+		//
+		List<String> members = new ArrayList<String>();
+		int previousSeparator = -1;
+		int level = 0; // Work only on level 0
+		for(int i=0; i<sequence.length(); i++) {
+			if(sequence.charAt(i) == '{') {
+				level++;
+			}
+			else if(sequence.charAt(i) == '}') {
+				level--;
+			}
+			
+			if(level > 0) { // We are in a nested block. More closing parentheses are expected to exit from this block.
+				continue;
+			}
+			else if(level < 0) {
+				this.linkTranslateStatus = new DcError(DcErrorCode.PARSE_ERROR, "Parse error.", "Problem with curly braces. Opening and closing curly braces must match.");
+				return;
+			}
+			
+			// Check if it is a member separator
+			if(sequence.charAt(i) == ';') {
+				members.add(sequence.substring(previousSeparator+1, i));
+				previousSeparator = i;
+			}
+		}
+		members.add(sequence.substring(previousSeparator+1, sequence.length()));
+
+		//
+		// Create child tuples from members and parse them
+		//
+		for(String member : members) {
+			int eq = member.indexOf("=");
+			if(eq < 0) {
+				this.linkTranslateStatus = new DcError(DcErrorCode.PARSE_ERROR, "Parse error.", "No equality sign. Tuple expression is a list of assignments.");
+				return;
+			}
+			String lhs = member.substring(0, eq).trim();
+			if(lhs.startsWith("[")) lhs = lhs.substring(1);
+			if(lhs.endsWith("]")) lhs = lhs.substring(0,lhs.length()-1);
+			String rhs = member.substring(eq+1).trim();
+
+			mmbrs.put(lhs, rhs);
+		}
+
+		this.linkMembers.putAll(mmbrs);
+	}
+	
 	//
 	// Evaluation status
 	// Translation errors are produced and stored in different objects like many evaluators or local fields (e.g., for links) so the final status is collected
@@ -1029,8 +1056,8 @@ public class Column {
 		String joutid = "`id`: `" + this.getOutput().getId() + "`";
 		String jout = "`output`: {" + joutid + "}";
 
-		String jstatus = "`status`: " + (this.getTranslateError() != null ? this.getTranslateError().toJson() : "undefined");
-		String jdirty = "`dirty`: " + (this.isDirtyPropagated() ? "true" : "false"); // We transfer deep dirty
+		String jstatus = "`status`: " + (this.getThisOrDependenceError() != null ? this.getTranslateError().toJson() : "undefined");
+		String jdirty = "`dirty`: " + (this.isThisOrDependenceDirty() ? "true" : "false"); // We transfer deep dirty including this column
 
 		String jkind = "`kind`:" + this.kind.getValue() + "";
 

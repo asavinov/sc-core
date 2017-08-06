@@ -492,36 +492,43 @@ public class Schema {
 	}
 
 	//
-	// Schema dependencies
+	// Dependency graph
 	//
 	
-	public List<Column> getChildDependencies(Column col) {
-		// Return all columns which point to the specified column as a dependency, that is, which have this column in its deps
+	protected void resetDependencies() { // Reset. Normally before generating new dependency graph
+		this.columns.forEach(x -> x.resetDependencies());
+	}
+	protected List<Column> getStartingColumns() { // Return all columns which do not depend on other columns (starting nodes in the dependency graph)
+		List<Column> res = this.columns.stream().filter(x -> x.isStartingColumn()).collect(Collectors.<Column>toList());
+		return res;
+	}
+	protected List<Column> getNextDependencies(Column col) { // Return all columns have the specified column in their dependencies (but can depend also on other columns)
 		List<Column> res = this.columns.stream().filter(x -> x.getDependencies() != null && x.getDependencies().contains(col)).collect(Collectors.<Column>toList());
 		return res;
 	}
-	public void emptyDependencies() { // Reset. Normally before generating them.
-		this.columns.forEach(x -> x.resetDependencies());
-	}
-
-	// Return all columns which do not depend on other columns. 
-	// They are starting nodes in the dependency graph
-	protected List<Column> getStartingColumns() {
-		List<Column> res = this.columns.stream().filter(x -> !x.isDerived()).collect(Collectors.<Column>toList());
-		return res;
-	}
-
-	// Get all column which have all their dependencies covered by the specified columns in the parameter list.
-	// We get all columns that directly depend on the specified columns.
-	// If the parameter includes all already evaluated columns then the output has columns that are ready to be evaluated on the next step.
-	// Essentially, we follow the dependency graph by generating next layer of columns in the output based on the previous layer of columns in the parameter.
-	protected List<Column> getNextColumns(List<Column> previousColumns) {
-		List<Column> res = new ArrayList<Column>();
+	protected List<Column> getNextColumns(List<Column> previousColumns) { // Get columns with all their dependencies in the specified list
+		List<Column> ret = new ArrayList<Column>();
 		
 		for(Column col : this.columns) {
+
+			if(previousColumns.contains(col)) continue; // Already in the list. Ccan it really happen without cycles?
 			List<Column> deps = col.getDependencies();
-			if(deps == null) continue; // Non-evaluatable (no formula or error)
-			if(previousColumns.contains(col)) continue; // Skip already evaluated columns
+			if(deps == null) continue; // Something wrong
+
+			if(previousColumns.containsAll(deps)) { // All column dependencies are in the list
+				ret.add(col); 
+			}
+		}
+		
+		return ret;
+	}
+	protected List<Column> getNextColumnsEvaluatable(List<Column> previousColumns) { // Get columns with all their dependencies in the specified list and having no translation errors (own or inherited)
+		List<Column> ret = new ArrayList<Column>();
+		
+		for(Column col : this.columns) {
+			if(previousColumns.contains(col)) continue;  // Already in the list. Ccan it really happen without cycles?
+			List<Column> deps = col.getDependencies();
+			if(deps == null) continue; // Something wrong
 
 			// If it has errors then exclude it (cannot be evaluated)
 			if(col.getTranslateError() != null && col.getTranslateError().code != DcErrorCode.NONE) {
@@ -533,29 +540,11 @@ public class Schema {
 			if(errCol != null) continue;
 			
 			if(previousColumns.containsAll(deps)) { // All deps have to be evaluated (non-dirty)
-				res.add(col); 
+				ret.add(col); 
 			}
 		}
 		
-		return res;
-	}
-
-	protected List<Column> getAllNextColumns(List<Column> previousColumns) {
-		List<Column> res = new ArrayList<Column>();
-		
-		for(Column col : this.columns) {
-		//for(Map.Entry<Column, List<Column>> entry : dependencies.entrySet()) {
-			//Column col = entry.getKey();
-			List<Column> deps = col.getDependencies();
-			if(deps == null) continue; // Non-evaluatable (no formula or error)
-			if(previousColumns.contains(col)) continue; // Skip already evaluated columns
-
-			if(previousColumns.containsAll(deps)) { // All deps have to be evaluated (non-dirty)
-				res.add(col); 
-			}
-		}
-		
-		return res;
+		return ret;
 	}
 
 	//
@@ -569,6 +558,22 @@ public class Schema {
 	 */
 	public void translate() {
 		// TODO:
+
+		// UI shows two statuses and we need two mechanisms:
+
+		// - canEvaluate - translation errors of this (error, cycle) or previous (warning) columns
+		//   - how to propagate canEvaluate/TranslateError/EvalError status?
+		//     - translate or evaluate errors? Probably both are important - if there eval error then we cannot eval next columns precisely as translate errors. the difference is that translate errors are static while eval errors appear during the eval process.
+		//   - we need to store/serialize it in the column properties for visualization purposes - currently status field in json
+		//     - so we can introduce an error property of each column - canEvaluate - is this own error or if absent, previous formula error.
+		//     - 
+
+		// - needEvaluate/isUptodate - dirty status of this (formula changed) or inherited (previous formulas changed)
+		//   - how to propagate need-eval (dirty/up-to-date) status? 
+		//     - Formula change vs data change? Formula -> this and next. Data change (free/starting columns) -> only next change.
+		//  - we need to serialize/store it for visualization purposes - current dirty field in json
+		//    - so we can introduce a boolean property of each column - needEvaluate/isUptodate/isDirty - it is computed using dependency graph (which has to be up-to-date, that is, normally after translation). Yes, if this formula changed or (inherited) previous formula changed.
+
 		// Problems:
 		// - finding/storing/getting inherited errors/status:
 		//   - inherited formula dirty/change
@@ -577,22 +582,21 @@ public class Schema {
 		//   - inherited evaluation errors
 		//   - self-dependence - it is viewed as formula error, it cannot be evaluated and hence all next column inherit this status
 		
-		// Inherited status is produced from a dependency graph which requires translation of all formulas
-		// We might need display inherited status so it could be set in each column as a real property like InheritedTranslationError (the first one)
-		// If not needed for visualization then it can be computed on demand (but then each time expansion tree of this column has to be built (down to free/primitive columns).
-		// If we assume that own errors have higher priority then inherited errors can be returned only if there are no own errors.
-		// If we change a formula (or data) then this action has to invalidate all next derived columns
-		
-		// UI shows two statuses:
-		// - canEvaluate - translation errors of this (error, cycle) or previous (warning) columns
-		// - needEvaluate/isUptodate - dirty status of this (formula changed) or inherited (previous formulas changed)
-		
+		// Final goal:
+		// - We need to define several examples with auto-evaluation (also manual) evaluation and event feeds from different sources like kafka.
+		//   We want to publish these examples in open source by comparing them with kafka and other stream processing engines.
+		//   Scenario 1: using rest api to feed events
+		//   Scenario 2: subscribing to kafka topic and auto-evaluate
+		//   Scenario 3: subscribing to kafka topic and writing the result to another kafka topic.
+		//   Examples: word count, moving average/max/min (we need some domain specific interpretation like average prices for the last 24 hours),
+		//   Scenario 4: Batch processing by loading from csv, evaluation, and writing the result back to csv.
+
 		
 		//
 		// Translate individual columns and build dependency graph
 		//
 
-		this.emptyDependencies(); // Reset
+		this.resetDependencies(); // Reset
 		for(Column col : this.columns) {
 			col.translate();
 		}
@@ -602,7 +606,7 @@ public class Schema {
 		// Goal is to see inherited status directly in column status. 
 		// Alternatively, the inherited status could be retrieved dynamically, which is good if something changes in previous columns.
 		//
-		
+/*
 		List<Column> readyColumns = new ArrayList<Column>(); // Already evaluated
 		List<Column> nextColumns = this.getStartingColumns(); // Initialize. First iteration with column with no dependency formulas. 
 		while(nextColumns.size() > 0) {
@@ -629,7 +633,7 @@ public class Schema {
 				}
 				readyColumns.add(col);
 			}
-			nextColumns = this.getAllNextColumns(readyColumns); // Next iteration
+			nextColumns = this.getNextColumns(readyColumns); // Next iteration
 		}
 		
 		//
@@ -645,6 +649,7 @@ public class Schema {
 				//col.mainExpr.status = new DcError(DcErrorCode.DEPENDENCY_CYCLE_ERROR, "Cyclic dependency.", "This column formula depends on itself by using other columns which depend on it.");
 			}
 		}
+*/
 
 	}
 
@@ -664,16 +669,28 @@ public class Schema {
 	}
 	
 	/**
-	 * Evaluate all columns of the schema.
+	 * Evaluate all columns of the schema which can be evaluated and need evaluation (dirty output).
 	 * 
-	 * The order of column evaluation is determined by the dependency graph. Currently dependencies do not involve ranges, that is, the full range of any dependent column must be up-to-date.
-	 * The input range for each evaluated column is determined by its own dirty status, that is, the evaluated inputs depend on this column dirty status. 
-	 * The dirty status involves involves two components: set population status (added and removed inputs), change status (updated outputs of inputs).
+	 * The order of column evaluation is determined by the dependency graph.
+	 * Can evaluate depends on the error status: translate errors, evaluate errors, self-dependence errors, and these errors in dependencies.
+	 * Need evaluate depends on formula changes, data output changes, set changes, and these changes in dependencies.
 	 * 
-	 * Evaluation results in cleaning this column status by computing the necessary outputs. 
+	 * Finally, the status of each evaluated column is cleaned (made up-to-date). 
 	 */
 	public void evaluate() {
 
+		for(List<Column> cols = this.getStartingColumns(); cols.size() > 0; cols = this.getNextColumnsEvaluatable(cols)) { // Loop on expansion layers of dependencies forward
+			for(Column col : cols) {
+				if(!col.isDerived()) continue;
+				// TODO: Detect also evaluate errors that could have happened before in this same evaluate loop and prevent this column from evaluation
+				DcError de = col.getTranslateError();
+				if(de == null || de.code == DcErrorCode.NONE) {
+					col.evaluate();
+				}
+			}
+		}
+
+/*
 		List<Column> readyColumns = new ArrayList<Column>(); // Already evaluated
 		List<Column> nextColumns = this.getStartingColumns(); // Initialize. First iteration with column with no dependency formulas. 
 		while(nextColumns.size() > 0) {
@@ -683,8 +700,9 @@ public class Schema {
 					readyColumns.add(col);
 				}
 			}
-			nextColumns = this.getNextColumns(readyColumns); // Next iteration
+			nextColumns = this.getNextColumnsEvaluatable(readyColumns); // Next iteration
 		}
+*/
 
 		this.setEvaluateTime(); // Store the time of evaluation
 	}
