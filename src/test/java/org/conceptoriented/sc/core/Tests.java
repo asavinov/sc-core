@@ -240,7 +240,7 @@ public class Tests {
         t2.append(Record.fromJson("{ A: 10.0, B: \"ccc\" }"));
 
         c5.setKind(DcColumnKind.LINK);
-        c5.setCalcFormula(" { [A] = [A]; [B] = [B] } ");
+        c5.setLinkFormula(" { [A] = [A]; [B] = [B] } ");
 
         c5.translate();
 
@@ -311,9 +311,9 @@ public class Tests {
         // Define accu column
         Column ta = schema.createColumn("T", "A", "Double");
         ta.setKind(DcColumnKind.ACCU);
-        ta.setCalcFormula(""); // Init to default
+        ta.setInitFormula(""); // Init to default
         ta.setAccuTable("T2");
-        ta.setAccuFormula(" out + 2.0 * [Id] ");
+        ta.setAccuFormula(" [out] + 2.0 * [Id] ");
         ta.setAccuPath("[G]");
 
         //
@@ -326,7 +326,7 @@ public class Tests {
         // Define group column
         Column t2g = schema.createColumn("T2", "G", "T");
         t2g.setKind(DcColumnKind.LINK);
-        t2g.setCalcFormula(" { [Id] = [Id] } ");
+        t2g.setLinkFormula(" { [Id] = [Id] } ");
         
         return schema;
     }

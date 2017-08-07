@@ -678,31 +678,20 @@ public class Schema {
 	 * Finally, the status of each evaluated column is cleaned (made up-to-date). 
 	 */
 	public void evaluate() {
-
-		for(List<Column> cols = this.getStartingColumns(); cols.size() > 0; cols = this.getNextColumnsEvaluatable(cols)) { // Loop on expansion layers of dependencies forward
+		
+		List<Column> done = new ArrayList<Column>();
+		for(List<Column> cols = this.getStartingColumns(); cols.size() > 0; cols = this.getNextColumnsEvaluatable(done)) { // Loop on expansion layers of dependencies forward
 			for(Column col : cols) {
 				if(!col.isDerived()) continue;
 				// TODO: Detect also evaluate errors that could have happened before in this same evaluate loop and prevent this column from evaluation
+				// Evaluate errors have to be also taken into account when generating next layer of columns
 				DcError de = col.getTranslateError();
 				if(de == null || de.code == DcErrorCode.NONE) {
 					col.evaluate();
 				}
 			}
+			done.addAll(cols);
 		}
-
-/*
-		List<Column> readyColumns = new ArrayList<Column>(); // Already evaluated
-		List<Column> nextColumns = this.getStartingColumns(); // Initialize. First iteration with column with no dependency formulas. 
-		while(nextColumns.size() > 0) {
-			for(Column col : nextColumns) {
-				if(col.getTranslateError() == null || col.getTranslateError().code == DcErrorCode.NONE) { // Only columns without problems can be evaluated
-					col.evaluate(); // This will update (clean) the dirty status of each individual column
-					readyColumns.add(col);
-				}
-			}
-			nextColumns = this.getNextColumnsEvaluatable(readyColumns); // Next iteration
-		}
-*/
 
 		this.setEvaluateTime(); // Store the time of evaluation
 	}

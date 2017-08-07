@@ -80,6 +80,8 @@ class EvaluatorExpr implements Evaluator {
 	// Formula
 	protected String formula;
 
+	protected boolean isEquality; // The formula is a single parameter without operations
+
 	// Will be filled by parser and then augmented by binder
 	protected List<ExprDependency> exprDependencies = new ArrayList<ExprDependency>();
 
@@ -106,7 +108,10 @@ class EvaluatorExpr implements Evaluator {
 	public List<Column> getDependencies() { // Extract all unique column objects used taking into account recursive-dependence via out or this column name and by removing duplicating columns
 		List<Column> columns = new ArrayList<Column>();
 		for(ExprDependency dep : this.exprDependencies) {
-			if(dep.qname.names.size() == 1 && dep.qname.names.get(0).equalsIgnoreCase(ExprNode.OUT_VARIABLE_NAME)) {
+			if(dep.pathName.equalsIgnoreCase("["+EvaluatorExpr.OUT_VARIABLE_NAME+"]")) {
+				; // Do not add to dependencies
+			}
+			if(dep.qname.names.size() == 1 && dep.qname.names.get(0).equalsIgnoreCase(EvaluatorExpr.OUT_VARIABLE_NAME)) {
 				; // Do not add to dependencies
 			}
 			else {
@@ -167,8 +172,12 @@ class EvaluatorExpr implements Evaluator {
 		int paramNo = 0;
 		for(ExprDependency dep : this.exprDependencies) {
 			Object value = params[paramNo];
+			if(value == null) value = Double.NaN;
 			try {
-				if(this.isExp4j()) {
+				if(this.isEquality) {
+					; // Do nothing
+				}
+				else if(this.isExp4j()) {
 					this.exp4jExpression.setVariable(dep.paramName, ((Number)value).doubleValue());
 				}
 				else if(this.isEvalex()) {
@@ -176,15 +185,19 @@ class EvaluatorExpr implements Evaluator {
 				}
 			}
 			catch(Exception e) {
-				this.translateError = new DcError(DcErrorCode.EVALUATE_ERROR, "Evaluate error", "Error setting parameter values. " + e.getMessage());
+				this.evaluateError = new DcError(DcErrorCode.EVALUATE_ERROR, "Evaluate error", "Error setting parameter values. " + e.getMessage());
 				return null;
 			}
+			paramNo++;
 		}
 
 		// Evaluate native expression
 		Object ret = null;
 		try {
-			if(this.isExp4j()) {
+			if(this.isEquality) {
+				ret = params[0]; // Only one param exists for equalities
+			}
+			else if(this.isExp4j()) {
 				ret = this.exp4jExpression.evaluate();
 			}
 			else if(this.isEvalex()) {
@@ -192,7 +205,7 @@ class EvaluatorExpr implements Evaluator {
 			}
 		}
 		catch(Exception e) {
-			this.translateError = new DcError(DcErrorCode.EVALUATE_ERROR, "Evaluate error", "Error evaluating expression. " + e.getMessage());
+			this.evaluateError = new DcError(DcErrorCode.EVALUATE_ERROR, "Evaluate error", "Error evaluating expression. " + e.getMessage());
 			return null;
 		}
 
@@ -267,6 +280,21 @@ class EvaluatorExpr implements Evaluator {
 			dep.pathName = this.formula.substring(dep.start, dep.end);
 			dep.qname = QName.parse(dep.pathName); // TODO: There might be errors here, e.g., wrong characters in names
 		}
+
+    	//
+		// Detect identity expressions which have a single parameter without operations
+		// It is a workaround to solve the problem of non-numeric expressions (used in links) which cannot be evaluated by a native expression library.
+		// For equalities, the evaluator will process them separately without using native evaluator.
+		//
+		if(this.exprDependencies.size() == 1) {
+			ExprDependency dep = this.exprDependencies.get(0);
+			if(dep.pathName.equals(this.formula.trim())) {
+				this.isEquality = true;
+			}
+			else {
+				this.isEquality = false;
+			}
+		}
 	}
 
 	//
@@ -279,6 +307,10 @@ class EvaluatorExpr implements Evaluator {
 		// Resolve each column path in the formula relative to the input table
 		//
 		for(ExprDependency dep : this.exprDependencies) {
+			
+			if(dep.pathName.equalsIgnoreCase("["+EvaluatorExpr.OUT_VARIABLE_NAME+"]")) { // It is this column (being evaluated)
+				continue;
+			}
 
 			dep.columns = dep.qname.resolveColumns(this.table); // Try to really resolve symbol
 

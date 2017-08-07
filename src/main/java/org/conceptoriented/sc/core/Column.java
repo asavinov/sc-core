@@ -413,6 +413,7 @@ public class Column {
 	protected void translateLinkFormula(String frml) { // Parse tuple {...} into a list of member assignments and set error
 		this.linkTranslateStatus = null;
 		this.linkMembers.clear();
+		if(frml == null | frml.isEmpty()) return;
 
 		Map<String,String> mmbrs = new HashMap<String,String>();
 
@@ -691,7 +692,10 @@ public class Column {
 		return isOutputParameter(qname.names.get(0));
 	}
 	private boolean isOutputParameter(String paramName) {
-		if(paramName.equalsIgnoreCase(ExprNode.OUT_VARIABLE_NAME)) {
+		if(paramName.equalsIgnoreCase("["+EvaluatorExpr.OUT_VARIABLE_NAME+"]")) {
+			return true;
+		}
+		if(paramName.equalsIgnoreCase(EvaluatorExpr.OUT_VARIABLE_NAME)) {
 			return true;
 		}
 		else if(paramName.equalsIgnoreCase(this.getName())) {
@@ -710,197 +714,6 @@ public class Column {
 		}
 		return defaultValue;
 	}
-
-	//
-	// Translate formula
-	// Parse and bind. Generate an evaluator object. Produce new (error) status of translation.
-	//
-/*
-	public DcError getStatus_OLD() {
-		DcError err = null;
-		if(this.mainExpr != null) {
-			ExprNode errorNode = this.mainExpr.getErrorNode();
-			if(errorNode != null) {
-				err = errorNode.status;
-			}
-		}
-		
-		if(err == null && this.accuExpr != null) {
-			ExprNode errorNode = this.accuExpr.getErrorNode();
-			if(errorNode != null) {
-				err = errorNode.status;
-			}
-		}
-
-		if(err == null) {
-			err = new DcError(DcErrorCode.NONE, "", "");
-		}
-		
-		return err;
-	}
-
-	public ExprNode mainExpr; // Either primitive or complex (link)
-
-	public ExprNode accuExpr; // Additional values collected from a lesser table
-
-	public void translate_OLD() {
-
-		//
-		// Reset
-		//
-		this.resetDependencies();
-		this.mainExpr = null;
-		this.accuExpr = null;
-
-		//
-		// Step 1: Evaluate main formula to initialize the column. If it is empty then we need to init it with default values
-		//
-
-		this.mainExpr = this.translateMain();
-
-		//
-		// Step 2: Evaluate accu formula to update the column values (in the case of accu formula)
-		//
-		if(this.kind == DcColumnKind.ACCU) {
-			this.accuExpr = this.translateAccu();
-		}
-
-		//
-		// Dependence graph
-		//
-
-		List<Column> columns = new ArrayList<Column>();
-
-		if(this.mainExpr != null) {
-			columns.addAll(this.mainExpr.getDependencies());
-		}
-
-		if(this.accuExpr != null) {
-			columns.addAll(this.accuExpr.getDependencies());
-		}
-
-		this.setDependencies(columns);
-	}
-
-	public ExprNode translateMain() {
-		if(this.calcFormula == null || this.calcFormula.isEmpty()) {
-			return null;
-		}
-
-		ExprNode expr = new ExprNode();
-
-		//
-		// Parse: check correct syntax, find all symbols and store them in dependencies
-		//
-		expr.formula = this.calcFormula;
-		expr.tableName = this.getInput().getName();
-		expr.pathName = "";
-		expr.name = this.name;
-		
-		expr.parse();
-
-		//
-		// Bind (check if all the symbols can be resolved)
-		//
-		expr.table = this.getInput();
-		expr.column = this;
-
-		expr.bind();
-		
-		return expr;
-	}
-		
-	public ExprNode translateAccu() {
-		if(this.accuFormula == null || this.accuFormula.isEmpty()) {
-			return null;
-		}
-
-		ExprNode expr = new ExprNode();
-
-		//
-		// Parse: check correct syntax, find all symbols and store them in dependencies
-		//
-		expr.formula = this.accuFormula;
-		expr.tableName = this.accuTable;
-		expr.pathName = this.accuPath;
-		expr.name = this.name;
-		
-		expr.parse();
-
-		//
-		// Bind (check if all the symbols can be resolved)
-		//
-		expr.column = this;
-
-		expr.bind();
-		
-		return expr;
-	}
-*/
-
-	//
-	// Evaluate formula. 
-	// Use evaluator object and generate new function outputs for all or some inputs
-	//
-/*
-	public void evaluate_OLD() {
-		
-		if(this.getKind() == DcColumnKind.CLASS) {
-			;
-		}
-		else if(this.getKind() == DcColumnKind.CALC || this.getKind() == DcColumnKind.ACCU || this.getKind() == DcColumnKind.LINK) {
-			
-			//
-			// Step 1: Evaluate main formula to initialize the column. If it is empty then we need to init it with default values
-			//
-	
-			Range mainRange = this.data.getIdRange(); // All dirty/new rows
-
-			if(this.calcFormula == null || this.calcFormula.trim().isEmpty()) { // Initialize to default constant (for example, after deletig the formula)
-				Object defaultValue; // Depends on the column type
-				if(this.getOutput().isPrimitive()) {
-					defaultValue = 0.0;
-				}
-				else {
-					defaultValue = null;
-				}
-				for(long i=mainRange.start; i<mainRange.end; i++) {
-					this.data.setValue(i, defaultValue);
-				}
-			}
-			else if(this.mainExpr != null) { // Initialize to what formula returns
-				for(long i=mainRange.start; i<mainRange.end; i++) {
-					this.mainExpr.evaluate(i);
-					this.data.setValue(i, this.mainExpr.result);
-				}
-			}
-	
-			//
-			// Step 2: Evaluate accu formula to update the column values (in the case of accu formula)
-			//
-			
-			if(this.getKind() == DcColumnKind.ACCU) {
-				
-				Column accuLinkColumn = accuExpr.path.get(0);
-	
-				Range accuRange = accuLinkColumn.getData().getIdRange(); // We use all existing rows for full re-evaluate
-				for(long i=accuRange.start; i<accuRange.end; i++) {
-					long g = (Long) accuLinkColumn.getData().getValue(accuExpr.path, i); // Find group element
-					accuExpr.evaluate(i);
-					this.data.setValue(g, accuExpr.result);
-				}
-	
-			}
-
-		}
-
-		this.data.markNewAsClean(); // Mark dirty as clean
-
-		this.setFormulaClean(); // Mark up-to-date if successful
-
-		this.setEvaluateTime(); // Store the time of evaluation
-	}
-*/
 
 	//
 	// Descriptor (if column is computed via Java class and not formula)
