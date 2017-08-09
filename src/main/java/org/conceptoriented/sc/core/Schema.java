@@ -339,11 +339,14 @@ public class Schema {
 		
 		DcColumnKind kind = obj.has("kind") ? DcColumnKind.fromInt(obj.getInt("kind")) : DcColumnKind.AUTO;
 		
-		String formula = obj.has("formula") && !obj.isNull("formula") ? obj.getString("formula") : "";
+		String calcFormula = obj.has("calcFormula") && !obj.isNull("calcFormula") ? obj.getString("calcFormula") : "";
 
-		String accuformula = obj.has("accuformula") && !obj.isNull("accuformula") ? obj.getString("accuformula") : "";
-		String accutable = obj.has("accutable") && !obj.isNull("accutable") ? obj.getString("accutable") : "";
-		String accupath = obj.has("accupath") && !obj.isNull("accupath") ? obj.getString("accupath") : "";
+		String linkFormula = obj.has("linkFormula") && !obj.isNull("linkFormula") ? obj.getString("linkFormula") : "";
+
+		String initFormula = obj.has("initFormula") && !obj.isNull("initFormula") ? obj.getString("initFormula") : "";
+		String accuFormula = obj.has("accuFormula") && !obj.isNull("accuFormula") ? obj.getString("accuFormula") : "";
+		String accuTable = obj.has("accuTable") && !obj.isNull("accuTable") ? obj.getString("accuTable") : "";
+		String accuPath = obj.has("accuPath") && !obj.isNull("accuPath") ? obj.getString("accuPath") : "";
 
 		// Descriptor is either JSON object or JSON string with an object but we want to store a string
 		String descr_string = "";
@@ -373,11 +376,14 @@ public class Schema {
 
 			col.setKind(kind);
 
-			col.setCalcFormula(formula);
+			col.setCalcFormula(calcFormula);
 
-			col.setAccuFormula(accuformula);
-			col.setAccuTable(accutable);
-			col.setAccuPath(accupath);
+			col.setLinkFormula(linkFormula);
+
+			col.setInitFormula(initFormula);
+			col.setAccuFormula(accuFormula);
+			col.setAccuTable(accuTable);
+			col.setAccuPath(accuPath);
 
 			col.setDescriptor(descr_string);
 			
@@ -424,11 +430,14 @@ public class Schema {
 		
 		DcColumnKind kind = obj.has("kind") ? DcColumnKind.fromInt(obj.getInt("kind")) : DcColumnKind.AUTO;
 		
-		String formula = obj.has("formula") && !obj.isNull("formula") ? obj.getString("formula") : "";
+		String calcFormula = obj.has("calcFormula") && !obj.isNull("calcFormula") ? obj.getString("calcFormula") : "";
 		
-		String accuformula = obj.has("accuformula") && !obj.isNull("accuformula") ? obj.getString("accuformula") : "";
-		String accutable = obj.has("accutable") && !obj.isNull("accutable") ? obj.getString("accutable") : "";
-		String accupath = obj.has("accupath") && !obj.isNull("accupath") ? obj.getString("accupath") : "";
+		String linkFormula = obj.has("linkFormula") && !obj.isNull("linkFormula") ? obj.getString("linkFormula") : "";
+		
+		String initFormula = obj.has("initFormula") && !obj.isNull("initFormula") ? obj.getString("initFormula") : "";
+		String accuFormula = obj.has("accuFormula") && !obj.isNull("accuFormula") ? obj.getString("accuFormula") : "";
+		String accuTable = obj.has("accuTable") && !obj.isNull("accuTable") ? obj.getString("accuTable") : "";
+		String accuPath = obj.has("accuPath") && !obj.isNull("accuPath") ? obj.getString("accuPath") : "";
 
 		// Descriptor is either JSON object or JSON string with an object but we want to store a string
 		String descr_string = null;
@@ -452,11 +461,14 @@ public class Schema {
 
 		if(obj.has("kind")) column.setKind(kind);
 
-		if(obj.has("formula")) column.setCalcFormula(formula);
+		if(obj.has("calcFormula")) column.setCalcFormula(calcFormula);
 
-		if(obj.has("accuformula")) column.setAccuFormula(accuformula);
-		if(obj.has("accutable")) column.setAccuTable(accutable);
-		if(obj.has("accupath")) column.setAccuPath(accupath);
+		if(obj.has("linkFormula")) column.setLinkFormula(linkFormula);
+
+		if(obj.has("initFormula")) column.setInitFormula(initFormula);
+		if(obj.has("accuFormula")) column.setAccuFormula(accuFormula);
+		if(obj.has("accuTable")) column.setAccuTable(accuTable);
+		if(obj.has("accuPath")) column.setAccuPath(accuPath);
 
 		if(obj.has("descriptor")) column.setDescriptor(descr_string);
 	}
@@ -601,56 +613,6 @@ public class Schema {
 			col.translate();
 		}
 		
-		//
-		// Propagate translation status (errors) through dependency graph
-		// Goal is to see inherited status directly in column status. 
-		// Alternatively, the inherited status could be retrieved dynamically, which is good if something changes in previous columns.
-		//
-/*
-		List<Column> readyColumns = new ArrayList<Column>(); // Already evaluated
-		List<Column> nextColumns = this.getStartingColumns(); // Initialize. First iteration with column with no dependency formulas. 
-		while(nextColumns.size() > 0) {
-			for(Column col : nextColumns) {
-				if(col.getTranslateError() == null || col.getTranslateError().code == DcErrorCode.NONE) {
-					// If there is at least one error in dependencies then mark this as propagated error
-					List<Column> deps = col.getDependencies();
-					if(deps == null) { 
-						readyColumns.add(col);
-						continue;
-					}
-					// If at least one dependency has errors then this column is not suitable for propagation
-					Column errCol = deps.stream().filter(x -> x.getTranslateError() != null && x.getTranslateError().code != DcErrorCode.NONE).findAny().orElse(null);
-					if(errCol != null) { // Mark this column as having propagated error
-						if(errCol.getTranslateError().code == DcErrorCode.PARSE_ERROR || errCol.getTranslateError().code == DcErrorCode.PARSE_PROPAGATION_ERROR)
-							;//col.mainExpr.status = new DcError(DcErrorCode.PARSE_PROPAGATION_ERROR, "Propagated parse error.", "Error in the column: '" + errCol.getName() + "'");
-						else if(errCol.getTranslateError().code == DcErrorCode.BIND_ERROR || errCol.getTranslateError().code == DcErrorCode.BIND_PROPAGATION_ERROR)
-							;//col.mainExpr.status = new DcError(DcErrorCode.BIND_PROPAGATION_ERROR, "Propagated bind error.", "Error in the column: '" + errCol.getName() + "'");
-						else if(errCol.getTranslateError().code == DcErrorCode.EVALUATE_ERROR || errCol.getTranslateError().code == DcErrorCode.EVALUATE_PROPAGATION_ERROR)
-							;//col.mainExpr.status = new DcError(DcErrorCode.EVALUATE_PROPAGATION_ERROR, "Propagated evaluation error.", "Error in the column: '" + errCol.getName() + "'");
-						else
-							;//col.mainExpr.status = new DcError(DcErrorCode.GENERAL, "Propagated error.", "Error in the column: '" + errCol.getName() + "'");
-					}
-				}
-				readyColumns.add(col);
-			}
-			nextColumns = this.getNextColumns(readyColumns); // Next iteration
-		}
-		
-		//
-		// Find columns with cyclic dependencies
-		//
-		for(Column col : this.getColumns()) {
-			if(readyColumns.contains(col)) continue;
-			
-			// If a column has not been covered during propagation then it belongs to a cycle. The cycle itself is not found by this procedure. 
-
-			if(col.getTranslateError() == null || col.getTranslateError().code == DcErrorCode.NONE) {
-				//if(col.mainExpr == null) col.mainExpr = new ExprNode(); // Wrong use. Should not happen.
-				//col.mainExpr.status = new DcError(DcErrorCode.DEPENDENCY_CYCLE_ERROR, "Cyclic dependency.", "This column formula depends on itself by using other columns which depend on it.");
-			}
-		}
-*/
-
 	}
 
 	//

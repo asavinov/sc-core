@@ -114,7 +114,7 @@ public class Column {
 	// Accumulation formula
 	//
 	
-	protected String accuFormula; // It is applied to accutable
+	protected String accuFormula; // It is applied to accuTable
 	public String getAccuFormula() {
 		return this.accuFormula;
 	}
@@ -134,13 +134,13 @@ public class Column {
 		this.setFormulaChange(true);
 	}
 	
-	protected String accuPath; // It leads from accutable to the input table of the column
+	protected String accuPath; // It leads from accuTable to the input table of the column
 	public String getAccuPath() {
 		return this.accuPath;
 	}
-	public void setAccuPath(String accupath) {
-		if(this.accuPath != null && this.accuPath.equals(accupath)) return; // Nothing to change
-		this.accuPath = accupath;
+	public void setAccuPath(String accuPath) {
+		if(this.accuPath != null && this.accuPath.equals(accuPath)) return; // Nothing to change
+		this.accuPath = accuPath;
 		this.setFormulaChange(true);
 	}
 	
@@ -384,7 +384,7 @@ public class Column {
 
 			// Initialization
 			this.initEvaluator = new EvaluatorExpr(inputTable);
-			this.initEvaluator.translate(this.calcFormula);
+			this.initEvaluator.translate(this.initFormula);
 			columns.addAll(this.initEvaluator.getDependencies());
 
 			// Accu table and link (group) path
@@ -869,21 +869,24 @@ public class Column {
 		String joutid = "`id`: `" + this.getOutput().getId() + "`";
 		String jout = "`output`: {" + joutid + "}";
 
-		String jstatus = "`status`: " + (this.getThisOrDependenceError() != null ? this.getTranslateError().toJson() : "undefined");
+		String jstatus = "`status`: " + (this.getThisOrDependenceError() != null ? this.getThisOrDependenceError().toJson() : "null");
 		String jdirty = "`dirty`: " + (this.isThisOrDependenceDirty() ? "true" : "false"); // We transfer deep dirty including this column
 
 		String jkind = "`kind`:" + this.kind.getValue() + "";
 
-		String jfmla = "`formula`: " + JSONObject.valueToString(this.getCalcFormula()) + "";
+		String jcalc = "`calcFormula`: " + JSONObject.valueToString(this.getCalcFormula()) + "";
 
-		String jafor = "`accuformula`: " + JSONObject.valueToString(this.getAccuFormula()) + "";
-		String jatbl = "`accutable`: " + JSONObject.valueToString(this.getAccuTable()) + "";
-		String japath = "`accupath`: " + JSONObject.valueToString(this.getAccuPath()) + "";
+		String jlink = "`linkFormula`: " + JSONObject.valueToString(this.getLinkFormula()) + "";
+
+		String jinit = "`initFormula`: " + JSONObject.valueToString(this.getInitFormula()) + "";
+		String jaccu = "`accuFormula`: " + JSONObject.valueToString(this.getAccuFormula()) + "";
+		String jatbl = "`accuTable`: " + JSONObject.valueToString(this.getAccuTable()) + "";
+		String japath = "`accuPath`: " + JSONObject.valueToString(this.getAccuPath()) + "";
 
 		//String jdescr = "`descriptor`: " + (this.getDescriptor() != null ? "`"+this.getDescriptor()+"`" : "null");
 		String jdescr = "`descriptor`: " + JSONObject.valueToString(this.getDescriptor()) + "";
 
-		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jdirty + ", " + jstatus + ", " + jkind + ", " + jfmla + ", " + jafor + ", " + jatbl + ", " + japath + ", " + jdescr;
+		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jdirty + ", " + jstatus + ", " + jkind + ", " + jcalc + ", " + jlink + ", " + jinit + ", " + jaccu + ", " + jatbl + ", " + japath + ", " + jdescr;
 
 		return ("{" + json + "}").replace('`', '"');
 	}
