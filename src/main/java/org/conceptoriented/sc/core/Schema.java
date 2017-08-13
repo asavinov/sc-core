@@ -564,9 +564,8 @@ public class Schema {
 	//
 	
 	/**
-	 * Parse and bind all column formulas in the schema. 
-	 * All dependencies are computed and made up-to-date.
-	 * The updated result of translation is stored in individual columns.
+	 * Parse, bind and build all column formulas in the schema. 
+	 * Generate dependencies.
 	 */
 	public void translate() {
 		// TODO:
@@ -610,6 +609,7 @@ public class Schema {
 
 		this.resetDependencies(); // Reset
 		for(Column col : this.columns) {
+			if(!col.isDerived()) continue;
 			col.translate();
 		}
 		
