@@ -63,6 +63,20 @@ public class QName {
 		return names.get(names.size()-1); // Last segment
 	}
 
+	@Override
+	public String toString() {
+		StringBuffer ret = new StringBuffer();
+		for(String n : this.names) {
+			ret.append("["+n+"].");
+		}
+		if(ret.length() > 1) {
+			return ret.substring(0, ret.length()-1);
+		}
+		else  {
+			return ret.toString();
+		}
+	}
+
 	public static QName parse(String path) {
 		QName ret = parser.buildQName(path); // TODO: There might be errors here, e.g., wrong characters in names
 		return ret;

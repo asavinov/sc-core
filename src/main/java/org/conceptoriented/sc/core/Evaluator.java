@@ -32,7 +32,7 @@ import java.util.regex.Pattern;
  * - Accumulate. Here the first parameter is explicitly used as the current output and then the updated output is returned. Separate evaluators are used for initialization and finalization.
  * - Link. Approach 1: Separate evaluators are used for each member of the tuple. However, their return values are not stored but rather are used to find/append an element by the column evaluator.
  * - Translation of source expression. An instance of this class is returned by a translator from some expression syntax. For each syntax, there is one translator. The paths can be encoded into the source expressions.
- *   The result is a native expression using its native variables as well as a list of bindings from column paths to these native variables.
+ *   The result is a native expression using its native variables.
  * 
  */
 public interface Evaluator {
@@ -44,7 +44,6 @@ public interface Evaluator {
 	 */
 	public void setParamPaths(List<String> paths);
 	public List<QName> getParamPaths();
-	public List<Column> getDependencies();
 	/**
 	 * Each parameter has a description which can be retrieved by means of this method. 
 	 * It is not the best approach because these descriptions are language specific.
@@ -74,9 +73,6 @@ class EvaluatorExpr implements Evaluator {
 	public boolean isExp4j() { return true; }
 	public boolean isEvalex() { return false; }
 	
-	// All terms (dependencies) of the expression are paths starting from this table
-	protected Table table;
-	
 	// Formula
 	protected String formula;
 
@@ -105,22 +101,6 @@ class EvaluatorExpr implements Evaluator {
 		return paths;
 	}
 	@Override
-	public List<Column> getDependencies() { // Extract all unique column objects used taking into account recursive-dependence via out or this column name and by removing duplicating columns
-		List<Column> columns = new ArrayList<Column>();
-		for(ExprDependency dep : this.exprDependencies) {
-			if(dep.pathName.equalsIgnoreCase("["+EvaluatorExpr.OUT_VARIABLE_NAME+"]")) {
-				; // Do not add to dependencies
-			}
-			if(dep.qname.names.size() == 1 && dep.qname.names.get(0).equalsIgnoreCase(EvaluatorExpr.OUT_VARIABLE_NAME)) {
-				; // Do not add to dependencies
-			}
-			else {
-				dep.columns.forEach(x -> { if(!columns.contains(x)) columns.add(x); }); // Each dependency is a path and different paths can included same segments
-			}
-		}
-		return columns;
-	}
-	@Override
 	public void translate(String formula) {
 		this.translateError = null;
 		this.formula = formula;
@@ -132,16 +112,6 @@ class EvaluatorExpr implements Evaluator {
 		catch(Exception err) {
 			if(this.translateError == null) { // Status has not been set by the failed method
 				this.translateError = new DcError(DcErrorCode.PARSE_ERROR, "Parse error", "Cannot parse the formula.");
-			}
-			return;
-		}
-
-		try {
-			this.bind();
-		}
-		catch(Exception err) {
-			if(this.translateError == null) { // Status has not been set by the failed method
-				this.translateError = new DcError(DcErrorCode.BIND_ERROR, "Bind error", "Cannot bind names used in the formula.");
 			}
 			return;
 		}
@@ -298,30 +268,6 @@ class EvaluatorExpr implements Evaluator {
 	}
 
 	//
-	// Bind
-	//
-
-	// Resolve all symbols found after parsing relative to the input table
-	public void bind() {
-		//
-		// Resolve each column path in the formula relative to the input table
-		//
-		for(ExprDependency dep : this.exprDependencies) {
-			
-			if(dep.pathName.equalsIgnoreCase("["+EvaluatorExpr.OUT_VARIABLE_NAME+"]")) { // It is this column (being evaluated)
-				continue;
-			}
-
-			dep.columns = dep.qname.resolveColumns(this.table); // Try to really resolve symbol
-
-			if(dep.columns == null || dep.columns.size() < dep.qname.names.size()) {
-				this.translateError = new DcError(DcErrorCode.BIND_ERROR, "Cannot resolve columns.", "Error resolving columns " + dep.pathName);
-				return;
-			}
-		}
-	}
-
-	//
 	// Build (native expression that can be evaluated)
 	//
 
@@ -447,8 +393,7 @@ class EvaluatorExpr implements Evaluator {
 		return buf.toString();
 	}
 
-	public EvaluatorExpr(Table tbl) {
-		this.table = tbl;
+	public EvaluatorExpr() {
 	}
 }
 
@@ -458,5 +403,4 @@ class ExprDependency {
 	public String pathName;
 	public String paramName;
 	public QName qname;
-	public List<Column> columns;
 }

@@ -338,6 +338,8 @@ public class Column {
 	// Translation status
 	// Translation errors are produced and stored in different objects like many evaluators or local fields (e.g., for links) so the final status is collected
 	//
+	
+	private DcError bindError;
 
 	public DcError getTranslateError() { // Get single (the first) error (there could be many errors detected)
 		List<DcError> errors = this.getTranslateErrors();
@@ -346,6 +348,11 @@ public class Column {
 	}
 	public List<DcError> getTranslateErrors() { // Empty list in the case of no errors
 		List<DcError> errors = new ArrayList<DcError>();
+
+		if(this.bindError != null) {
+			errors.add(this.bindError);
+		}
+
 		if(this.kind == DcColumnKind.CALC) {
 			if(this.calcEvaluator != null) errors.add(this.calcEvaluator.getTranslateError());
 		}
@@ -361,7 +368,7 @@ public class Column {
 			if(this.finEvaluator != null) errors.add(this.accuEvaluator.getTranslateError());
 		}
 
-		return null;
+		return errors;
 	}
 	public boolean hasTranslateErrors() { // Is successfully translated and can be used for evaluation
 		if(getTranslateErrors().size() == 0) return false;
@@ -390,6 +397,8 @@ public class Column {
 	public void translate() {
 
 		// Reset
+		this.bindError = null;
+
 		this.calcEvaluator = null;
 
 		this.linkEvaluators.clear();
@@ -408,9 +417,9 @@ public class Column {
 		if(this.kind == DcColumnKind.CALC) {
 			if(this.calcFormula == null || this.calcFormula.isEmpty()) return;
 
-			this.calcEvaluator = new EvaluatorExpr(inputTable);
+			this.calcEvaluator = new EvaluatorExpr();
 			this.calcEvaluator.translate(this.calcFormula);
-			columns.addAll(this.calcEvaluator.getDependencies());
+			columns.addAll(this.resolveParameters(this.calcEvaluator.getParamPaths(), inputTable));
 		}
 		else if(this.kind == DcColumnKind.LINK) {
 
@@ -422,9 +431,9 @@ public class Column {
 			for(Entry<String,String> mmbr : this.linkMembers.entrySet()) { // For each tuple member (assignment) create an expression
 
 				// Right hand side
-				EvaluatorExpr expr = new EvaluatorExpr(inputTable);
+				EvaluatorExpr expr = new EvaluatorExpr();
 				expr.translate(mmbr.getValue());
-				columns.addAll(expr.getDependencies());
+				columns.addAll(this.resolveParameters(expr.getParamPaths(), inputTable));
 				
 				// Left hand side (column of the type table)
 				Column assignColumn = this.schema.getColumn(outputTable.getName(), mmbr.getKey());
@@ -436,9 +445,9 @@ public class Column {
 			if(this.accuFormula == null || this.accuFormula.isEmpty()) return;
 
 			// Initialization
-			this.initEvaluator = new EvaluatorExpr(inputTable);
+			this.initEvaluator = new EvaluatorExpr();
 			this.initEvaluator.translate(this.initFormula);
-			columns.addAll(this.initEvaluator.getDependencies());
+			columns.addAll(this.resolveParameters(this.initEvaluator.getParamPaths(), inputTable));
 
 			// Accu table and link (group) path
 			Table accuTable = this.schema.getTable(this.getAccuTable());
@@ -447,20 +456,60 @@ public class Column {
 			columns.addAll(this.accuPathColumns);
 
 			// Accumulation
-			this.accuEvaluator = new EvaluatorExpr(accuTable);
+			this.accuEvaluator = new EvaluatorExpr();
 			this.accuEvaluator.translate(this.accuFormula);
-			columns.addAll(this.accuEvaluator.getDependencies());
+			columns.addAll(this.resolveParameters(this.accuEvaluator.getParamPaths(), accuTable));
 
 			// Finalization
-			this.finEvaluator = new EvaluatorExpr(inputTable);
+			this.finEvaluator = new EvaluatorExpr();
 			this.finEvaluator.translate(this.finFormula);
-			columns.addAll(this.finEvaluator.getDependencies());
+			columns.addAll(this.resolveParameters(this.finEvaluator.getParamPaths(), inputTable));
 		}
 		else if(this.getKind() == DcColumnKind.CLASS) {
 			;
 		}
 
 		this.setDependencies(columns);
+	}
+
+	private List<Column> resolveParameters(List<QName> params, Table mainTable) { // Resolve specified parameter paths by removing duplicates and recognizing reference to this (out) column
+		if(mainTable == null) mainTable = this.getInput();
+		List<Column> columns = new ArrayList<Column>();
+		for(QName param : params) {
+			if(this.isOutputParameter(param)) {
+				continue; // Do not add to dependencies
+			}
+
+			Table table = mainTable;
+			for(String name : param.names) {
+				Column col = schema.getColumn(table.getName(), name);
+				if(col == null) { // Cannot resolve
+					this.bindError = new DcError(DcErrorCode.BIND_ERROR, "Binding error.", "Cannot find column: " + col);
+					break;
+				}
+				
+				if(!columns.contains(col)) { 
+					columns.add(col);
+				}
+
+				table = col.getOutput(); // Next segment will be resolved from the previous column output
+			}
+		}
+		
+		return columns;
+	}
+	private List<List<Column>> resolveParameterPaths(List<QName> params, Table mainTable) { // Resolve the specified path names into data (function) objects taking into account a possible special (out) parameter
+		if(mainTable == null) mainTable = this.getInput();
+		List<List<Column>> paths = new ArrayList<List<Column>>();
+		for(QName param : params) {
+			if(this.isOutputParameter(param)) {
+				paths.add(Arrays.asList(this)); // Single element in path (this column)
+			}
+			else {
+				paths.add(param.resolveColumns(mainTable)); // Multi-segment paths from the iterated table
+			}
+		}
+		return paths;
 	}
 
 	protected void translateLinkFormula(String frml) { // Parse tuple {...} into a list of member assignments and set error
@@ -632,7 +681,7 @@ public class Column {
 		Range mainRange = mainTable.getIdRange();
 
 		// Get all necessary parameters and prepare (resolve) the corresponding data (function) objects for reading values
-		List<List<Column>> paramPaths = this.resolveParameterPaths(mainTable, eval.getParamPaths());
+		List<List<Column>> paramPaths = this.resolveParameterPaths(eval.getParamPaths(), mainTable);
 		Object[] paramValues = new Object[paramPaths.size()]; // Will store values for all params
 		Object result; // Will be written to output for each input
 
@@ -679,7 +728,7 @@ public class Column {
 			Evaluator eval = mmbr.getRight();
 			int paramCount = eval.getParamPaths().size();
 
-			rhsParamPaths.add( this.resolveParameterPaths(mainTable, eval.getParamPaths()) );
+			rhsParamPaths.add( this.resolveParameterPaths(eval.getParamPaths(), mainTable) );
 			rhsParamValues.add( new Object[ paramCount ] );
 			rhsResults.add( null );
 		}
@@ -727,28 +776,15 @@ public class Column {
 		}
 	}
 
-	// Resolve the specified path names into data (function) objects taking into account a possible special (out) parameter
-	private List<List<Column>> resolveParameterPaths(Table pathTable, List<QName> paramPathNames) {
-		List<List<Column>> paramPaths = new ArrayList<List<Column>>();
-		for(QName n : paramPathNames) {
-			if(this.isOutputParameter(n)) {
-				paramPaths.add(Arrays.asList(this)); // Single element in path (this column)
-			}
-			else {
-				paramPaths.add(n.resolveColumns(pathTable)); // Multi-segment paths from the iterated table
-			}
-		}
-		return paramPaths;
-	}
 	private boolean isOutputParameter(QName qname) {
 		if(qname.names.size() != 1) return false;
-		return isOutputParameter(qname.names.get(0));
+		return this.isOutputParameter(qname.names.get(0));
 	}
 	private boolean isOutputParameter(String paramName) {
 		if(paramName.equalsIgnoreCase("["+EvaluatorExpr.OUT_VARIABLE_NAME+"]")) {
 			return true;
 		}
-		if(paramName.equalsIgnoreCase(EvaluatorExpr.OUT_VARIABLE_NAME)) {
+		else if(paramName.equalsIgnoreCase(EvaluatorExpr.OUT_VARIABLE_NAME)) {
 			return true;
 		}
 		else if(paramName.equalsIgnoreCase(this.getName())) {
