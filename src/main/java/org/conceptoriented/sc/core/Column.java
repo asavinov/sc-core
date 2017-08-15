@@ -358,7 +358,7 @@ public class Column {
 		}
 		else if(this.kind == DcColumnKind.LINK) {
 			if(this.linkTranslateStatus != null) errors.add(this.linkTranslateStatus);
-			for(Pair<Column,Evaluator> mmbr : this.linkEvaluators) {
+			for(Pair<Column,UserDefinedExpression> mmbr : this.linkEvaluators) {
 				if(mmbr.getRight() != null) errors.add(mmbr.getRight().getTranslateError());
 			}
 		}
@@ -381,17 +381,17 @@ public class Column {
 	//
 	
 	// Calc evaluator
-	Evaluator calcEvaluator;
+	UserDefinedExpression calcEvaluator;
 
 	// Link evaluators
-	List<Pair<Column,Evaluator>> linkEvaluators = new ArrayList<Pair<Column,Evaluator>>();
+	List<Pair<Column,UserDefinedExpression>> linkEvaluators = new ArrayList<Pair<Column,UserDefinedExpression>>();
 	DcError linkTranslateStatus;
 	protected Map<String, String> linkMembers = new HashMap<String, String>();
 
 	// Accu evaluators
-	Evaluator initEvaluator;
-	Evaluator accuEvaluator;
-	Evaluator finEvaluator;
+	UserDefinedExpression initEvaluator;
+	UserDefinedExpression accuEvaluator;
+	UserDefinedExpression finEvaluator;
 	List<Column> accuPathColumns;
 
 	public void translate() {
@@ -417,7 +417,7 @@ public class Column {
 		if(this.kind == DcColumnKind.CALC) {
 			if(this.calcFormula == null || this.calcFormula.isEmpty()) return;
 
-			this.calcEvaluator = new EvaluatorExpr();
+			this.calcEvaluator = new UdeFormula();
 			this.calcEvaluator.translate(this.calcFormula);
 			columns.addAll(this.resolveParameters(this.calcEvaluator.getParamPaths(), inputTable));
 		}
@@ -431,7 +431,7 @@ public class Column {
 			for(Entry<String,String> mmbr : this.linkMembers.entrySet()) { // For each tuple member (assignment) create an expression
 
 				// Right hand side
-				EvaluatorExpr expr = new EvaluatorExpr();
+				UdeFormula expr = new UdeFormula();
 				expr.translate(mmbr.getValue());
 				columns.addAll(this.resolveParameters(expr.getParamPaths(), inputTable));
 				
@@ -445,7 +445,7 @@ public class Column {
 			if(this.accuFormula == null || this.accuFormula.isEmpty()) return;
 
 			// Initialization
-			this.initEvaluator = new EvaluatorExpr();
+			this.initEvaluator = new UdeFormula();
 			this.initEvaluator.translate(this.initFormula);
 			columns.addAll(this.resolveParameters(this.initEvaluator.getParamPaths(), inputTable));
 
@@ -456,12 +456,12 @@ public class Column {
 			columns.addAll(this.accuPathColumns);
 
 			// Accumulation
-			this.accuEvaluator = new EvaluatorExpr();
+			this.accuEvaluator = new UdeFormula();
 			this.accuEvaluator.translate(this.accuFormula);
 			columns.addAll(this.resolveParameters(this.accuEvaluator.getParamPaths(), accuTable));
 
 			// Finalization
-			this.finEvaluator = new EvaluatorExpr();
+			this.finEvaluator = new UdeFormula();
 			this.finEvaluator.translate(this.finFormula);
 			columns.addAll(this.resolveParameters(this.finEvaluator.getParamPaths(), inputTable));
 		}
@@ -598,7 +598,7 @@ public class Column {
 			if(this.calcEvaluator != null) errors.add(this.calcEvaluator.getEvaluateError());
 		}
 		else if(this.kind == DcColumnKind.LINK) {
-			for(Pair<Column,Evaluator> mmbr : this.linkEvaluators) {
+			for(Pair<Column,UserDefinedExpression> mmbr : this.linkEvaluators) {
 				if(mmbr.getRight() != null) errors.add(mmbr.getRight().getEvaluateError());
 			}
 		}
@@ -673,7 +673,7 @@ public class Column {
 		this.setEvaluateTime(); // Store the time of evaluation
 	}
 	
-	private void evaluateExpr(Evaluator eval, List<Column> accuLinkPath) {
+	private void evaluateExpr(UserDefinedExpression eval, List<Column> accuLinkPath) {
 		Table mainTable = accuLinkPath == null ? this.getInput() : accuLinkPath.get(0).getInput(); // Loop/scan table
 
 		// ACCU: Currently we do full re-evaluate by resetting the accu column outputs and then making full scan through all existing facts
@@ -724,8 +724,8 @@ public class Column {
 		Record outRecord = new Record(); // All output values for all expressions along with column names (is used by the search)
 
 		// Initialize items of these lists for each member expression
-		for(Pair<Column,Evaluator> mmbr : this.linkEvaluators) {
-			Evaluator eval = mmbr.getRight();
+		for(Pair<Column,UserDefinedExpression> mmbr : this.linkEvaluators) {
+			UserDefinedExpression eval = mmbr.getRight();
 			int paramCount = eval.getParamPaths().size();
 
 			rhsParamPaths.add( this.resolveParameterPaths(eval.getParamPaths(), mainTable) );
@@ -739,7 +739,7 @@ public class Column {
 			
 			// Evaluate ALL child rhs expressions by producing an array of their results 
 			int mmbrNo = 0;
-			for(Pair<Column,Evaluator> mmbr : this.linkEvaluators) {
+			for(Pair<Column,UserDefinedExpression> mmbr : this.linkEvaluators) {
 
 				List<List<Column>> paramPaths = rhsParamPaths.get(mmbrNo);
 				Object[] paramValues = rhsParamValues.get(mmbrNo);
@@ -781,10 +781,10 @@ public class Column {
 		return this.isOutputParameter(qname.names.get(0));
 	}
 	private boolean isOutputParameter(String paramName) {
-		if(paramName.equalsIgnoreCase("["+EvaluatorExpr.OUT_VARIABLE_NAME+"]")) {
+		if(paramName.equalsIgnoreCase("["+UdeFormula.OUT_VARIABLE_NAME+"]")) {
 			return true;
 		}
-		else if(paramName.equalsIgnoreCase(EvaluatorExpr.OUT_VARIABLE_NAME)) {
+		else if(paramName.equalsIgnoreCase(UdeFormula.OUT_VARIABLE_NAME)) {
 			return true;
 		}
 		else if(paramName.equalsIgnoreCase(this.getName())) {

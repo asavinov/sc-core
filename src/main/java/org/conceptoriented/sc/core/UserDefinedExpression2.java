@@ -80,7 +80,7 @@ import java.util.List;
  * - Evaluator can vary inputs of the functions it needs, for example, to compute moving average or to shift them. So it can generate new (local) iterations and loops similar to an external driver like the central evaluator which provides the main loop.  
  * - Generic evaluator/function has two alternative interpretations: computing single output for certain input values provided from outside, and computing a range of outputs for a range of inputs provided from outside. 
  */
-interface Evaluator2 {
+interface UserDefinedExpression2 {
 
 	public void setColumn(Column column);
 

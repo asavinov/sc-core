@@ -35,7 +35,7 @@ import java.util.regex.Pattern;
  *   The result is a native expression using its native variables.
  * 
  */
-public interface Evaluator {
+public interface UserDefinedExpression {
 
 	/**
 	 * For each instance, its parameters are bound to certain column paths (normally primitive).
@@ -66,7 +66,7 @@ public interface Evaluator {
 /**
  * 
  */
-class EvaluatorExpr implements Evaluator {
+class UdeFormula implements UserDefinedExpression {
 
 	public static String OUT_VARIABLE_NAME = "out";
 	
@@ -393,7 +393,7 @@ class EvaluatorExpr implements Evaluator {
 		return buf.toString();
 	}
 
-	public EvaluatorExpr() {
+	public UdeFormula() {
 	}
 }
 
