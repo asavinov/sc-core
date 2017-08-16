@@ -83,7 +83,7 @@ class UdeFormula implements UserDefinedExpression {
 
 	// Native expressions produced during translation and used during evaluation
 	protected net.objecthunter.exp4j.Expression exp4jExpression;
-	protected com.udojava.evalex.Expression evalexExpression = null;
+	protected com.udojava.evalex.Expression evalexExpression;
 
 	//
 	// EvaluatorExpr interface

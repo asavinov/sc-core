@@ -21,7 +21,7 @@ import java.util.List;
 
 
 /**
- * This class implements the logic of evaluation for definitions of certain kind, that is, how definitions of certain kind are interpreted to compute this column output.
+ * This class is an object representation of a derived column. It implements the logic of computation and knows how to compute all output values for certain column kind.
  * It knows the following aspects: 
  * - Looping: the main (loop) table and other tables needed for evaluation of this column definition
  * - Reading inputs: column paths which are used to compute the output including expression parameters or group path for accumulation
@@ -32,6 +32,8 @@ import java.util.List;
  */
 public interface ColumnEvaluator {
 	public void evaluate();
+	public List<DcError> getErrors();
+	// List<Column> getDependencies(); // TODO: Do we need this method for dependency graph?
 }
 
 /**
@@ -41,6 +43,7 @@ public interface ColumnEvaluator {
 class ColumnEvaluatorCalc extends ColumnEvaluatorBase implements ColumnEvaluator {
 	UDE ude;
 
+	@Override
 	public void evaluate() {
 		// Logic of evaluation for calc (maybe use some base method
 
@@ -52,6 +55,10 @@ class ColumnEvaluatorCalc extends ColumnEvaluatorBase implements ColumnEvaluator
 		// Evaluate expression
 		// Write result to the output
 	}
+	@Override
+	public List<DcError> getErrors() {
+		return null;
+	}
 
 	public ColumnEvaluatorCalc(UDE ude) {
 		this.ude = ude;
@@ -61,59 +68,3 @@ class ColumnEvaluatorCalc extends ColumnEvaluatorBase implements ColumnEvaluator
 class ColumnEvaluatorBase { // Convenience class for implementing common functions
 	// Evaluate one expression for one specified table
 }
-
-
-/**
- * User defined expression. It knows how to computing one output value given several input values.
- * Normally it is implemented by a user class programmatically or produced by a translator from some syntactic representation (formula). 
- */
-interface UDE {
-	//public Table getMainTable(); // Do we need this? Normally it is available in the context
-	//public Column getOutputColumn(); // Do we need this? Normally it is available in the context
-	public List<List<Column>> getInputPaths();
-	public Object evaluate(Object[] params);
-}
-
-/**
- * For test purposes to check if it useful and can be used for situations.
- * Use cases:
- * - Reusable and binding of parameters: I want to implement the logic of computation which can be applied to different inputs, that is, one class can be instantiated and used for different input paths and tables.
- * This can be implemented by the necessary binding for each new instance.
- * - Issue: each instance is hard-bound to certain column paths so if the schema changes then this binding can break.
- *   - Solution: flexibility is reached by name-based dependencies (as opposed to reference-based) but then it is necessary to translation after each change of the schema.
- * - Issue: Path names have to be stored somewhere if we want to work at the level of names.
- *   - Solution: using formulas and descriptors.
- *
- */
-class UdeExample implements UDE {
-	List<List<Column>> inputPaths = new ArrayList<List<Column>>();
-	public List<List<Column>> getInputPaths() {
-		return this.inputPaths;
-	}
-	public Object evaluate(Object[] params) {
-		return (double)params[0] + 1;
-	}
-	public UdeExample(List<List<Column>> inputPaths) { // Binding of parameter
-		this.inputPaths.addAll(inputPaths);
-	}
-}
-
-
-
-// It is a syntactic or serializable representation of a derived column of calc kind. 
-// It knows about syntax convention and assumes this column kind.
-// We also can encode the logic of translation to an evaluator object by translating all formulas to user defined expresions.
-class ColumnDefinitionCalc {
-	String formula;
-	
-	// It is transformed to an object form as a column evaluator by translating all expressions from this specific syntactic format
-	ColumnEvaluatorCalc translate() {
-		return null;
-	}
-
-	public ColumnDefinitionCalc(String formula) {
-		this.formula = formula;
-	}
-}
-
-
