@@ -3,6 +3,8 @@ package org.conceptoriented.sc.core;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.commons.lang3.tuple.Pair;
+
 
 //ColumnDefinitionCalc - it is a syntactic/serializable form using strings: formula(s), column/table names, Java class names etc. 
 // -> translate and build ColumnEvaluatorCalc object by generating the necessary Java objects: UDEs, column/table references etc.
@@ -36,6 +38,10 @@ public interface ColumnEvaluator {
 	// List<Column> getDependencies(); // TODO: Do we need this method for dependency graph?
 }
 
+class ColumnEvaluatorBase { // Convenience class for implementing common functions
+	// Evaluate one expression for one specified table
+}
+
 /**
  * It is an implementation of evaluator for calc columns.
  * It loops through the main table, reads inputs, passes them to the expression and then write the output to the main column.
@@ -65,6 +71,42 @@ class ColumnEvaluatorCalc extends ColumnEvaluatorBase implements ColumnEvaluator
 	}
 }
 
-class ColumnEvaluatorBase { // Convenience class for implementing common functions
-	// Evaluate one expression for one specified table
+/**
+ * It is an implementation of evaluator for link columns.
+ * It loops through the main table, reads inputs, passes them to the expression and then write the output to the main column.
+ */
+class ColumnEvaluatorLink extends ColumnEvaluatorBase implements ColumnEvaluator {
+	List<Pair<Column,UDE>> udes;
+
+	@Override
+	public void evaluate() {
+	}
+	@Override
+	public List<DcError> getErrors() {
+		return null;
+	}
+
+	public ColumnEvaluatorLink(List<Pair<Column,UDE>> udes) {
+		this.udes = udes;
+	}
+}
+
+/**
+ * It is an implementation of evaluator for link columns.
+ * It loops through the main table, reads inputs, passes them to the expression and then write the output to the main column.
+ */
+class ColumnEvaluatorAccu extends ColumnEvaluatorBase implements ColumnEvaluator {
+	UDE ude;
+
+	@Override
+	public void evaluate() {
+	}
+	@Override
+	public List<DcError> getErrors() {
+		return null;
+	}
+
+	public ColumnEvaluatorAccu(UDE ude) {
+		this.ude = ude;
+	}
 }

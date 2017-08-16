@@ -78,12 +78,12 @@ class UdeFormula implements UserDefinedExpression {
 
 	protected boolean isEquality; // The formula is a single parameter without operations
 
-	// Will be filled by parser and then augmented by binder
-	protected List<ExprDependency> exprDependencies = new ArrayList<ExprDependency>();
-
 	// Native expressions produced during translation and used during evaluation
 	protected net.objecthunter.exp4j.Expression exp4jExpression;
 	protected com.udojava.evalex.Expression evalexExpression;
+
+	// Will be filled by parser and then augmented by binder
+	protected List<ExprDependency> exprDependencies = new ArrayList<ExprDependency>();
 
 	//
 	// EvaluatorExpr interface

@@ -1,6 +1,8 @@
 package org.conceptoriented.sc.core;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * It is a syntactic representation of a derived column with some specific serialization convention corresponding to certain format, for example, programming language or expression language.
@@ -16,11 +18,14 @@ public interface ColumnDefinition {
 }
 
 /**
- * Representation of a calc column using numeric expression libraries like exp4j.
- * The library to be used is chosen in options.
+ * Representation of a calc column using numeric expression libraries like exp4j (library can be chosen as an option).
+ * Calc definition is an expression which uses other column paths as parameters. Or it can be a single assignment where lhs is this column. 
  */
 class ColumnDefinitionCalc implements ColumnDefinition {
 	String formula;
+	public String getFormula() {
+		return this.formula;
+	}
 	
 	@Override
 	public ColumnEvaluator translate() {
@@ -33,6 +38,54 @@ class ColumnDefinitionCalc implements ColumnDefinition {
 	}
 
 	public ColumnDefinitionCalc(String formula) {
+		this.formula = formula;
+	}
+}
+
+/**
+ * Representation of a calc column using numeric expression libraries like exp4j (library can be chosen as an option).
+ * Link definition is a collection of assignments represented either syntactically or as an (already parsed) array object. 
+ */
+class ColumnDefinitionLink implements ColumnDefinition {
+	String formula;
+	
+	@Override
+	public ColumnEvaluator translate() {
+		// Generate ColumnEvaluatorLink object by instantiating the necessary Ude, tables, columns and other objects used during evaluation.
+		return null;
+	}
+	@Override
+	public List<DcError> getErrors() {
+		return null;
+	}
+
+	public static Map<String,String> translateLinkFormula(String formula) {
+		return new HashMap<String,String>();
+	}
+
+	public ColumnDefinitionLink(String formula) {
+		this.formula = formula;
+	}
+}
+
+/**
+ * Representation of a accu column using numeric expression libraries like exp4j (library can be chosen as an option).
+ * Link definition is a collection of assignments represented either syntactically or as an (already parsed) array object. 
+ */
+class ColumnDefinitionAccu implements ColumnDefinition {
+	String formula;
+	
+	@Override
+	public ColumnEvaluator translate() {
+		// Generate ColumnEvaluatorAccu object by instantiating the necessary Ude, tables, columns and other objects used during evaluation.
+		return null;
+	}
+	@Override
+	public List<DcError> getErrors() {
+		return null;
+	}
+
+	public ColumnDefinitionAccu(String formula) {
 		this.formula = formula;
 	}
 }

@@ -46,3 +46,45 @@ class UdeExample implements UDE {
 		this.inputPaths.addAll(inputPaths);
 	}
 }
+
+class UdeJava implements UDE {
+
+	public static String OUT_VARIABLE_NAME = "out";
+	
+	public boolean isExp4j() { return true; }
+	public boolean isEvalex() { return false; }
+	
+	// Formula
+	protected String formula;
+
+	protected boolean isEquality; // The formula is a single parameter without operations
+
+	// Native expressions which do real computations
+	protected net.objecthunter.exp4j.Expression exp4jExpression;
+	protected com.udojava.evalex.Expression evalexExpression;
+
+	// List of all parameter paths recognized by the parser
+	private List<UdeJavaParameter> exprDependencies = new ArrayList<UdeJavaParameter>();
+
+	@Override
+	public Object evaluate(Object[] params) {
+		return null;
+	}
+	List<List<Column>> inputPaths = new ArrayList<List<Column>>();
+	@Override
+	public List<List<Column>> getInputPaths() {
+		return this.inputPaths;
+	}
+
+	public UdeJava(String formula) {
+		this.formula = formula;
+	}
+}
+
+class UdeJavaParameter {
+	public int start;
+	public int end;
+	public String pathName;
+	public String paramName;
+	public QName qname;
+}

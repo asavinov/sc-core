@@ -376,6 +376,54 @@ public class Column {
 	}
 
 	//
+	// Translate NEW
+	//
+	
+	ColumnEvaluatorCalc evaluatorCalc;
+	ColumnEvaluatorLink evaluatorLink;
+	ColumnEvaluatorAccu evaluatorAccu;
+
+	public void translate_NEW() {
+		// Reset
+
+		// Translate depending on the formula kind
+		if(this.kind == DcColumnKind.CALC) {
+			// In future, it will be stored in the column instead of individual formulas
+			ColumnDefinitionCalc definitionCalc = new ColumnDefinitionCalc(this.calcFormula);
+
+			// Translate by preparing expressions and other objects
+			UDE expr = new UdeJava(definitionCalc.getFormula());
+
+			// Dependencies
+			// TODO:
+			// - who returns dependencies as names: Definition, Ude (need to collect from all Udes), Evaluator?
+			// - who resolves (column) names: Definition, Ude (need to collect from all Udes), Evaluator, or here?
+			// - who returns dependencies as objects?
+
+			// Evaluator
+			evaluatorCalc = new ColumnEvaluatorCalc(expr);
+		}
+		else if(this.kind == DcColumnKind.LINK) {
+			List<Pair<Column,UDE>> exprs = new ArrayList<Pair<Column,UDE>>();
+			// Parse and create a collection of assignments
+			Map<String,String> mmbrs = ColumnDefinitionLink.translateLinkFormula(this.linkFormula);
+
+			// Create expressions and columns for each assignment
+
+			evaluatorLink = new ColumnEvaluatorLink(exprs);
+		}
+		else if(this.kind == DcColumnKind.ACCU) {
+			UDE initExpr = new UdeJava(this.initFormula);
+			UDE accuExpr = new UdeJava(this.accuFormula);
+			UDE finExpr = new UdeJava(this.finFormula);
+
+			List<Column> accuPathColumns; // Parse group path
+
+			evaluatorAccu = new ColumnEvaluatorAccu(null);
+		}
+	}
+
+	//
 	// Translate formula
 	// Parse (formulas), bind (columns), build (evaluators). Generate dependencies. Produce new (translate) status.
 	//
