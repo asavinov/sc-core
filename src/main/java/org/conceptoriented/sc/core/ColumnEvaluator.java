@@ -39,7 +39,126 @@ public interface ColumnEvaluator {
 }
 
 class ColumnEvaluatorBase { // Convenience class for implementing common functions
-	// Evaluate one expression for one specified table
+
+	Column column; // TODO: Need to be initialized by a child class
+
+	protected void evaluateExpr(UserDefinedExpression expr, List<Column> accuLinkPath) {
+
+		Table mainTable = accuLinkPath == null ? this.column.getInput() : accuLinkPath.get(0).getInput(); // Loop/scan table
+
+		// ACCU: Currently we do full re-evaluate by resetting the accu column outputs and then making full scan through all existing facts
+		// ACCU: The optimal approach is to apply negative accu function for removed elements and then positive accu function for added elements
+		Range mainRange = mainTable.getIdRange();
+
+		// Get all necessary parameters and prepare (resolve) the corresponding data (function) objects for reading values
+		List<List<Column>> paramPaths = this.resolveParameterPaths(expr.getParamPaths(), mainTable);
+		Object[] paramValues = new Object[paramPaths.size()]; // Will store values for all params
+		Object result; // Will be written to output for each input
+
+		for(long i=mainRange.start; i<mainRange.end; i++) {
+			// Find group [ACCU-specific]
+			Long g = accuLinkPath == null ? i : (Long) accuLinkPath.get(0).getData().getValue(accuLinkPath, i);
+
+			// Read all parameter values including this column output
+			int paramNo = 0;
+			for(List<Column> paramPath : paramPaths) {
+				if(paramPath.get(0) == this.column) {
+					paramValues[paramNo] = this.column.getData().getValue(g); // [ACCU-specific] [FIN-specific]
+				}
+				else {
+					paramValues[paramNo] = paramPath.get(0).data.getValue(paramPath, i);
+				}
+				paramNo++;
+			}
+
+			// Evaluate
+			result = expr.evaluate(paramValues);
+
+			// Update output
+			this.column.getData().setValue(g, result);
+		}
+	}
+
+
+	protected void evaluateLink(List<Pair<Column,UserDefinedExpression>> exprs) {
+
+		Table typeTable = this.column.getOutput();
+
+		Table mainTable = this.column.getInput();
+		// Currently we make full scan by re-evaluating all existing input ids
+		Range mainRange = this.column.getData().getIdRange();
+
+		// Each item in this lists is for one member expression 
+		// We use lists and not map because want to use common index (faster) for access and not key (slower) which is important for frequent accesses in a long loop.
+		List< List<List<Column>> > rhsParamPaths = new ArrayList< List<List<Column>> >();
+		List< Object[] > rhsParamValues = new ArrayList< Object[] >();
+		List< Object > rhsResults = new ArrayList< Object >();
+		Record outRecord = new Record(); // All output values for all expressions along with column names (is used by the search)
+
+		// Initialize items of these lists for each member expression
+		for(Pair<Column,UserDefinedExpression> mmbr : exprs) {
+			UserDefinedExpression eval = mmbr.getRight();
+			int paramCount = eval.getParamPaths().size();
+
+			rhsParamPaths.add( this.resolveParameterPaths(eval.getParamPaths(), mainTable) );
+			rhsParamValues.add( new Object[ paramCount ] );
+			rhsResults.add( null );
+		}
+
+		for(long i=mainRange.start; i<mainRange.end; i++) {
+			
+			outRecord.fields.clear();
+			
+			// Evaluate ALL child rhs expressions by producing an array of their results 
+			int mmbrNo = 0;
+			for(Pair<Column,UserDefinedExpression> mmbr : exprs) {
+
+				List<List<Column>> paramPaths = rhsParamPaths.get(mmbrNo);
+				Object[] paramValues = rhsParamValues.get(mmbrNo);
+				
+				// Read all parameter values (assuming that this column output is not used in link columns)
+				int paramNo = 0;
+				for(List<Column> paramPath : paramPaths) {
+					paramValues[paramNo] = paramPath.get(0).data.getValue(paramPath, i);
+					paramNo++;
+				}
+
+				// Evaluate this member expression
+				Object result = mmbr.getRight().evaluate(paramValues);
+				rhsResults.set(mmbrNo, result);
+				outRecord.set(mmbr.getLeft().getName(), result);
+				
+				mmbrNo++; // Iterate
+			}
+
+			// Find element in the type table which corresponds to these expression results (can be null if not found and not added)
+			Object out = typeTable.find(outRecord, true);
+			
+			// Update output
+			this.getData().setValue(i, out);
+		}
+
+	}
+
+	protected void evaluateExprDefault() {
+		Range mainRange = this.column.getData().getIdRange(); // All dirty/new rows
+		Object defaultValue = this.getDefaultValue();
+		for(long i=mainRange.start; i<mainRange.end; i++) {
+			this.column.getData().setValue(i, defaultValue);
+		}
+	}
+
+	protected Object getDefaultValue() { // Depends on the column type
+		Object defaultValue;
+		if(this.column.getOutput().isPrimitive()) {
+			defaultValue = 0.0;
+		}
+		else {
+			defaultValue = null;
+		}
+		return defaultValue;
+	}
+
 }
 
 /**
@@ -51,15 +170,13 @@ class ColumnEvaluatorCalc extends ColumnEvaluatorBase implements ColumnEvaluator
 
 	@Override
 	public void evaluate() {
-		// Logic of evaluation for calc (maybe use some base method
-
-		// Get list of parameter paths
-		
-		// Loop over all inputs
-		
-		// Read all parameters for one input
-		// Evaluate expression
-		// Write result to the output
+		// Evaluate calc expression
+		if(this.ude == null) { // Default
+			super.evaluateExprDefault();
+		}
+		else {
+			super.evaluateExpr(ude, null);
+		}
 	}
 	@Override
 	public List<DcError> getErrors() {
@@ -80,6 +197,7 @@ class ColumnEvaluatorLink extends ColumnEvaluatorBase implements ColumnEvaluator
 
 	@Override
 	public void evaluate() {
+		super.evaluateLink(udes);
 	}
 	@Override
 	public List<DcError> getErrors() {
@@ -104,6 +222,24 @@ class ColumnEvaluatorAccu extends ColumnEvaluatorBase implements ColumnEvaluator
 
 	@Override
 	public void evaluate() {
+		// Initialization
+		if(this.initExpr == null) { // Default
+			super.evaluateExprDefault();
+		}
+		else {
+			super.evaluateExpr(this.initExpr, null);
+		}
+		
+		// Accumulation
+		super.evaluateExpr(this.accuExpr, this.accuPathColumns);
+
+		// Finalization
+		if(this.finExpr == null) { // Default
+			; // No finalization if not specified
+		}
+		else {
+			super.evaluateExpr(this.finExpr, null);
+		}
 	}
 	@Override
 	public List<DcError> getErrors() {

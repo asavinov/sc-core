@@ -446,21 +446,21 @@ public class Column {
 
 			// Initialization
 			UserDefinedExpression initExpr = new UdeFormula(this.initFormula);
-			columns.addAll(this.resolveParameters(this.initEvaluator.getParamPaths(), inputTable));
+			columns.addAll(this.resolveParameters(initExpr.getParamPaths(), inputTable));
 
 			// Accu table and link (group) path
 			Table accuTable = this.schema.getTable(this.getAccuTable());
 			QName accuLinkPath = QName.parse(this.accuPath);
 			List<Column> accuPathColumns = accuLinkPath.resolveColumns(accuTable);
-			columns.addAll(this.accuPathColumns);
+			columns.addAll(accuPathColumns);
 
 			// Accumulation
 			UserDefinedExpression accuExpr = new UdeFormula(this.accuFormula);
-			columns.addAll(this.resolveParameters(this.accuEvaluator.getParamPaths(), accuTable));
+			columns.addAll(this.resolveParameters(accuExpr.getParamPaths(), accuTable));
 
 			// Finalization
 			UserDefinedExpression finExpr = new UdeFormula(this.finFormula);
-			columns.addAll(this.resolveParameters(this.finEvaluator.getParamPaths(), inputTable));
+			columns.addAll(this.resolveParameters(finExpr.getParamPaths(), inputTable));
 
 			// Use these objects to create an evaluator
 			evaluatorAccu = new ColumnEvaluatorAccu(initExpr, accuExpr, finExpr, accuPathColumns);
@@ -512,11 +512,39 @@ public class Column {
 		return paths;
 	}
 
+	private boolean isOutputParameter(QName qname) {
+		if(qname.names.size() != 1) return false;
+		return this.isOutputParameter(qname.names.get(0));
+	}
+	private boolean isOutputParameter(String paramName) {
+		if(paramName.equalsIgnoreCase("["+UdeFormula.OUT_VARIABLE_NAME+"]")) {
+			return true;
+		}
+		else if(paramName.equalsIgnoreCase(UdeFormula.OUT_VARIABLE_NAME)) {
+			return true;
+		}
+		else if(paramName.equalsIgnoreCase(this.getName())) {
+			return true;
+		}
+		return false;
+	}
+
+	private Object getDefaultValue() { // Depends on the column type
+		Object defaultValue;
+		if(this.getOutput().isPrimitive()) {
+			defaultValue = 0.0;
+		}
+		else {
+			defaultValue = null;
+		}
+		return defaultValue;
+	}
+
 	//
 	// Translate formula
 	// Parse (formulas), bind (columns), build (evaluators). Generate dependencies. Produce new (translate) status.
 	//
-	
+/*
 	// Calc evaluator
 	UserDefinedExpression calcEvaluator;
 
@@ -530,6 +558,8 @@ public class Column {
 	UserDefinedExpression accuEvaluator;
 	UserDefinedExpression finEvaluator;
 	List<Column> accuPathColumns;
+*/
+
 /* OLD together wiith old evaluator above
 	public void translate_OLD() {
 
@@ -730,7 +760,28 @@ public class Column {
 		return Duration.between(this.evaluateTime, Instant.now());
 	}
 	
+	// GOAL: Use ColumnEvaluator for evaluation instead of old expressions
 	public void evaluate() {
+		
+		if(this.getKind() == DcColumnKind.CALC) {
+			this.evaluatorCalc.evaluate();
+		}
+		else if(this.getKind() == DcColumnKind.LINK) {
+			this.evaluatorLink.evaluate();
+		}
+		else if(this.getKind() == DcColumnKind.ACCU) {
+			this.evaluatorAccu.evaluate();
+		}
+
+		this.data.markNewAsClean(); // Mark dirty as clean
+
+		this.setFormulaClean(); // Mark up-to-date if successful
+
+		this.setEvaluateTime(); // Store the time of evaluation
+	}
+
+/* OLD
+	public void evaluate_OLD() {
 		
 		if(this.getKind() == DcColumnKind.CALC) {
 			// Evaluate calc expression
@@ -741,7 +792,7 @@ public class Column {
 				this.evaluateExpr(this.calcEvaluator, null);
 			}
 		}
-		if(this.getKind() == DcColumnKind.LINK) {
+		else if(this.getKind() == DcColumnKind.LINK) {
 			// Link
 			this.evaluateLink();
 		}
@@ -773,7 +824,7 @@ public class Column {
 		this.setEvaluateTime(); // Store the time of evaluation
 	}
 	
-	private void evaluateExpr(UserDefinedExpression eval, List<Column> accuLinkPath) {
+	private void evaluateExpr(UserDefinedExpression expr, List<Column> accuLinkPath) {
 		Table mainTable = accuLinkPath == null ? this.getInput() : accuLinkPath.get(0).getInput(); // Loop/scan table
 
 		// ACCU: Currently we do full re-evaluate by resetting the accu column outputs and then making full scan through all existing facts
@@ -781,7 +832,7 @@ public class Column {
 		Range mainRange = mainTable.getIdRange();
 
 		// Get all necessary parameters and prepare (resolve) the corresponding data (function) objects for reading values
-		List<List<Column>> paramPaths = this.resolveParameterPaths(eval.getParamPaths(), mainTable);
+		List<List<Column>> paramPaths = this.resolveParameterPaths(expr.getParamPaths(), mainTable);
 		Object[] paramValues = new Object[paramPaths.size()]; // Will store values for all params
 		Object result; // Will be written to output for each input
 
@@ -802,7 +853,7 @@ public class Column {
 			}
 
 			// Evaluate
-			result = eval.evaluate(paramValues);
+			result = expr.evaluate(paramValues);
 
 			// Update output
 			this.data.setValue(g, result);
@@ -867,42 +918,14 @@ public class Column {
 		}
 
 	}
-
 	private void evaluateExprDefault() {
 		Range mainRange = this.data.getIdRange(); // All dirty/new rows
-		Object defaultValue = getDefaultValue();
+		Object defaultValue = this.getDefaultValue();
 		for(long i=mainRange.start; i<mainRange.end; i++) {
 			this.data.setValue(i, defaultValue);
 		}
 	}
-
-	private boolean isOutputParameter(QName qname) {
-		if(qname.names.size() != 1) return false;
-		return this.isOutputParameter(qname.names.get(0));
-	}
-	private boolean isOutputParameter(String paramName) {
-		if(paramName.equalsIgnoreCase("["+UdeFormula.OUT_VARIABLE_NAME+"]")) {
-			return true;
-		}
-		else if(paramName.equalsIgnoreCase(UdeFormula.OUT_VARIABLE_NAME)) {
-			return true;
-		}
-		else if(paramName.equalsIgnoreCase(this.getName())) {
-			return true;
-		}
-		return false;
-	}
-
-	private Object getDefaultValue() { // Depends on the column type
-		Object defaultValue;
-		if(this.getOutput().isPrimitive()) {
-			defaultValue = 0.0;
-		}
-		else {
-			defaultValue = null;
-		}
-		return defaultValue;
-	}
+*/
 
 	//
 	// Descriptor (if column is computed via Java class and not formula)
