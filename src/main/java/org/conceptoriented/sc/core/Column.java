@@ -383,44 +383,133 @@ public class Column {
 	ColumnEvaluatorLink evaluatorLink;
 	ColumnEvaluatorAccu evaluatorAccu;
 
-	public void translate_NEW() {
+	// Generate Evaluator* from ColumnDefinition*
+	public void translate() {
 		// Reset
+		this.bindError = null;
+
+		this.evaluatorCalc = null;
+		this.evaluatorLink = null;
+		this.evaluatorAccu = null;
+
+		this.resetDependencies();
+		List<Column> columns = new ArrayList<Column>();
+		
+		Table inputTable = this.getInput();
+		Table outputTable = this.getOutput();
 
 		// Translate depending on the formula kind
 		if(this.kind == DcColumnKind.CALC) {
-			// In future, it will be stored in the column instead of individual formulas
+			// In future, this object will be stored in the column instead of multiple formulas
 			ColumnDefinitionCalc definitionCalc = new ColumnDefinitionCalc(this.calcFormula);
 
 			// Translate by preparing expressions and other objects
-			UDE expr = new UdeJava(definitionCalc.getFormula());
+			UserDefinedExpression expr = new UdeFormula(definitionCalc.getFormula());
 
-			// Dependencies
+			// Evaluator
+			evaluatorCalc = new ColumnEvaluatorCalc(expr);
+
+			// Collect dependencies
 			// TODO:
 			// - who returns dependencies as names: Definition, Ude (need to collect from all Udes), Evaluator?
 			// - who resolves (column) names: Definition, Ude (need to collect from all Udes), Evaluator, or here?
 			// - who returns dependencies as objects?
-
-			// Evaluator
-			evaluatorCalc = new ColumnEvaluatorCalc(expr);
+			// IDEA: ColumnEvaluator* could be created directly from ColumnDefinition* as one of their methods (instead of manually creating all objects here)
+			// - the necessary dependencies are then retrieved from the created ColumnEvaluator* rather than from individual expressions and objects 
+			columns.addAll(this.resolveParameters(expr.getParamPaths(), inputTable));
 		}
 		else if(this.kind == DcColumnKind.LINK) {
-			List<Pair<Column,UDE>> exprs = new ArrayList<Pair<Column,UDE>>();
-			// Parse and create a collection of assignments
-			Map<String,String> mmbrs = ColumnDefinitionLink.translateLinkFormula(this.linkFormula);
+			// In future, this object will be stored in the column instead of multiple formulas
+			ColumnDefinitionLink definitionLink = new ColumnDefinitionLink(this.linkFormula);
 
-			// Create expressions and columns for each assignment
+			// Parse tuple and create a collection of assignments
+			Map<String,String> mmbrs = definitionLink.translateLinkFormulas();
 
+			// Create column-expression pairs for each assignment
+			List<Pair<Column,UserDefinedExpression>> exprs = new ArrayList<Pair<Column,UserDefinedExpression>>();
+			for(Entry<String,String> mmbr : mmbrs.entrySet()) { // For each tuple member (assignment) create an expression
+
+				// Right hand side
+				UdeFormula expr = new UdeFormula(mmbr.getValue());
+				columns.addAll(this.resolveParameters(expr.getParamPaths(), inputTable));
+
+				// Left hand side (column of the type table)
+				Column assignColumn = this.schema.getColumn(outputTable.getName(), mmbr.getKey());
+				exprs.add(Pair.of(assignColumn, expr));
+				columns.add(assignColumn);
+			}
+
+			// Use this list of assignments to create an evaluator
 			evaluatorLink = new ColumnEvaluatorLink(exprs);
 		}
 		else if(this.kind == DcColumnKind.ACCU) {
-			UDE initExpr = new UdeJava(this.initFormula);
-			UDE accuExpr = new UdeJava(this.accuFormula);
-			UDE finExpr = new UdeJava(this.finFormula);
 
-			List<Column> accuPathColumns; // Parse group path
+			// Initialization
+			UserDefinedExpression initExpr = new UdeFormula(this.initFormula);
+			columns.addAll(this.resolveParameters(this.initEvaluator.getParamPaths(), inputTable));
 
-			evaluatorAccu = new ColumnEvaluatorAccu(null);
+			// Accu table and link (group) path
+			Table accuTable = this.schema.getTable(this.getAccuTable());
+			QName accuLinkPath = QName.parse(this.accuPath);
+			List<Column> accuPathColumns = accuLinkPath.resolveColumns(accuTable);
+			columns.addAll(this.accuPathColumns);
+
+			// Accumulation
+			UserDefinedExpression accuExpr = new UdeFormula(this.accuFormula);
+			columns.addAll(this.resolveParameters(this.accuEvaluator.getParamPaths(), accuTable));
+
+			// Finalization
+			UserDefinedExpression finExpr = new UdeFormula(this.finFormula);
+			columns.addAll(this.resolveParameters(this.finEvaluator.getParamPaths(), inputTable));
+
+			// Use these objects to create an evaluator
+			evaluatorAccu = new ColumnEvaluatorAccu(initExpr, accuExpr, finExpr, accuPathColumns);
 		}
+		else if(this.getKind() == DcColumnKind.CLASS) {
+			; // TODO: We do not have CLASS - we will use descriptors in place of formulas. CLASS is then an indicator of formula syntax convention. 
+		}
+
+		this.setDependencies(columns);
+	}
+
+	private List<Column> resolveParameters(List<QName> params, Table mainTable) { // Resolve specified parameter paths by removing duplicates and recognizing reference to this (out) column
+		if(mainTable == null) mainTable = this.getInput();
+		List<Column> columns = new ArrayList<Column>();
+		for(QName param : params) {
+			if(this.isOutputParameter(param)) {
+				continue; // Do not add to dependencies
+			}
+
+			Table table = mainTable;
+			for(String name : param.names) {
+				Column col = schema.getColumn(table.getName(), name);
+				if(col == null) { // Cannot resolve
+					this.bindError = new DcError(DcErrorCode.BIND_ERROR, "Binding error.", "Cannot find column: " + col);
+					break;
+				}
+				
+				if(!columns.contains(col)) { 
+					columns.add(col);
+				}
+
+				table = col.getOutput(); // Next segment will be resolved from the previous column output
+			}
+		}
+		
+		return columns;
+	}
+	private List<List<Column>> resolveParameterPaths(List<QName> params, Table mainTable) { // Resolve the specified path names into data (function) objects taking into account a possible special (out) parameter
+		if(mainTable == null) mainTable = this.getInput();
+		List<List<Column>> paths = new ArrayList<List<Column>>();
+		for(QName param : params) {
+			if(this.isOutputParameter(param)) {
+				paths.add(Arrays.asList(this)); // Single element in path (this column)
+			}
+			else {
+				paths.add(param.resolveColumns(mainTable)); // Multi-segment paths from the iterated table
+			}
+		}
+		return paths;
 	}
 
 	//
@@ -441,8 +530,8 @@ public class Column {
 	UserDefinedExpression accuEvaluator;
 	UserDefinedExpression finEvaluator;
 	List<Column> accuPathColumns;
-
-	public void translate() {
+/* OLD together wiith old evaluator above
+	public void translate_OLD() {
 
 		// Reset
 		this.bindError = null;
@@ -519,47 +608,9 @@ public class Column {
 
 		this.setDependencies(columns);
 	}
+*/
 
-	private List<Column> resolveParameters(List<QName> params, Table mainTable) { // Resolve specified parameter paths by removing duplicates and recognizing reference to this (out) column
-		if(mainTable == null) mainTable = this.getInput();
-		List<Column> columns = new ArrayList<Column>();
-		for(QName param : params) {
-			if(this.isOutputParameter(param)) {
-				continue; // Do not add to dependencies
-			}
-
-			Table table = mainTable;
-			for(String name : param.names) {
-				Column col = schema.getColumn(table.getName(), name);
-				if(col == null) { // Cannot resolve
-					this.bindError = new DcError(DcErrorCode.BIND_ERROR, "Binding error.", "Cannot find column: " + col);
-					break;
-				}
-				
-				if(!columns.contains(col)) { 
-					columns.add(col);
-				}
-
-				table = col.getOutput(); // Next segment will be resolved from the previous column output
-			}
-		}
-		
-		return columns;
-	}
-	private List<List<Column>> resolveParameterPaths(List<QName> params, Table mainTable) { // Resolve the specified path names into data (function) objects taking into account a possible special (out) parameter
-		if(mainTable == null) mainTable = this.getInput();
-		List<List<Column>> paths = new ArrayList<List<Column>>();
-		for(QName param : params) {
-			if(this.isOutputParameter(param)) {
-				paths.add(Arrays.asList(this)); // Single element in path (this column)
-			}
-			else {
-				paths.add(param.resolveColumns(mainTable)); // Multi-segment paths from the iterated table
-			}
-		}
-		return paths;
-	}
-
+/* OLD - moved to link definition
 	protected void translateLinkFormula(String frml) { // Parse tuple {...} into a list of member assignments and set error
 		this.linkTranslateStatus = null;
 		this.linkMembers.clear();
@@ -629,7 +680,8 @@ public class Column {
 
 		this.linkMembers.putAll(mmbrs);
 	}
-	
+*/
+
 	//
 	// Evaluation status
 	// Translation errors are produced and stored in different objects like many evaluators or local fields (e.g., for links) so the final status is collected

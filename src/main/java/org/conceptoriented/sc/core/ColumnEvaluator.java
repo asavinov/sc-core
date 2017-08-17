@@ -47,7 +47,7 @@ class ColumnEvaluatorBase { // Convenience class for implementing common functio
  * It loops through the main table, reads inputs, passes them to the expression and then write the output to the main column.
  */
 class ColumnEvaluatorCalc extends ColumnEvaluatorBase implements ColumnEvaluator {
-	UDE ude;
+	UserDefinedExpression ude;
 
 	@Override
 	public void evaluate() {
@@ -66,7 +66,7 @@ class ColumnEvaluatorCalc extends ColumnEvaluatorBase implements ColumnEvaluator
 		return null;
 	}
 
-	public ColumnEvaluatorCalc(UDE ude) {
+	public ColumnEvaluatorCalc(UserDefinedExpression ude) {
 		this.ude = ude;
 	}
 }
@@ -76,7 +76,7 @@ class ColumnEvaluatorCalc extends ColumnEvaluatorBase implements ColumnEvaluator
  * It loops through the main table, reads inputs, passes them to the expression and then write the output to the main column.
  */
 class ColumnEvaluatorLink extends ColumnEvaluatorBase implements ColumnEvaluator {
-	List<Pair<Column,UDE>> udes;
+	List<Pair<Column,UserDefinedExpression>> udes;
 
 	@Override
 	public void evaluate() {
@@ -86,7 +86,7 @@ class ColumnEvaluatorLink extends ColumnEvaluatorBase implements ColumnEvaluator
 		return null;
 	}
 
-	public ColumnEvaluatorLink(List<Pair<Column,UDE>> udes) {
+	public ColumnEvaluatorLink(List<Pair<Column,UserDefinedExpression>> udes) {
 		this.udes = udes;
 	}
 }
@@ -96,7 +96,11 @@ class ColumnEvaluatorLink extends ColumnEvaluatorBase implements ColumnEvaluator
  * It loops through the main table, reads inputs, passes them to the expression and then write the output to the main column.
  */
 class ColumnEvaluatorAccu extends ColumnEvaluatorBase implements ColumnEvaluator {
-	UDE ude;
+	UserDefinedExpression initExpr;
+	UserDefinedExpression accuExpr;
+	UserDefinedExpression finExpr;
+	
+	List<Column> accuPathColumns;
 
 	@Override
 	public void evaluate() {
@@ -106,7 +110,11 @@ class ColumnEvaluatorAccu extends ColumnEvaluatorBase implements ColumnEvaluator
 		return null;
 	}
 
-	public ColumnEvaluatorAccu(UDE ude) {
-		this.ude = ude;
+	public ColumnEvaluatorAccu(UserDefinedExpression initExpr, UserDefinedExpression accuExpr, UserDefinedExpression finExpr, List<Column> accuPathColumns) {
+		this.initExpr = initExpr;
+		this.accuExpr = accuExpr;
+		this.finExpr = finExpr;
+		
+		this.accuPathColumns = accuPathColumns;
 	}
 }
