@@ -47,6 +47,7 @@ public interface UserDefinedExpression {
 	 */
 	public void setParamPaths(List<String> paths);
 	public List<QName> getParamPaths();
+	public List<List<Column>> getResolvedParamPaths();
 	/**
 	 * Each parameter has a description which can be retrieved by means of this method. 
 	 * It is not the best approach because these descriptions are language specific.
@@ -55,14 +56,14 @@ public interface UserDefinedExpression {
 
 
 	public void translate(String formula);
-	public List<DcError> getErrors();
+	public List<DcError> getTranslateErrors();
 
 	/**
 	 * Compute output value using the provide input values. 
 	 * The first parameter is the current output value (or null).
 	 * Note that all parameters are output values of different paths for one and the same input id.
 	 */
-	public Object evaluate(Object[] params);
+	public Object evaluate(Object[] params, Object out);
 	public DcError getEvaluateError();
 }
 
@@ -79,6 +80,8 @@ class UdeFormula implements UserDefinedExpression {
 	// Formula
 	protected String formula;
 
+	protected Table table; // For resolution (binding). Formula terms will be resolved relative to this table
+
 	protected boolean isEquality; // The formula is a single parameter without operations
 
 	// Native expressions produced during translation and used during evaluation
@@ -87,6 +90,7 @@ class UdeFormula implements UserDefinedExpression {
 
 	// Will be filled by parser and then augmented by binder
 	protected List<ExprDependency> exprDependencies = new ArrayList<ExprDependency>();
+	protected ExprDependency outDependency;
 
 	//
 	// EvaluatorExpr interface
@@ -100,6 +104,14 @@ class UdeFormula implements UserDefinedExpression {
 		List<QName> paths = new ArrayList<QName>();
 		for(ExprDependency dep : this.exprDependencies) {
 			paths.add(dep.qname);
+		}
+		return paths;
+	}
+	@Override
+	public List<List<Column>> getResolvedParamPaths() {
+		List<List<Column>> paths = new ArrayList<List<Column>>();
+		for(ExprDependency dep : this.exprDependencies) {
+			paths.add(dep.columns);
 		}
 		return paths;
 	}
@@ -118,6 +130,18 @@ class UdeFormula implements UserDefinedExpression {
 			}
 			return;
 		}
+		if(this.translateError != null) return;
+
+		try {
+			this.bind();
+		}
+		catch(Exception err) {
+			if(this.translateError == null) { // Status has not been set by the failed method
+				this.translateError = new DcError(DcErrorCode.BIND_ERROR, "Bind error", "Cannot resolve symbols.");
+			}
+			return;
+		}
+		if(this.translateError != null) return;
 
 		try {
 			this.build();
@@ -128,10 +152,11 @@ class UdeFormula implements UserDefinedExpression {
 			}
 			return;
 		}
+		if(this.translateError != null) return;
 	}
 	private DcError translateError;
 	@Override
-	public List<DcError> getErrors() { // Find first error or null for no errors. Is meaningful only after translation.
+	public List<DcError> getTranslateErrors() { // Find first error or null for no errors. Is meaningful only after translation.
 		List<DcError> ret = new ArrayList<DcError>();
 		if(this.translateError == null || this.translateError.code == DcErrorCode.NONE) {
 			return ret;
@@ -140,7 +165,7 @@ class UdeFormula implements UserDefinedExpression {
 		return ret;
 	}
 	@Override
-	public Object evaluate(Object[] params) {
+	public Object evaluate(Object[] params, Object out) {
 		this.evaluateError = null;
 		
 		// Set all parameters in native expressions
@@ -164,6 +189,26 @@ class UdeFormula implements UserDefinedExpression {
 				return null;
 			}
 			paramNo++;
+		}
+
+		// Set out value (if used)
+		if(this.outDependency != null) {
+			if(out == null) out = Double.NaN;
+			try {
+				if(this.isEquality) {
+					; // Do nothing
+				}
+				else if(this.isExp4j()) {
+					this.exp4jExpression.setVariable(this.outDependency.paramName, ((Number)out).doubleValue());
+				}
+				else if(this.isEvalex()) {
+					;
+				}
+			}
+			catch(Exception e) {
+				this.evaluateError = new DcError(DcErrorCode.EVALUATE_ERROR, "Evaluate error", "Error setting parameter values. " + e.getMessage());
+				return null;
+			}
 		}
 
 		// Evaluate native expression
@@ -207,6 +252,7 @@ class UdeFormula implements UserDefinedExpression {
 		if(this.formula == null || this.formula.isEmpty()) return;
 
 		this.exprDependencies.clear();
+		this.outDependency = null;
 
 		//
 		// Find all occurrences of columns names (in square brackets or otherwise syntactically identified)
@@ -268,6 +314,45 @@ class UdeFormula implements UserDefinedExpression {
 			}
 			else {
 				this.isEquality = false;
+			}
+		}
+
+		// Detect out parameter and move out of this list to a separate variable
+		int outParamNo = 0;
+		for(ExprDependency dep : this.exprDependencies) {
+			if(this.isOutputParameter(dep.qname)) {
+				break;
+			}
+			outParamNo++;
+		}
+		if(outParamNo < this.exprDependencies.size()) {
+			this.outDependency = this.exprDependencies.get(outParamNo);
+			this.exprDependencies.remove(outParamNo);
+		}
+	}
+	private boolean isOutputParameter(QName qname) {
+		if(qname.names.size() != 1) return false;
+		return this.isOutputParameter(qname.names.get(0));
+	}
+	private boolean isOutputParameter(String paramName) {
+		if(paramName.equalsIgnoreCase("["+UdeFormula.OUT_VARIABLE_NAME+"]")) {
+			return true;
+		}
+		else if(paramName.equalsIgnoreCase(UdeFormula.OUT_VARIABLE_NAME)) {
+			return true;
+		}
+		return false;
+	}
+
+	//
+	// Bind (resolve all parameters)
+	//
+	protected void bind() {
+		for(ExprDependency dep : this.exprDependencies) {
+			dep.columns = dep.qname.resolveColumns(this.table);
+			if(dep.columns == null || dep.columns.size() < dep.qname.names.size()) {
+				this.translateError = new DcError(DcErrorCode.BIND_ERROR, "Bind error", "Cannot resolve column path " + dep.pathName);
+				return;
 			}
 		}
 	}
@@ -400,8 +485,10 @@ class UdeFormula implements UserDefinedExpression {
 
 	public UdeFormula() {
 	}
-	public UdeFormula(String formula) {
+	public UdeFormula(String formula, Table table) {
 		this.formula = formula;
+		this.table = table;
+		
 		this.translate(formula);
 	}
 }
@@ -409,9 +496,10 @@ class UdeFormula implements UserDefinedExpression {
 class ExprDependency {
 	public int start;
 	public int end;
-	public String pathName;
+	public String pathName; // Original param paths
 	public String paramName;
-	public QName qname;
+	public QName qname; // Parsed param paths
+	List<Column> columns; // Resolved param paths
 }
 
 /**
@@ -434,9 +522,10 @@ class UdeExample implements UserDefinedExpression {
 
 	@Override public void setParamPaths(List<String> paths) {}
 	@Override public List<QName> getParamPaths() { return null; }
+	@Override public List<List<Column>> getResolvedParamPaths() { return null; }
 	@Override public void translate(String formula) {}
-	@Override public List<DcError> getErrors() { return null; }
-	@Override public Object evaluate(Object[] params) { return (double)params[0] + 1; }
+	@Override public List<DcError> getTranslateErrors() { return null; }
+	@Override public Object evaluate(Object[] params, Object out) { return (double)params[0] + 1; }
 	@Override public DcError getEvaluateError() { return null; }
 	
 	public UdeExample(List<List<Column>> inputPaths) { // Binding of parameter

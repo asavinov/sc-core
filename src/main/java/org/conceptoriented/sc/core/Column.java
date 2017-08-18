@@ -69,10 +69,6 @@ import org.json.JSONObject;
 // Custom link evaluator, e.g., by searching the output or imposing complex predicate (filter)
 // Custom accu evaluator, e.g., using conditional update or selecting only certain facts
 
-// Questions:
-// - Is it Evaluator or something else?
-// - Does it have to implement our Evaluator interface?
-// - Is it specific for some formula kind? 
 
 
 public class Column {
@@ -281,6 +277,20 @@ public class Column {
 		return ret;
 	}
 
+	private List<Column> getDependencies(UserDefinedExpression expr) { // Get parameter paths from expression and extract (unique) column from them
+		List<Column> columns = new ArrayList<Column>();
+		
+		List<List<Column>> paths = expr.getResolvedParamPaths();
+		for(List<Column> path : paths) {
+			for(Column col : path) {
+				if(!this.dependencies.contains(col) && !columns.contains(col)) {
+					columns.add(col);
+				}
+			}
+		}
+		return columns;
+	}
+	
 	public boolean isStartingColumn() { // True if this column has no dependencies (e.g., constant expression) or is free (user, non-derived) column
 		if(!this.isDerived()) {
 			return true;
@@ -382,21 +392,14 @@ public class Column {
 			ColumnDefinitionCalc definitionCalc = new ColumnDefinitionCalc(this.calcFormula);
 
 			// Translate by preparing expressions and other objects
-			UserDefinedExpression expr = new UdeFormula(definitionCalc.getFormula());
-			this.translateErrors.addAll(expr.getErrors());
+			UserDefinedExpression expr = new UdeFormula(definitionCalc.getFormula(), inputTable);
+			this.translateErrors.addAll(expr.getTranslateErrors());
 			if(this.hasTranslateErrors()) return; // Cannot proceed
 
 			// Evaluator
 			evaluatorCalc = new ColumnEvaluatorCalc(expr);
 
-			// Collect dependencies
-			// TODO:
-			// - who returns dependencies as names: Definition, Ude (need to collect from all Udes), Evaluator?
-			// - who resolves (column) names: Definition, Ude (need to collect from all Udes), Evaluator, or here?
-			// - who returns dependencies as objects?
-			// IDEA: ColumnEvaluator* could be created directly from ColumnDefinition* as one of their methods (instead of manually creating all objects here)
-			// - the necessary dependencies are then retrieved from the created ColumnEvaluator* rather than from individual expressions and objects 
-			columns.addAll(this.resolveParameters(expr.getParamPaths(), inputTable));
+			columns.addAll(this.getDependencies(expr));
 		}
 		else if(this.kind == DcColumnKind.LINK) {
 			// In future, this object will be stored in the column instead of multiple formulas
@@ -412,8 +415,8 @@ public class Column {
 			for(Entry<String,String> mmbr : mmbrs.entrySet()) { // For each tuple member (assignment) create an expression
 
 				// Right hand side
-				UdeFormula expr = new UdeFormula(mmbr.getValue());
-				this.translateErrors.addAll(expr.getErrors());
+				UdeFormula expr = new UdeFormula(mmbr.getValue(), outputTable);
+				this.translateErrors.addAll(expr.getTranslateErrors());
 				if(this.hasTranslateErrors()) return; // Cannot proceed
 
 				// Left hand side (column of the type table)
@@ -426,7 +429,7 @@ public class Column {
 				exprs.add(Pair.of(assignColumn, expr));
 
 				// Dependencies
-				columns.addAll(this.resolveParameters(expr.getParamPaths(), inputTable));
+				columns.addAll(this.getDependencies(expr));
 				columns.add(assignColumn);
 			}
 
@@ -436,10 +439,10 @@ public class Column {
 		else if(this.kind == DcColumnKind.ACCU) {
 
 			// Initialization
-			UserDefinedExpression initExpr = new UdeFormula(this.initFormula);
-			this.translateErrors.addAll(initExpr.getErrors());
+			UserDefinedExpression initExpr = new UdeFormula(this.initFormula, inputTable);
+			this.translateErrors.addAll(initExpr.getTranslateErrors());
 			if(this.hasTranslateErrors()) return; // Cannot proceed
-			columns.addAll(this.resolveParameters(initExpr.getParamPaths(), inputTable));
+			columns.addAll(this.getDependencies(initExpr));
 
 			// Accu table and link (group) path
 			Table accuTable = this.schema.getTable(this.getAccuTable());
@@ -456,16 +459,16 @@ public class Column {
 			columns.addAll(accuPathColumns);
 
 			// Accumulation
-			UserDefinedExpression accuExpr = new UdeFormula(this.accuFormula);
-			this.translateErrors.addAll(accuExpr.getErrors());
+			UserDefinedExpression accuExpr = new UdeFormula(this.accuFormula, accuTable);
+			this.translateErrors.addAll(accuExpr.getTranslateErrors());
 			if(this.hasTranslateErrors()) return; // Cannot proceed
-			columns.addAll(this.resolveParameters(accuExpr.getParamPaths(), accuTable));
+			columns.addAll(this.getDependencies(accuExpr));
 
 			// Finalization
-			UserDefinedExpression finExpr = new UdeFormula(this.finFormula);
-			this.translateErrors.addAll(finExpr.getErrors());
+			UserDefinedExpression finExpr = new UdeFormula(this.finFormula, inputTable);
+			this.translateErrors.addAll(finExpr.getTranslateErrors());
 			if(this.hasTranslateErrors()) return; // Cannot proceed
-			columns.addAll(this.resolveParameters(finExpr.getParamPaths(), inputTable));
+			columns.addAll(this.getDependencies(finExpr));
 
 			// Use these objects to create an evaluator
 			evaluatorAccu = new ColumnEvaluatorAccu(initExpr, accuExpr, finExpr, accuPathColumns);
@@ -477,6 +480,7 @@ public class Column {
 		this.setDependencies(columns);
 	}
 
+/*
 	private List<Column> resolveParameters(List<QName> params, Table mainTable) { // Resolve specified parameter paths by removing duplicates and recognizing reference to this (out) column
 		if(mainTable == null) mainTable = this.getInput();
 		List<Column> columns = new ArrayList<Column>();
@@ -503,6 +507,7 @@ public class Column {
 		
 		return columns;
 	}
+
 	private List<List<Column>> resolveParameterPaths(List<QName> params, Table mainTable) { // Resolve the specified path names into data (function) objects taking into account a possible special (out) parameter
 		if(mainTable == null) mainTable = this.getInput();
 		List<List<Column>> paths = new ArrayList<List<Column>>();
@@ -533,7 +538,8 @@ public class Column {
 		}
 		return false;
 	}
-
+*/
+/*
 	private Object getDefaultValue() { // Depends on the column type
 		Object defaultValue;
 		if(this.getOutput().isPrimitive()) {
@@ -544,7 +550,7 @@ public class Column {
 		}
 		return defaultValue;
 	}
-
+*/
 	//
 	// Translate formula
 	// Parse (formulas), bind (columns), build (evaluators). Generate dependencies. Produce new (translate) status.
@@ -565,7 +571,7 @@ public class Column {
 	List<Column> accuPathColumns;
 */
 
-/* OLD together wiith old evaluator above
+/* OLD together with old evaluator above
 	public void translate_OLD() {
 
 		// Reset

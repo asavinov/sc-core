@@ -51,28 +51,27 @@ class ColumnEvaluatorBase { // Convenience class for implementing common functio
 		Range mainRange = mainTable.getIdRange();
 
 		// Get all necessary parameters and prepare (resolve) the corresponding data (function) objects for reading values
-		List<List<Column>> paramPaths = this.resolveParameterPaths(expr.getParamPaths(), mainTable);
+		List<List<Column>> paramPaths = expr.getResolvedParamPaths();
 		Object[] paramValues = new Object[paramPaths.size()]; // Will store values for all params
+		Object out; // Current output value
 		Object result; // Will be written to output for each input
 
 		for(long i=mainRange.start; i<mainRange.end; i++) {
 			// Find group [ACCU-specific]
 			Long g = accuLinkPath == null ? i : (Long) accuLinkPath.get(0).getData().getValue(accuLinkPath, i);
 
-			// Read all parameter values including this column output
+			// Read all parameter values
 			int paramNo = 0;
 			for(List<Column> paramPath : paramPaths) {
-				if(paramPath.get(0) == this.column) {
-					paramValues[paramNo] = this.column.getData().getValue(g); // [ACCU-specific] [FIN-specific]
-				}
-				else {
-					paramValues[paramNo] = paramPath.get(0).data.getValue(paramPath, i);
-				}
+				paramValues[paramNo] = paramPath.get(0).data.getValue(paramPath, i);
 				paramNo++;
 			}
+			
+			// Read current out value
+			out = this.column.getData().getValue(g); // [ACCU-specific] [FIN-specific]
 
 			// Evaluate
-			result = expr.evaluate(paramValues);
+			result = expr.evaluate(paramValues, out);
 
 			// Update output
 			this.column.getData().setValue(g, result);
@@ -100,7 +99,7 @@ class ColumnEvaluatorBase { // Convenience class for implementing common functio
 			UserDefinedExpression eval = mmbr.getRight();
 			int paramCount = eval.getParamPaths().size();
 
-			rhsParamPaths.add( this.resolveParameterPaths(eval.getParamPaths(), mainTable) );
+			rhsParamPaths.add( eval.getResolvedParamPaths() );
 			rhsParamValues.add( new Object[ paramCount ] );
 			rhsResults.add( null );
 		}
@@ -124,7 +123,7 @@ class ColumnEvaluatorBase { // Convenience class for implementing common functio
 				}
 
 				// Evaluate this member expression
-				Object result = mmbr.getRight().evaluate(paramValues);
+				Object result = mmbr.getRight().evaluate(paramValues, null);
 				rhsResults.set(mmbrNo, result);
 				outRecord.set(mmbr.getLeft().getName(), result);
 				
@@ -135,7 +134,7 @@ class ColumnEvaluatorBase { // Convenience class for implementing common functio
 			Object out = typeTable.find(outRecord, true);
 			
 			// Update output
-			this.getData().setValue(i, out);
+			this.column.getData().setValue(i, out);
 		}
 
 	}
