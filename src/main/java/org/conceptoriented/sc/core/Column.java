@@ -339,44 +339,22 @@ public class Column {
 	// Translation errors are produced and stored in different objects like many evaluators or local fields (e.g., for links) so the final status is collected
 	//
 	
-	private DcError bindError;
-
-	public DcError getTranslateError() { // Get single (the first) error (there could be many errors detected)
-		List<DcError> errors = this.getTranslateErrors();
-		if(errors == null || errors.size() == 0) return null;
-		return errors.get(0);
-	}
+	private List<DcError> translateErrors = new ArrayList<DcError>();
 	public List<DcError> getTranslateErrors() { // Empty list in the case of no errors
-		List<DcError> errors = new ArrayList<DcError>();
-
-		if(this.bindError != null) {
-			errors.add(this.bindError);
-		}
-
-		if(this.kind == DcColumnKind.CALC) {
-			if(this.calcEvaluator != null) errors.add(this.calcEvaluator.getTranslateError());
-		}
-		else if(this.kind == DcColumnKind.LINK) {
-			if(this.linkTranslateStatus != null) errors.add(this.linkTranslateStatus);
-			for(Pair<Column,UserDefinedExpression> mmbr : this.linkEvaluators) {
-				if(mmbr.getRight() != null) errors.add(mmbr.getRight().getTranslateError());
-			}
-		}
-		else if(this.kind == DcColumnKind.ACCU) {
-			if(this.initEvaluator != null) errors.add(this.initEvaluator.getTranslateError());
-			if(this.accuEvaluator != null) errors.add(this.accuEvaluator.getTranslateError());
-			if(this.finEvaluator != null) errors.add(this.accuEvaluator.getTranslateError());
-		}
-
-		return errors;
+		return this.translateErrors;
+	}
+	public DcError getTranslateError() { // Get single (the first) error (there could be many errors detected)
+		List<DcError> ret = this.getTranslateErrors();
+		if(ret == null || ret.size() == 0) return null;
+		return ret.get(0);
 	}
 	public boolean hasTranslateErrors() { // Is successfully translated and can be used for evaluation
-		if(getTranslateErrors().size() == 0) return false;
+		if(this.translateErrors.size() == 0) return false;
 		else return true;
 	}
 
 	//
-	// Translate NEW
+	// Translate
 	//
 	
 	ColumnEvaluatorCalc evaluatorCalc;
@@ -386,7 +364,7 @@ public class Column {
 	// Generate Evaluator* from ColumnDefinition*
 	public void translate() {
 		// Reset
-		this.bindError = null;
+		this.translateErrors.clear();;
 
 		this.evaluatorCalc = null;
 		this.evaluatorLink = null;
@@ -405,6 +383,8 @@ public class Column {
 
 			// Translate by preparing expressions and other objects
 			UserDefinedExpression expr = new UdeFormula(definitionCalc.getFormula());
+			this.translateErrors.addAll(expr.getErrors());
+			if(this.hasTranslateErrors()) return; // Cannot proceed
 
 			// Evaluator
 			evaluatorCalc = new ColumnEvaluatorCalc(expr);
@@ -421,6 +401,8 @@ public class Column {
 		else if(this.kind == DcColumnKind.LINK) {
 			// In future, this object will be stored in the column instead of multiple formulas
 			ColumnDefinitionLink definitionLink = new ColumnDefinitionLink(this.linkFormula);
+			this.translateErrors.addAll(definitionLink.getErrors());
+			if(this.hasTranslateErrors()) return; // Cannot proceed
 
 			// Parse tuple and create a collection of assignments
 			Map<String,String> mmbrs = definitionLink.translateLinkFormulas();
@@ -431,11 +413,20 @@ public class Column {
 
 				// Right hand side
 				UdeFormula expr = new UdeFormula(mmbr.getValue());
-				columns.addAll(this.resolveParameters(expr.getParamPaths(), inputTable));
+				this.translateErrors.addAll(expr.getErrors());
+				if(this.hasTranslateErrors()) return; // Cannot proceed
 
 				// Left hand side (column of the type table)
 				Column assignColumn = this.schema.getColumn(outputTable.getName(), mmbr.getKey());
+				if(assignColumn == null) { // Binding error
+					this.translateErrors.add(new DcError(DcErrorCode.BIND_ERROR, "Binding error.", "Cannot find column: " + assignColumn));
+					return;
+				}
+
 				exprs.add(Pair.of(assignColumn, expr));
+
+				// Dependencies
+				columns.addAll(this.resolveParameters(expr.getParamPaths(), inputTable));
 				columns.add(assignColumn);
 			}
 
@@ -446,20 +437,34 @@ public class Column {
 
 			// Initialization
 			UserDefinedExpression initExpr = new UdeFormula(this.initFormula);
+			this.translateErrors.addAll(initExpr.getErrors());
+			if(this.hasTranslateErrors()) return; // Cannot proceed
 			columns.addAll(this.resolveParameters(initExpr.getParamPaths(), inputTable));
 
 			// Accu table and link (group) path
 			Table accuTable = this.schema.getTable(this.getAccuTable());
+			if(accuTable == null) { // Binding error
+				this.translateErrors.add(new DcError(DcErrorCode.BIND_ERROR, "Binding error.", "Cannot find table: " + accuTable));
+				return;
+			}
 			QName accuLinkPath = QName.parse(this.accuPath);
 			List<Column> accuPathColumns = accuLinkPath.resolveColumns(accuTable);
+			if(accuPathColumns == null) { // Binding error
+				this.translateErrors.add(new DcError(DcErrorCode.BIND_ERROR, "Binding error.", "Cannot find columns: " + this.accuPath));
+				return;
+			}
 			columns.addAll(accuPathColumns);
 
 			// Accumulation
 			UserDefinedExpression accuExpr = new UdeFormula(this.accuFormula);
+			this.translateErrors.addAll(accuExpr.getErrors());
+			if(this.hasTranslateErrors()) return; // Cannot proceed
 			columns.addAll(this.resolveParameters(accuExpr.getParamPaths(), accuTable));
 
 			// Finalization
 			UserDefinedExpression finExpr = new UdeFormula(this.finFormula);
+			this.translateErrors.addAll(finExpr.getErrors());
+			if(this.hasTranslateErrors()) return; // Cannot proceed
 			columns.addAll(this.resolveParameters(finExpr.getParamPaths(), inputTable));
 
 			// Use these objects to create an evaluator
@@ -484,7 +489,7 @@ public class Column {
 			for(String name : param.names) {
 				Column col = schema.getColumn(table.getName(), name);
 				if(col == null) { // Cannot resolve
-					this.bindError = new DcError(DcErrorCode.BIND_ERROR, "Binding error.", "Cannot find column: " + col);
+					this.translateErrors.add(new DcError(DcErrorCode.BIND_ERROR, "Binding error.", "Cannot find column: " + col));
 					break;
 				}
 				
@@ -717,28 +722,13 @@ public class Column {
 	// Translation errors are produced and stored in different objects like many evaluators or local fields (e.g., for links) so the final status is collected
 	//
 
-	public DcError getEvaluateError() { // Get single (the first) error (there could be many errors detected)
-		List<DcError> errors = this.getEvaluateErrors();
-		if(errors == null || errors.size() == 0) return null;
-		return errors.get(0);
-	}
+	private List<DcError> evaluateErrors = new ArrayList<DcError>();
 	public List<DcError> getEvaluateErrors() { // Empty list in the case of no errors
-		List<DcError> errors = new ArrayList<DcError>();
-		if(this.kind == DcColumnKind.CALC) {
-			if(this.calcEvaluator != null) errors.add(this.calcEvaluator.getEvaluateError());
-		}
-		else if(this.kind == DcColumnKind.LINK) {
-			for(Pair<Column,UserDefinedExpression> mmbr : this.linkEvaluators) {
-				if(mmbr.getRight() != null) errors.add(mmbr.getRight().getEvaluateError());
-			}
-		}
-		else if(this.kind == DcColumnKind.ACCU) {
-			if(this.initEvaluator != null) errors.add(this.initEvaluator.getEvaluateError());
-			if(this.accuEvaluator != null) errors.add(this.accuEvaluator.getEvaluateError());
-			if(this.finEvaluator != null) errors.add(this.accuEvaluator.getEvaluateError());
-		}
-
-		return null;
+		return this.evaluateErrors;
+	}
+	public DcError getEvaluateError() { // Get single (the first) error (there could be many errors detected)
+		if(this.evaluateErrors == null || this.evaluateErrors.size() == 0) return null;
+		return this.evaluateErrors.get(0);
 	}
 	public boolean hasEvaluateErrors() { // Is successfully evaluated
 		if(getEvaluateErrors().size() == 0) return false;
@@ -762,15 +752,22 @@ public class Column {
 	
 	// GOAL: Use ColumnEvaluator for evaluation instead of old expressions
 	public void evaluate() {
+		this.evaluateErrors.clear();
 		
 		if(this.getKind() == DcColumnKind.CALC) {
 			this.evaluatorCalc.evaluate();
+			this.evaluateErrors.addAll(this.evaluatorCalc.getErrors());
+			if(this.hasEvaluateErrors()) return;
 		}
 		else if(this.getKind() == DcColumnKind.LINK) {
 			this.evaluatorLink.evaluate();
+			this.evaluateErrors.addAll(this.evaluatorLink.getErrors());
+			if(this.hasEvaluateErrors()) return;
 		}
 		else if(this.getKind() == DcColumnKind.ACCU) {
 			this.evaluatorAccu.evaluate();
+			this.evaluateErrors.addAll(this.evaluatorAccu.getErrors());
+			if(this.hasEvaluateErrors()) return;
 		}
 
 		this.data.markNewAsClean(); // Mark dirty as clean

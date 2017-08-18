@@ -57,7 +57,7 @@ class ColumnDefinitionLink implements ColumnDefinition {
 	}
 	@Override
 	public List<DcError> getErrors() {
-		return null;
+		return new ArrayList<DcError>();
 	}
 
 	DcError linkTranslateStatus;

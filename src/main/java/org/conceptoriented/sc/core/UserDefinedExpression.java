@@ -55,7 +55,7 @@ public interface UserDefinedExpression {
 
 
 	public void translate(String formula);
-	public DcError getTranslateError();
+	public List<DcError> getErrors();
 
 	/**
 	 * Compute output value using the provide input values. 
@@ -131,11 +131,13 @@ class UdeFormula implements UserDefinedExpression {
 	}
 	private DcError translateError;
 	@Override
-	public DcError getTranslateError() { // Find first error or null for no errors. Is meaningful only after translation.
+	public List<DcError> getErrors() { // Find first error or null for no errors. Is meaningful only after translation.
+		List<DcError> ret = new ArrayList<DcError>();
 		if(this.translateError == null || this.translateError.code == DcErrorCode.NONE) {
-			return null;
+			return ret;
 		}
-		return this.translateError;
+		ret.add(this.translateError);
+		return ret;
 	}
 	@Override
 	public Object evaluate(Object[] params) {
@@ -433,7 +435,7 @@ class UdeExample implements UserDefinedExpression {
 	@Override public void setParamPaths(List<String> paths) {}
 	@Override public List<QName> getParamPaths() { return null; }
 	@Override public void translate(String formula) {}
-	@Override public DcError getTranslateError() { return null; }
+	@Override public List<DcError> getErrors() { return null; }
 	@Override public Object evaluate(Object[] params) { return (double)params[0] + 1; }
 	@Override public DcError getEvaluateError() { return null; }
 	
