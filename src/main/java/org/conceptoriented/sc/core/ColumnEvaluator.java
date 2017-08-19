@@ -38,11 +38,19 @@ public interface ColumnEvaluator {
 	// List<Column> getDependencies(); // TODO: Do we need this method for dependency graph?
 }
 
-class ColumnEvaluatorBase { // Convenience class for implementing common functions
+abstract class ColumnEvaluatorBase implements ColumnEvaluator { // Convenience class for implementing common functions
 
-	Column column; // TODO: Need to be initialized by a child class
+	Column column;
+	
+	List<DcError> errors = new ArrayList<DcError>();
+	@Override
+	public List<DcError> getErrors() {
+		return this.errors;
+	}
 
 	protected void evaluateExpr(UserDefinedExpression expr, List<Column> accuLinkPath) {
+		
+		errors.clear(); // Clear state
 
 		Table mainTable = accuLinkPath == null ? this.column.getInput() : accuLinkPath.get(0).getInput(); // Loop/scan table
 
@@ -72,6 +80,10 @@ class ColumnEvaluatorBase { // Convenience class for implementing common functio
 
 			// Evaluate
 			result = expr.evaluate(paramValues, out);
+			if(expr.getEvaluateError() != null) {
+				errors.add(expr.getEvaluateError());
+				return;
+			}
 
 			// Update output
 			this.column.getData().setValue(g, result);
@@ -80,6 +92,8 @@ class ColumnEvaluatorBase { // Convenience class for implementing common functio
 
 
 	protected void evaluateLink(List<Pair<Column,UserDefinedExpression>> exprs) {
+
+		errors.clear(); // Clear state
 
 		Table typeTable = this.column.getOutput();
 
@@ -123,7 +137,13 @@ class ColumnEvaluatorBase { // Convenience class for implementing common functio
 				}
 
 				// Evaluate this member expression
-				Object result = mmbr.getRight().evaluate(paramValues, null);
+				UserDefinedExpression expr = mmbr.getRight();
+				Object result = expr.evaluate(paramValues, null);
+				if(expr.getEvaluateError() != null) {
+					errors.add(expr.getEvaluateError());
+					return;
+				}
+
 				rhsResults.set(mmbrNo, result);
 				outRecord.set(mmbr.getLeft().getName(), result);
 				
@@ -141,21 +161,14 @@ class ColumnEvaluatorBase { // Convenience class for implementing common functio
 
 	protected void evaluateExprDefault() {
 		Range mainRange = this.column.getData().getIdRange(); // All dirty/new rows
-		Object defaultValue = this.getDefaultValue();
+		Object defaultValue = this.column.getDefaultValue();
 		for(long i=mainRange.start; i<mainRange.end; i++) {
 			this.column.getData().setValue(i, defaultValue);
 		}
 	}
 
-	protected Object getDefaultValue() { // Depends on the column type
-		Object defaultValue;
-		if(this.column.getOutput().isPrimitive()) {
-			defaultValue = 0.0;
-		}
-		else {
-			defaultValue = null;
-		}
-		return defaultValue;
+	public ColumnEvaluatorBase(Column column) {
+		this.column = column;
 	}
 
 }
@@ -164,7 +177,7 @@ class ColumnEvaluatorBase { // Convenience class for implementing common functio
  * It is an implementation of evaluator for calc columns.
  * It loops through the main table, reads inputs, passes them to the expression and then write the output to the main column.
  */
-class ColumnEvaluatorCalc extends ColumnEvaluatorBase implements ColumnEvaluator {
+class ColumnEvaluatorCalc extends ColumnEvaluatorBase {
 	UserDefinedExpression ude;
 
 	@Override
@@ -177,12 +190,9 @@ class ColumnEvaluatorCalc extends ColumnEvaluatorBase implements ColumnEvaluator
 			super.evaluateExpr(ude, null);
 		}
 	}
-	@Override
-	public List<DcError> getErrors() {
-		return null;
-	}
 
-	public ColumnEvaluatorCalc(UserDefinedExpression ude) {
+	public ColumnEvaluatorCalc(Column column, UserDefinedExpression ude) {
+		super(column);
 		this.ude = ude;
 	}
 }
@@ -191,19 +201,16 @@ class ColumnEvaluatorCalc extends ColumnEvaluatorBase implements ColumnEvaluator
  * It is an implementation of evaluator for link columns.
  * It loops through the main table, reads inputs, passes them to the expression and then write the output to the main column.
  */
-class ColumnEvaluatorLink extends ColumnEvaluatorBase implements ColumnEvaluator {
+class ColumnEvaluatorLink extends ColumnEvaluatorBase {
 	List<Pair<Column,UserDefinedExpression>> udes;
 
 	@Override
 	public void evaluate() {
 		super.evaluateLink(udes);
 	}
-	@Override
-	public List<DcError> getErrors() {
-		return null;
-	}
 
-	public ColumnEvaluatorLink(List<Pair<Column,UserDefinedExpression>> udes) {
+	public ColumnEvaluatorLink(Column column, List<Pair<Column,UserDefinedExpression>> udes) {
+		super(column);
 		this.udes = udes;
 	}
 }
@@ -212,7 +219,8 @@ class ColumnEvaluatorLink extends ColumnEvaluatorBase implements ColumnEvaluator
  * It is an implementation of evaluator for link columns.
  * It loops through the main table, reads inputs, passes them to the expression and then write the output to the main column.
  */
-class ColumnEvaluatorAccu extends ColumnEvaluatorBase implements ColumnEvaluator {
+class ColumnEvaluatorAccu extends ColumnEvaluatorBase {
+
 	UserDefinedExpression initExpr;
 	UserDefinedExpression accuExpr;
 	UserDefinedExpression finExpr;
@@ -240,16 +248,14 @@ class ColumnEvaluatorAccu extends ColumnEvaluatorBase implements ColumnEvaluator
 			super.evaluateExpr(this.finExpr, null);
 		}
 	}
-	@Override
-	public List<DcError> getErrors() {
-		return null;
-	}
 
-	public ColumnEvaluatorAccu(UserDefinedExpression initExpr, UserDefinedExpression accuExpr, UserDefinedExpression finExpr, List<Column> accuPathColumns) {
+	public ColumnEvaluatorAccu(Column column, UserDefinedExpression initExpr, UserDefinedExpression accuExpr, UserDefinedExpression finExpr, List<Column> accuPathColumns) {
+		super(column);
+
 		this.initExpr = initExpr;
 		this.accuExpr = accuExpr;
 		this.finExpr = finExpr;
-		
+
 		this.accuPathColumns = accuPathColumns;
 	}
 }

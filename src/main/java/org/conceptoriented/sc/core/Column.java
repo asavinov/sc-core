@@ -22,54 +22,17 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-// Conclusions:
-// - Fix column kinds and their semantics in the sense what expressions are needed and how they are used to organize loop and computing the whole output.
-// - Each column kind is known to the user and has its specific class and/or interface.
-// - A column instance is defined via the necessary expression(s) which are given either as syntactic formulas or using Java classes. In both cases a descriptor can be used to encode all necessary parameters for the definition of this kind (or even different kinds if it has such a field).
-// - Column object has a switch on column kind and store the corresponding class instance as its specification.
-// - This class instance (representing definition kind) knows how to organize loops etc. 
-//   - ColumnDefCalc, ColumnDefLink, ColumnDefAccu, ...
-// - Each of these classes takes expressions as parameters: either formulas or descriptor or Java class or whatever - it is important that it is possible to initialize such an instance according to the kind semantics.
-// - Definitions of all kinds must provide common API and information to the column: errors of any kind (translate/evaluate/inherited/cycles etc.)
+// NEXT:
+//- !!! Example/test with programmatically defined custom ColumnEvaluator (without formula) with Java class as UDE -> anology with MR (map, reduce etc. are like ColumnEvaluatorCalc (map), ColumnEvaluatorAccu (reduce), ColumnEvaluatorLink (join))
+//  - Custom link evaluator, e.g., by searching the output or imposing complex predicate (filter)
+//  - Custom accu evaluator, e.g., using conditional update or selecting only certain facts
 
-// Questions:
-// - should definitions deal with dirty status? Evaluate loop should understand it in order to propagate new/changed/del status of inputs. But it does not change this status itself.
-//   - When a new element is added then the status is changed automatically.
-//   - Evaluator should be able to change this status, for example, after updating accu for new and del elements.
-// - where formula dirty status is stored?
-// - where formulas are stored? formulas are origins and are provided by the user. on the other hand, there could be different syntax for formulas and each requires its evaluator which knows how to parse them.
-//   !!! - definition could use only Evaluator API but be unaware of the formulas and how this object is created. So the column or definition could store formulas, while the definition evaluation logic gets instances of Evaluator.
-// !! - User provides formula(s) and two two parameters: 1) Column Kind, 2) Expr/Formula types (exp4j, JS, Java etc. - how formulas are converted to expressions - Evaluator class)
-
-// - Formulas for certain kind with certain syntax. Formula dirty status.
-// - Logic of producing Evaluator instances from formulas using classes specific to syntax (input is formula and we need to use Java class for this syntax)
-// - Logic of evaluation for certain kind (input is Evaluators, independent of formulas and syntax)
-
-
-
-// Column Knows (essentially, how to use single expression(s) to compute all outputs of this column according to the kind):
-// - switch(column kind)
-//   - what class(s) of evaluator object to create for each kind and how to use it, e.g., translate and get dependencies
-//   - one or any evaluators specific to each column kind, what to do if empty evaluation 
-//   - use this specific evaluator(s): main table, how to loop, get input(s), where and how to store the output,
-
-// Evaluator knows (essentially, single expression for computing output given inputs, so it is an expression provider or single value calculator):
-// - unaware of formula kind, how to loop over main table, where values come from etc.
-// - unaware of how to change the result (and also how to read values)
-// - single formula, its syntactic conventions, how to parse it, e.g., arithmetic expression or string operations or whatever 
-// - main table against columns of this table using its columns in expression
-// - the main table is not necessarily is a table of this (evaluated) column, e.g., for accu formula
-// - knows how to extract dependencies (other columns) from the formula
-// - knows how to resolve columns (it is a generic function which can be factored out, e.g., List<Column> resolveAll(List<String> paths)
-// - how to build native expression that really transforms input values to one output value
-
-// Use cases:
-// Using custom Java class implementing our interface instead of formula. Descriptor for param specification etc.
-// Using standard Java method instead of formula. Descriptor.
-// Custom link evaluator, e.g., by searching the output or imposing complex predicate (filter)
-// Custom accu evaluator, e.g., using conditional update or selecting only certain facts
-
-
+// - constant UDE (easy to compute but not necessary)
+// - equal to column UDE (easier to compute but not necessary)
+// - How to deal with empty formulas and defaults in a principled manner?
+// - Issue: multiple [out] occurrences in a formula (currently only one is possible)
+// - Use ColumnDefinition to store formulas instead of individual strings -> Use translation directly from ColumnDefinition* to ColumnEvaluator*
+//
 
 public class Column {
 	private Schema schema;
@@ -114,6 +77,17 @@ public class Column {
 		return this.data;
 	}
 
+	protected Object getDefaultValue() { // Depends on the column type. Maybe move to Data class
+		Object defaultValue;
+		if(this.getOutput().isPrimitive()) {
+			defaultValue = 0.0;
+		}
+		else {
+			defaultValue = null;
+		}
+		return defaultValue;
+	}
+	
 	//
 	// Formula kind
 	//
@@ -374,7 +348,7 @@ public class Column {
 	// Generate Evaluator* from ColumnDefinition*
 	public void translate() {
 		// Reset
-		this.translateErrors.clear();;
+		this.translateErrors.clear();
 
 		this.evaluatorCalc = null;
 		this.evaluatorLink = null;
@@ -392,12 +366,12 @@ public class Column {
 			ColumnDefinitionCalc definitionCalc = new ColumnDefinitionCalc(this.calcFormula);
 
 			// Translate by preparing expressions and other objects
-			UserDefinedExpression expr = new UdeFormula(definitionCalc.getFormula(), inputTable);
+			UserDefinedExpression expr = new UdeJava(definitionCalc.getFormula(), inputTable);
 			this.translateErrors.addAll(expr.getTranslateErrors());
 			if(this.hasTranslateErrors()) return; // Cannot proceed
 
 			// Evaluator
-			evaluatorCalc = new ColumnEvaluatorCalc(expr);
+			evaluatorCalc = new ColumnEvaluatorCalc(this, expr);
 
 			columns.addAll(this.getDependencies(expr));
 		}
@@ -415,7 +389,7 @@ public class Column {
 			for(Entry<String,String> mmbr : mmbrs.entrySet()) { // For each tuple member (assignment) create an expression
 
 				// Right hand side
-				UdeFormula expr = new UdeFormula(mmbr.getValue(), outputTable);
+				UdeJava expr = new UdeJava(mmbr.getValue(), inputTable);
 				this.translateErrors.addAll(expr.getTranslateErrors());
 				if(this.hasTranslateErrors()) return; // Cannot proceed
 
@@ -434,12 +408,18 @@ public class Column {
 			}
 
 			// Use this list of assignments to create an evaluator
-			evaluatorLink = new ColumnEvaluatorLink(exprs);
+			evaluatorLink = new ColumnEvaluatorLink(this, exprs);
 		}
 		else if(this.kind == DcColumnKind.ACCU) {
 
-			// Initialization
-			UserDefinedExpression initExpr = new UdeFormula(this.initFormula, inputTable);
+			// Initialization (always initialize - even for empty formula)
+			UserDefinedExpression initExpr = null;
+			if(this.finFormula == null || this.finFormula.isEmpty()) { // TODO: We need UDE for constants and for equality (equal to the specified column)
+				initExpr = new UdeJava(this.getDefaultValue().toString(), inputTable);
+			}
+			else {
+				initExpr = new UdeJava(this.finFormula, inputTable);
+			}
 			this.translateErrors.addAll(initExpr.getTranslateErrors());
 			if(this.hasTranslateErrors()) return; // Cannot proceed
 			columns.addAll(this.getDependencies(initExpr));
@@ -459,19 +439,22 @@ public class Column {
 			columns.addAll(accuPathColumns);
 
 			// Accumulation
-			UserDefinedExpression accuExpr = new UdeFormula(this.accuFormula, accuTable);
+			UserDefinedExpression accuExpr = new UdeJava(this.accuFormula, accuTable);
 			this.translateErrors.addAll(accuExpr.getTranslateErrors());
 			if(this.hasTranslateErrors()) return; // Cannot proceed
 			columns.addAll(this.getDependencies(accuExpr));
 
 			// Finalization
-			UserDefinedExpression finExpr = new UdeFormula(this.finFormula, inputTable);
-			this.translateErrors.addAll(finExpr.getTranslateErrors());
-			if(this.hasTranslateErrors()) return; // Cannot proceed
-			columns.addAll(this.getDependencies(finExpr));
+			UserDefinedExpression finExpr = null;
+			if(this.finFormula != null && !this.finFormula.isEmpty()) {
+				finExpr = new UdeJava(this.finFormula, inputTable);
+				this.translateErrors.addAll(finExpr.getTranslateErrors());
+				if(this.hasTranslateErrors()) return; // Cannot proceed
+				columns.addAll(this.getDependencies(finExpr));
+			}
 
 			// Use these objects to create an evaluator
-			evaluatorAccu = new ColumnEvaluatorAccu(initExpr, accuExpr, finExpr, accuPathColumns);
+			evaluatorAccu = new ColumnEvaluatorAccu(this, initExpr, accuExpr, finExpr, accuPathColumns);
 		}
 		else if(this.getKind() == DcColumnKind.CLASS) {
 			; // TODO: We do not have CLASS - we will use descriptors in place of formulas. CLASS is then an indicator of formula syntax convention. 
@@ -479,249 +462,6 @@ public class Column {
 
 		this.setDependencies(columns);
 	}
-
-/*
-	private List<Column> resolveParameters(List<QName> params, Table mainTable) { // Resolve specified parameter paths by removing duplicates and recognizing reference to this (out) column
-		if(mainTable == null) mainTable = this.getInput();
-		List<Column> columns = new ArrayList<Column>();
-		for(QName param : params) {
-			if(this.isOutputParameter(param)) {
-				continue; // Do not add to dependencies
-			}
-
-			Table table = mainTable;
-			for(String name : param.names) {
-				Column col = schema.getColumn(table.getName(), name);
-				if(col == null) { // Cannot resolve
-					this.translateErrors.add(new DcError(DcErrorCode.BIND_ERROR, "Binding error.", "Cannot find column: " + col));
-					break;
-				}
-				
-				if(!columns.contains(col)) { 
-					columns.add(col);
-				}
-
-				table = col.getOutput(); // Next segment will be resolved from the previous column output
-			}
-		}
-		
-		return columns;
-	}
-
-	private List<List<Column>> resolveParameterPaths(List<QName> params, Table mainTable) { // Resolve the specified path names into data (function) objects taking into account a possible special (out) parameter
-		if(mainTable == null) mainTable = this.getInput();
-		List<List<Column>> paths = new ArrayList<List<Column>>();
-		for(QName param : params) {
-			if(this.isOutputParameter(param)) {
-				paths.add(Arrays.asList(this)); // Single element in path (this column)
-			}
-			else {
-				paths.add(param.resolveColumns(mainTable)); // Multi-segment paths from the iterated table
-			}
-		}
-		return paths;
-	}
-
-	private boolean isOutputParameter(QName qname) {
-		if(qname.names.size() != 1) return false;
-		return this.isOutputParameter(qname.names.get(0));
-	}
-	private boolean isOutputParameter(String paramName) {
-		if(paramName.equalsIgnoreCase("["+UdeFormula.OUT_VARIABLE_NAME+"]")) {
-			return true;
-		}
-		else if(paramName.equalsIgnoreCase(UdeFormula.OUT_VARIABLE_NAME)) {
-			return true;
-		}
-		else if(paramName.equalsIgnoreCase(this.getName())) {
-			return true;
-		}
-		return false;
-	}
-*/
-/*
-	private Object getDefaultValue() { // Depends on the column type
-		Object defaultValue;
-		if(this.getOutput().isPrimitive()) {
-			defaultValue = 0.0;
-		}
-		else {
-			defaultValue = null;
-		}
-		return defaultValue;
-	}
-*/
-	//
-	// Translate formula
-	// Parse (formulas), bind (columns), build (evaluators). Generate dependencies. Produce new (translate) status.
-	//
-/*
-	// Calc evaluator
-	UserDefinedExpression calcEvaluator;
-
-	// Link evaluators
-	List<Pair<Column,UserDefinedExpression>> linkEvaluators = new ArrayList<Pair<Column,UserDefinedExpression>>();
-	DcError linkTranslateStatus;
-	protected Map<String, String> linkMembers = new HashMap<String, String>();
-
-	// Accu evaluators
-	UserDefinedExpression initEvaluator;
-	UserDefinedExpression accuEvaluator;
-	UserDefinedExpression finEvaluator;
-	List<Column> accuPathColumns;
-*/
-
-/* OLD together with old evaluator above
-	public void translate_OLD() {
-
-		// Reset
-		this.bindError = null;
-
-		this.calcEvaluator = null;
-
-		this.linkEvaluators.clear();
-
-		this.initEvaluator = null;
-		this.accuEvaluator = null;
-		this.finEvaluator = null;
-
-		this.resetDependencies();
-		List<Column> columns = new ArrayList<Column>();
-		
-		Table inputTable = this.getInput();
-		Table outputTable = this.getOutput();
-
-		// Translate depending on the formula kind
-		if(this.kind == DcColumnKind.CALC) {
-			if(this.calcFormula == null || this.calcFormula.isEmpty()) return;
-
-			this.calcEvaluator = new UdeFormula();
-			this.calcEvaluator.translate(this.calcFormula);
-			columns.addAll(this.resolveParameters(this.calcEvaluator.getParamPaths(), inputTable));
-		}
-		else if(this.kind == DcColumnKind.LINK) {
-
-			this.translateLinkFormula(this.linkFormula);
-			if(this.linkTranslateStatus != null && this.linkTranslateStatus.code != DcErrorCode.NONE) {
-				return; // Tuple translation error
-			}
-			
-			for(Entry<String,String> mmbr : this.linkMembers.entrySet()) { // For each tuple member (assignment) create an expression
-
-				// Right hand side
-				UdeFormula expr = new UdeFormula();
-				expr.translate(mmbr.getValue());
-				columns.addAll(this.resolveParameters(expr.getParamPaths(), inputTable));
-				
-				// Left hand side (column of the type table)
-				Column assignColumn = this.schema.getColumn(outputTable.getName(), mmbr.getKey());
-				this.linkEvaluators.add(Pair.of(assignColumn, expr));
-				columns.add(assignColumn);
-			}
-		}
-		else if(this.kind == DcColumnKind.ACCU) {
-			if(this.accuFormula == null || this.accuFormula.isEmpty()) return;
-
-			// Initialization
-			this.initEvaluator = new UdeFormula();
-			this.initEvaluator.translate(this.initFormula);
-			columns.addAll(this.resolveParameters(this.initEvaluator.getParamPaths(), inputTable));
-
-			// Accu table and link (group) path
-			Table accuTable = this.schema.getTable(this.getAccuTable());
-			QName accuLinkPath = QName.parse(this.accuPath);
-			this.accuPathColumns = accuLinkPath.resolveColumns(accuTable);
-			columns.addAll(this.accuPathColumns);
-
-			// Accumulation
-			this.accuEvaluator = new UdeFormula();
-			this.accuEvaluator.translate(this.accuFormula);
-			columns.addAll(this.resolveParameters(this.accuEvaluator.getParamPaths(), accuTable));
-
-			// Finalization
-			this.finEvaluator = new UdeFormula();
-			this.finEvaluator.translate(this.finFormula);
-			columns.addAll(this.resolveParameters(this.finEvaluator.getParamPaths(), inputTable));
-		}
-		else if(this.getKind() == DcColumnKind.CLASS) {
-			;
-		}
-
-		this.setDependencies(columns);
-	}
-*/
-
-/* OLD - moved to link definition
-	protected void translateLinkFormula(String frml) { // Parse tuple {...} into a list of member assignments and set error
-		this.linkTranslateStatus = null;
-		this.linkMembers.clear();
-		if(frml == null | frml.isEmpty()) return;
-
-		Map<String,String> mmbrs = new HashMap<String,String>();
-
-		//
-		// Check correct enclosure (curly brackets)
-		//
-		int open = frml.indexOf("{");
-		int close = frml.lastIndexOf("}");
-
-		if(open < 0 || close < 0 || open >= close) {
-			this.linkTranslateStatus = new DcError(DcErrorCode.PARSE_ERROR, "Parse error.", "Problem with curly braces. Tuple expression is a list of assignments in curly braces.");
-			return;
-		}
-
-		String sequence = frml.substring(open+1, close).trim();
-
-		//
-		// Build a list of members from comma separated list
-		//
-		List<String> members = new ArrayList<String>();
-		int previousSeparator = -1;
-		int level = 0; // Work only on level 0
-		for(int i=0; i<sequence.length(); i++) {
-			if(sequence.charAt(i) == '{') {
-				level++;
-			}
-			else if(sequence.charAt(i) == '}') {
-				level--;
-			}
-			
-			if(level > 0) { // We are in a nested block. More closing parentheses are expected to exit from this block.
-				continue;
-			}
-			else if(level < 0) {
-				this.linkTranslateStatus = new DcError(DcErrorCode.PARSE_ERROR, "Parse error.", "Problem with curly braces. Opening and closing curly braces must match.");
-				return;
-			}
-			
-			// Check if it is a member separator
-			if(sequence.charAt(i) == ';') {
-				members.add(sequence.substring(previousSeparator+1, i));
-				previousSeparator = i;
-			}
-		}
-		members.add(sequence.substring(previousSeparator+1, sequence.length()));
-
-		//
-		// Create child tuples from members and parse them
-		//
-		for(String member : members) {
-			int eq = member.indexOf("=");
-			if(eq < 0) {
-				this.linkTranslateStatus = new DcError(DcErrorCode.PARSE_ERROR, "Parse error.", "No equality sign. Tuple expression is a list of assignments.");
-				return;
-			}
-			String lhs = member.substring(0, eq).trim();
-			if(lhs.startsWith("[")) lhs = lhs.substring(1);
-			if(lhs.endsWith("]")) lhs = lhs.substring(0,lhs.length()-1);
-			String rhs = member.substring(eq+1).trim();
-
-			mmbrs.put(lhs, rhs);
-		}
-
-		this.linkMembers.putAll(mmbrs);
-	}
-*/
 
 	//
 	// Evaluation status
@@ -756,7 +496,6 @@ public class Column {
 		return Duration.between(this.evaluateTime, Instant.now());
 	}
 	
-	// GOAL: Use ColumnEvaluator for evaluation instead of old expressions
 	public void evaluate() {
 		this.evaluateErrors.clear();
 		
@@ -782,153 +521,6 @@ public class Column {
 
 		this.setEvaluateTime(); // Store the time of evaluation
 	}
-
-/* OLD
-	public void evaluate_OLD() {
-		
-		if(this.getKind() == DcColumnKind.CALC) {
-			// Evaluate calc expression
-			if(this.calcFormula == null || this.calcFormula.trim().isEmpty() || this.calcEvaluator == null) { // Default
-				this.evaluateExprDefault();
-			}
-			else {
-				this.evaluateExpr(this.calcEvaluator, null);
-			}
-		}
-		else if(this.getKind() == DcColumnKind.LINK) {
-			// Link
-			this.evaluateLink();
-		}
-		else if(this.getKind() == DcColumnKind.ACCU) {
-			// Initialization
-			if(this.initFormula == null || this.initFormula.trim().isEmpty() || this.initEvaluator == null) { // Default
-				this.evaluateExprDefault();
-			}
-			else {
-				this.evaluateExpr(this.initEvaluator, null);
-			}
-			
-			// Accumulation
-			this.evaluateExpr(this.accuEvaluator, accuPathColumns);
-
-			// Finalization
-			if(this.calcFormula == null || this.calcFormula.trim().isEmpty() || this.finEvaluator == null) { // Default
-				; // No finalization if not specified
-			}
-			else {
-				this.evaluateExpr(this.finEvaluator, null);
-			}
-		}
-
-		this.data.markNewAsClean(); // Mark dirty as clean
-
-		this.setFormulaClean(); // Mark up-to-date if successful
-
-		this.setEvaluateTime(); // Store the time of evaluation
-	}
-	
-	private void evaluateExpr(UserDefinedExpression expr, List<Column> accuLinkPath) {
-		Table mainTable = accuLinkPath == null ? this.getInput() : accuLinkPath.get(0).getInput(); // Loop/scan table
-
-		// ACCU: Currently we do full re-evaluate by resetting the accu column outputs and then making full scan through all existing facts
-		// ACCU: The optimal approach is to apply negative accu function for removed elements and then positive accu function for added elements
-		Range mainRange = mainTable.getIdRange();
-
-		// Get all necessary parameters and prepare (resolve) the corresponding data (function) objects for reading values
-		List<List<Column>> paramPaths = this.resolveParameterPaths(expr.getParamPaths(), mainTable);
-		Object[] paramValues = new Object[paramPaths.size()]; // Will store values for all params
-		Object result; // Will be written to output for each input
-
-		for(long i=mainRange.start; i<mainRange.end; i++) {
-			// Find group [ACCU-specific]
-			Long g = accuLinkPath == null ? i : (Long) accuLinkPath.get(0).getData().getValue(accuLinkPath, i);
-
-			// Read all parameter values including this column output
-			int paramNo = 0;
-			for(List<Column> paramPath : paramPaths) {
-				if(paramPath.get(0) == this) {
-					paramValues[paramNo] = this.data.getValue(g); // [ACCU-specific] [FIN-specific]
-				}
-				else {
-					paramValues[paramNo] = paramPath.get(0).data.getValue(paramPath, i);
-				}
-				paramNo++;
-			}
-
-			// Evaluate
-			result = expr.evaluate(paramValues);
-
-			// Update output
-			this.data.setValue(g, result);
-		}
-	}
-	private void evaluateLink() {
-
-		Table typeTable = this.getOutput();
-
-		Table mainTable = this.getInput();
-		// Currently we make full scan by re-evaluating all existing input ids
-		Range mainRange = this.data.getIdRange();
-
-		// Each item in this lists is for one member expression 
-		// We use lists and not map because want to use common index (faster) for access and not key (slower) which is important for frequent accesses in a long loop.
-		List< List<List<Column>> > rhsParamPaths = new ArrayList< List<List<Column>> >();
-		List< Object[] > rhsParamValues = new ArrayList< Object[] >();
-		List< Object > rhsResults = new ArrayList< Object >();
-		Record outRecord = new Record(); // All output values for all expressions along with column names (is used by the search)
-
-		// Initialize items of these lists for each member expression
-		for(Pair<Column,UserDefinedExpression> mmbr : this.linkEvaluators) {
-			UserDefinedExpression eval = mmbr.getRight();
-			int paramCount = eval.getParamPaths().size();
-
-			rhsParamPaths.add( this.resolveParameterPaths(eval.getParamPaths(), mainTable) );
-			rhsParamValues.add( new Object[ paramCount ] );
-			rhsResults.add( null );
-		}
-
-		for(long i=mainRange.start; i<mainRange.end; i++) {
-			
-			outRecord.fields.clear();
-			
-			// Evaluate ALL child rhs expressions by producing an array of their results 
-			int mmbrNo = 0;
-			for(Pair<Column,UserDefinedExpression> mmbr : this.linkEvaluators) {
-
-				List<List<Column>> paramPaths = rhsParamPaths.get(mmbrNo);
-				Object[] paramValues = rhsParamValues.get(mmbrNo);
-				
-				// Read all parameter values (assuming that this column output is not used in link columns)
-				int paramNo = 0;
-				for(List<Column> paramPath : paramPaths) {
-					paramValues[paramNo] = paramPath.get(0).data.getValue(paramPath, i);
-					paramNo++;
-				}
-
-				// Evaluate this member expression
-				Object result = mmbr.getRight().evaluate(paramValues);
-				rhsResults.set(mmbrNo, result);
-				outRecord.set(mmbr.getLeft().getName(), result);
-				
-				mmbrNo++; // Iterate
-			}
-
-			// Find element in the type table which corresponds to these expression results (can be null if not found and not added)
-			Object out = typeTable.find(outRecord, true);
-			
-			// Update output
-			this.data.setValue(i, out);
-		}
-
-	}
-	private void evaluateExprDefault() {
-		Range mainRange = this.data.getIdRange(); // All dirty/new rows
-		Object defaultValue = this.getDefaultValue();
-		for(long i=mainRange.start; i<mainRange.end; i++) {
-			this.data.setValue(i, defaultValue);
-		}
-	}
-*/
 
 	//
 	// Descriptor (if column is computed via Java class and not formula)

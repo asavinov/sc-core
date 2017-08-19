@@ -70,7 +70,7 @@ public interface UserDefinedExpression {
 /**
  * 
  */
-class UdeFormula implements UserDefinedExpression {
+class UdeJava implements UserDefinedExpression {
 
 	public static String OUT_VARIABLE_NAME = "out";
 	
@@ -335,10 +335,10 @@ class UdeFormula implements UserDefinedExpression {
 		return this.isOutputParameter(qname.names.get(0));
 	}
 	private boolean isOutputParameter(String paramName) {
-		if(paramName.equalsIgnoreCase("["+UdeFormula.OUT_VARIABLE_NAME+"]")) {
+		if(paramName.equalsIgnoreCase("["+UdeJava.OUT_VARIABLE_NAME+"]")) {
 			return true;
 		}
-		else if(paramName.equalsIgnoreCase(UdeFormula.OUT_VARIABLE_NAME)) {
+		else if(paramName.equalsIgnoreCase(UdeJava.OUT_VARIABLE_NAME)) {
 			return true;
 		}
 		return false;
@@ -392,9 +392,11 @@ class UdeFormula implements UserDefinedExpression {
 		}
 		// Set<String> vars = this.primExprDependencies.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
 		
-		// Add the current output value as a special (reserved) variable
-		if(!vars.contains(OUT_VARIABLE_NAME)) vars.add(OUT_VARIABLE_NAME);
-		vals.put(OUT_VARIABLE_NAME, 0.0);
+		// Out variable (in principle, we can always add it to the expression)
+		if(this.outDependency != null) {
+			vars.add(this.outDependency.paramName);
+			vals.put(this.outDependency.paramName, 0.0);
+		}
 
 		//
 		// Create expression object with the transformed formula
@@ -440,9 +442,11 @@ class UdeFormula implements UserDefinedExpression {
 		}
 		// Set<String> vars = this.primExprDependencies.stream().map(x -> x.paramName).collect(Collectors.toCollection(HashSet::new));
 		
-		// Add the current output value as a special (reserved) variable
-		if(!vars.contains(OUT_VARIABLE_NAME)) vars.add(OUT_VARIABLE_NAME);
-		vals.put(OUT_VARIABLE_NAME, 0.0);
+		// Out variable (in principle, we can always add it to the expression)
+		if(this.outDependency != null) {
+			vars.add(this.outDependency.paramName);
+			vals.put(this.outDependency.paramName, 0.0);
+		}
 
 		//
 		// Create expression object with the transformed formula
@@ -474,18 +478,28 @@ class UdeFormula implements UserDefinedExpression {
 	// Replace all occurrences of column paths in the formula by variable names from the symbol table
 	private String transformFormula() {
 		StringBuffer buf = new StringBuffer(this.formula);
+
+		// Input parameters
 		for(int i = this.exprDependencies.size()-1; i >= 0; i--) {
 			ExprDependency dep = this.exprDependencies.get(i);
 			if(dep.start < 0 || dep.end < 0) continue; // Some dependencies are not from formula (e.g., group path)
-			dep.paramName = "__p__"+i;
+			dep.paramName = "__p__" + i;
 			buf.replace(dep.start, dep.end, dep.paramName);
 		}
+
+		// Current out parameter
+		ExprDependency dep = this.outDependency;
+		if(dep != null) {
+			dep.paramName = "__p__" + this.exprDependencies.size();
+			buf.replace(dep.start, dep.end, dep.paramName);
+		}
+
 		return buf.toString();
 	}
 
-	public UdeFormula() {
+	public UdeJava() {
 	}
-	public UdeFormula(String formula, Table table) {
+	public UdeJava(String formula, Table table) {
 		this.formula = formula;
 		this.table = table;
 		
