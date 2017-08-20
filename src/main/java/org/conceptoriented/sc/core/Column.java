@@ -27,6 +27,11 @@ import org.json.JSONObject;
 //  - Custom link evaluator, e.g., by searching the output or imposing complex predicate (filter)
 //  - Custom accu evaluator, e.g., using conditional update or selecting only certain facts
 
+// OPTIMIZATION:
+// - We do not need to store dependencies - they are anyway stored in Evaluator*. 
+//   So leave the same methods but read them from Evaluator* rather than from the dedicated field.
+//   Translation then for direct custom Evaluator* is not needed.
+
 // - constant UDE (easy to compute but not necessary)
 // - equal to column UDE (easier to compute but not necessary)
 // - How to deal with empty formulas and defaults in a principled manner?
@@ -118,6 +123,7 @@ public class Column {
 		if(this.calcFormula != null && this.calcFormula.equals(frml)) return; // Nothing to change
 		this.calcFormula = frml;
 		this.setFormulaChange(true);
+		this.isEvaluator = false;
 	}
 	
 	//
@@ -131,6 +137,7 @@ public class Column {
 		if(this.linkFormula != null && this.linkFormula.equals(frml)) return; // Nothing to change
 		this.linkFormula = frml;
 		this.setFormulaChange(true);
+		this.isEvaluator = false;
 	}
 
 	//
@@ -145,6 +152,7 @@ public class Column {
 		if(this.accuFormula != null && this.accuFormula.equals(accuFrml)) return; // Nothing to change
 		this.accuFormula = accuFrml;
 		this.setFormulaChange(true);
+		this.isEvaluator = false;
 	}
 	
 	protected String accuTable;
@@ -155,6 +163,7 @@ public class Column {
 		if(this.accuTable != null && this.accuTable.equals(accuTbl)) return; // Nothing to change
 		this.accuTable = accuTbl;
 		this.setFormulaChange(true);
+		this.isEvaluator = false;
 	}
 	
 	protected String accuPath; // It leads from accuTable to the input table of the column
@@ -165,6 +174,7 @@ public class Column {
 		if(this.accuPath != null && this.accuPath.equals(accuPath)) return; // Nothing to change
 		this.accuPath = accuPath;
 		this.setFormulaChange(true);
+		this.isEvaluator = false;
 	}
 	
 	// Initialize
@@ -176,6 +186,7 @@ public class Column {
 		if(this.initFormula != null && this.initFormula.equals(frml)) return; // Nothing to change
 		this.initFormula = frml;
 		this.setFormulaChange(true);
+		this.isEvaluator = false;
 	}
 	
 	// Finalize
@@ -187,6 +198,7 @@ public class Column {
 		if(this.finFormula != null && this.finFormula.equals(frml)) return; // Nothing to change
 		this.finFormula = frml;
 		this.setFormulaChange(true);
+		this.isEvaluator = false;
 	}
 
 	//
@@ -251,20 +263,6 @@ public class Column {
 		return ret;
 	}
 
-	private List<Column> getDependencies(UserDefinedExpression expr) { // Get parameter paths from expression and extract (unique) column from them
-		List<Column> columns = new ArrayList<Column>();
-		
-		List<List<Column>> paths = expr.getResolvedParamPaths();
-		for(List<Column> path : paths) {
-			for(Column col : path) {
-				if(!this.dependencies.contains(col) && !columns.contains(col)) {
-					columns.add(col);
-				}
-			}
-		}
-		return columns;
-	}
-	
 	public boolean isStartingColumn() { // True if this column has no dependencies (e.g., constant expression) or is free (user, non-derived) column
 		if(!this.isDerived()) {
 			return true;
@@ -341,15 +339,43 @@ public class Column {
 	// Translate
 	//
 	
+	boolean isEvaluator = false;
+
 	ColumnEvaluatorCalc evaluatorCalc;
+	public void setEvaluatorCalc(ColumnEvaluatorCalc eval) { this.evaluatorCalc = eval; this.isEvaluator = true; }
 	ColumnEvaluatorLink evaluatorLink;
+	public void setEvaluatorLink(ColumnEvaluatorLink eval) { this.evaluatorLink = eval; this.isEvaluator = true; }
 	ColumnEvaluatorAccu evaluatorAccu;
+	public void setEvaluatorAccu(ColumnEvaluatorAccu eval) { this.evaluatorAccu = eval; this.isEvaluator = true; }
 
 	// Generate Evaluator* from ColumnDefinition*
+	// TODO: What if Evaluator* is provided directly without Formulas/Definition?
+	// - setEvaluator means direct, setFormula means translation
 	public void translate() {
-		// Reset
+
 		this.translateErrors.clear();
 
+		if(this.isEvaluator) {
+			
+			this.resetDependencies();
+			List<Column> columns = new ArrayList<Column>();
+
+			if(this.kind == DcColumnKind.CALC) {
+				columns.addAll( this.evaluatorCalc.getDependencies() );
+			}
+			else if(this.kind == DcColumnKind.LINK) {
+				columns.addAll( this.evaluatorLink.getDependencies() );
+			}
+			else if(this.kind == DcColumnKind.ACCU) {
+				columns.addAll( this.evaluatorAccu.getDependencies() );
+			}
+			
+			this.setDependencies(columns);
+
+			return;
+		}
+		
+		// Reset
 		this.evaluatorCalc = null;
 		this.evaluatorLink = null;
 		this.evaluatorAccu = null;
@@ -371,9 +397,10 @@ public class Column {
 			if(this.hasTranslateErrors()) return; // Cannot proceed
 
 			// Evaluator
-			evaluatorCalc = new ColumnEvaluatorCalc(this, expr);
+			this.evaluatorCalc = new ColumnEvaluatorCalc(this, expr);
 
-			columns.addAll(this.getDependencies(expr));
+			// Dependencies
+			columns.addAll(this.evaluatorCalc.getDependencies());
 		}
 		else if(this.kind == DcColumnKind.LINK) {
 			// In future, this object will be stored in the column instead of multiple formulas
@@ -401,14 +428,13 @@ public class Column {
 				}
 
 				exprs.add(Pair.of(assignColumn, expr));
-
-				// Dependencies
-				columns.addAll(this.getDependencies(expr));
-				columns.add(assignColumn);
 			}
 
 			// Use this list of assignments to create an evaluator
-			evaluatorLink = new ColumnEvaluatorLink(this, exprs);
+			this.evaluatorLink = new ColumnEvaluatorLink(this, exprs);
+
+			// Dependencies
+			columns.addAll(this.evaluatorLink.getDependencies());
 		}
 		else if(this.kind == DcColumnKind.ACCU) {
 
@@ -422,7 +448,6 @@ public class Column {
 			}
 			this.translateErrors.addAll(initExpr.getTranslateErrors());
 			if(this.hasTranslateErrors()) return; // Cannot proceed
-			columns.addAll(this.getDependencies(initExpr));
 
 			// Accu table and link (group) path
 			Table accuTable = this.schema.getTable(this.getAccuTable());
@@ -436,13 +461,11 @@ public class Column {
 				this.translateErrors.add(new DcError(DcErrorCode.BIND_ERROR, "Binding error.", "Cannot find columns: " + this.accuPath));
 				return;
 			}
-			columns.addAll(accuPathColumns);
 
 			// Accumulation
 			UserDefinedExpression accuExpr = new UdeJava(this.accuFormula, accuTable);
 			this.translateErrors.addAll(accuExpr.getTranslateErrors());
 			if(this.hasTranslateErrors()) return; // Cannot proceed
-			columns.addAll(this.getDependencies(accuExpr));
 
 			// Finalization
 			UserDefinedExpression finExpr = null;
@@ -450,11 +473,13 @@ public class Column {
 				finExpr = new UdeJava(this.finFormula, inputTable);
 				this.translateErrors.addAll(finExpr.getTranslateErrors());
 				if(this.hasTranslateErrors()) return; // Cannot proceed
-				columns.addAll(this.getDependencies(finExpr));
 			}
 
 			// Use these objects to create an evaluator
-			evaluatorAccu = new ColumnEvaluatorAccu(this, initExpr, accuExpr, finExpr, accuPathColumns);
+			this.evaluatorAccu = new ColumnEvaluatorAccu(this, initExpr, accuExpr, finExpr, accuPathColumns);
+
+			// Dependencies
+			columns.addAll(this.evaluatorAccu.getDependencies());
 		}
 		else if(this.getKind() == DcColumnKind.CLASS) {
 			; // TODO: We do not have CLASS - we will use descriptors in place of formulas. CLASS is then an indicator of formula syntax convention. 

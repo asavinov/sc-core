@@ -35,7 +35,7 @@ import org.apache.commons.lang3.tuple.Pair;
 public interface ColumnEvaluator {
 	public void evaluate();
 	public List<DcError> getErrors();
-	// List<Column> getDependencies(); // TODO: Do we need this method for dependency graph?
+	public List<Column> getDependencies();
 }
 
 abstract class ColumnEvaluatorBase implements ColumnEvaluator { // Convenience class for implementing common functions
@@ -167,6 +167,20 @@ abstract class ColumnEvaluatorBase implements ColumnEvaluator { // Convenience c
 		}
 	}
 
+	protected List<Column> getExpressionDependencies(UserDefinedExpression expr) { // Get parameter paths from expression and extract (unique) columns from them
+		List<Column> columns = new ArrayList<Column>();
+		
+		List<List<Column>> paths = expr.getResolvedParamPaths();
+		for(List<Column> path : paths) {
+			for(Column col : path) {
+				if(!columns.contains(col) && col != this.column) {
+					columns.add(col);
+				}
+			}
+		}
+		return columns;
+	}
+
 	public ColumnEvaluatorBase(Column column) {
 		this.column = column;
 	}
@@ -191,6 +205,12 @@ class ColumnEvaluatorCalc extends ColumnEvaluatorBase {
 		}
 	}
 
+	@Override
+	public List<Column> getDependencies() {
+		List<Column> deps = super.getExpressionDependencies(this.ude);
+		return deps;
+	}
+
 	public ColumnEvaluatorCalc(Column column, UserDefinedExpression ude) {
 		super(column);
 		this.ude = ude;
@@ -202,16 +222,35 @@ class ColumnEvaluatorCalc extends ColumnEvaluatorBase {
  * It loops through the main table, reads inputs, passes them to the expression and then write the output to the main column.
  */
 class ColumnEvaluatorLink extends ColumnEvaluatorBase {
-	List<Pair<Column,UserDefinedExpression>> udes;
+	List<Pair<Column,UserDefinedExpression>> udes = new ArrayList<Pair<Column,UserDefinedExpression>>();
 
 	@Override
 	public void evaluate() {
 		super.evaluateLink(udes);
 	}
 
+	@Override
+	public List<Column> getDependencies() {
+		List<Column> ret = new ArrayList<Column>();
+		if(udes == null) return ret;
+		
+		for(Pair<Column,UserDefinedExpression> pair : udes) {
+			Column lhs = pair.getLeft();
+			if(!ret.contains(lhs)) ret.add(lhs);
+
+			List<Column> deps = super.getExpressionDependencies(pair.getRight());
+			for(Column col : deps) {
+				if(!ret.contains(col)) {
+					ret.add(col);
+				}
+			}
+		}
+		return ret;
+	}
+
 	public ColumnEvaluatorLink(Column column, List<Pair<Column,UserDefinedExpression>> udes) {
 		super(column);
-		this.udes = udes;
+		this.udes.addAll(udes);
 	}
 }
 
@@ -247,6 +286,33 @@ class ColumnEvaluatorAccu extends ColumnEvaluatorBase {
 		else {
 			super.evaluateExpr(this.finExpr, null);
 		}
+	}
+
+	@Override
+	public List<Column> getDependencies() {
+		List<Column> ret = new ArrayList<Column>();
+		
+		if(this.initExpr != null) {
+			for(Column col : super.getExpressionDependencies(this.initExpr)) {
+				if(!ret.contains(col)) ret.add(col);
+			}
+		}
+		if(this.accuExpr != null) {
+			for(Column col : super.getExpressionDependencies(this.accuExpr)) {
+				if(!ret.contains(col)) ret.add(col);
+			}
+		}
+		if(this.finExpr != null) {
+			for(Column col : super.getExpressionDependencies(this.finExpr)) {
+				if(!ret.contains(col)) ret.add(col);
+			}
+		}
+
+		for(Column col : this.accuPathColumns) {
+			if(!ret.contains(col)) ret.add(col);
+		}
+
+		return ret;
 	}
 
 	public ColumnEvaluatorAccu(Column column, UserDefinedExpression initExpr, UserDefinedExpression accuExpr, UserDefinedExpression finExpr, List<Column> accuPathColumns) {

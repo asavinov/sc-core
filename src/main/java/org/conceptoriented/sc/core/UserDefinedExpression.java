@@ -516,33 +516,3 @@ class ExprDependency {
 	List<Column> columns; // Resolved param paths
 }
 
-/**
- * For test purposes to check if it useful and can be used for situations.
- * Use cases:
- * - Reusable and binding of parameters: I want to implement the logic of computation which can be applied to different inputs, that is, one class can be instantiated and used for different input paths and tables.
- * This can be implemented by the necessary binding for each new instance.
- * - Issue: each instance is hard-bound to certain column paths so if the schema changes then this binding can break.
- *   - Solution: flexibility is reached by name-based dependencies (as opposed to reference-based) but then it is necessary to translation after each change of the schema.
- * - Issue: Path names have to be stored somewhere if we want to work at the level of names.
- *   - Solution: using formulas and descriptors.
- *
- */
-class UdeExample implements UserDefinedExpression {
-	
-	List<List<Column>> inputPaths = new ArrayList<List<Column>>();
-	public List<List<Column>> getInputPaths() {
-		return this.inputPaths;
-	}
-
-	@Override public void setParamPaths(List<String> paths) {}
-	@Override public List<QName> getParamPaths() { return null; }
-	@Override public List<List<Column>> getResolvedParamPaths() { return null; }
-	@Override public void translate(String formula) {}
-	@Override public List<DcError> getTranslateErrors() { return null; }
-	@Override public Object evaluate(Object[] params, Object out) { return (double)params[0] + 1; }
-	@Override public DcError getEvaluateError() { return null; }
-	
-	public UdeExample(List<List<Column>> inputPaths) { // Binding of parameter
-		this.inputPaths.addAll(inputPaths);
-	}
-}
