@@ -45,7 +45,7 @@ public interface UserDefinedExpression {
 	 * This information is used by the evaluation procedure to retrieve the values and pass them as parameters to this evaluator. This procedure gets this list, retrieve these path values given the current input, and passes these values to the evaluator.
 	 * Each instance has to be bound to certain paths by an external procedure. Typically, it is done by translating a formula.
 	 */
-	public void setParamPaths(List<String> paths);
+	public void setParamPaths(List<QName> paths);
 	public List<QName> getParamPaths();
 	public List<List<Column>> getResolvedParamPaths();
 	/**
@@ -96,8 +96,8 @@ class UdeJava implements UserDefinedExpression {
 	// EvaluatorExpr interface
 	//
 	@Override
-	public void setParamPaths(List<String> paths) {
-		; // TODO
+	public void setParamPaths(List<QName> paths) {
+		; // Not needed. Parameter paths are extracted from the formula itself
 	}
 	@Override
 	public List<QName> getParamPaths() {

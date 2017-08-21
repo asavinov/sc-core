@@ -115,6 +115,8 @@ public class Column {
 	// Calc formula
 	//
 	
+	public ColumnDefinitionKind formulaKind = ColumnDefinitionKind.EXP4J;
+
 	protected String calcFormula;
 	public String getCalcFormula() {
 		return this.calcFormula;
@@ -123,7 +125,6 @@ public class Column {
 		if(this.calcFormula != null && this.calcFormula.equals(frml)) return; // Nothing to change
 		this.calcFormula = frml;
 		this.setFormulaChange(true);
-		this.isEvaluator = false;
 	}
 	
 	//
@@ -137,7 +138,6 @@ public class Column {
 		if(this.linkFormula != null && this.linkFormula.equals(frml)) return; // Nothing to change
 		this.linkFormula = frml;
 		this.setFormulaChange(true);
-		this.isEvaluator = false;
 	}
 
 	//
@@ -152,7 +152,6 @@ public class Column {
 		if(this.accuFormula != null && this.accuFormula.equals(accuFrml)) return; // Nothing to change
 		this.accuFormula = accuFrml;
 		this.setFormulaChange(true);
-		this.isEvaluator = false;
 	}
 	
 	protected String accuTable;
@@ -163,7 +162,6 @@ public class Column {
 		if(this.accuTable != null && this.accuTable.equals(accuTbl)) return; // Nothing to change
 		this.accuTable = accuTbl;
 		this.setFormulaChange(true);
-		this.isEvaluator = false;
 	}
 	
 	protected String accuPath; // It leads from accuTable to the input table of the column
@@ -174,7 +172,6 @@ public class Column {
 		if(this.accuPath != null && this.accuPath.equals(accuPath)) return; // Nothing to change
 		this.accuPath = accuPath;
 		this.setFormulaChange(true);
-		this.isEvaluator = false;
 	}
 	
 	// Initialize
@@ -186,7 +183,6 @@ public class Column {
 		if(this.initFormula != null && this.initFormula.equals(frml)) return; // Nothing to change
 		this.initFormula = frml;
 		this.setFormulaChange(true);
-		this.isEvaluator = false;
 	}
 	
 	// Finalize
@@ -198,7 +194,6 @@ public class Column {
 		if(this.finFormula != null && this.finFormula.equals(frml)) return; // Nothing to change
 		this.finFormula = frml;
 		this.setFormulaChange(true);
-		this.isEvaluator = false;
 	}
 
 	//
@@ -339,14 +334,12 @@ public class Column {
 	// Translate
 	//
 	
-	boolean isEvaluator = false;
-
 	ColumnEvaluatorCalc evaluatorCalc;
-	public void setEvaluatorCalc(ColumnEvaluatorCalc eval) { this.evaluatorCalc = eval; this.isEvaluator = true; }
+	public void setEvaluatorCalc(ColumnEvaluatorCalc eval) { this.evaluatorCalc = eval; this.formulaKind = ColumnDefinitionKind.NONE; }
 	ColumnEvaluatorLink evaluatorLink;
-	public void setEvaluatorLink(ColumnEvaluatorLink eval) { this.evaluatorLink = eval; this.isEvaluator = true; }
+	public void setEvaluatorLink(ColumnEvaluatorLink eval) { this.evaluatorLink = eval; this.formulaKind = ColumnDefinitionKind.NONE; }
 	ColumnEvaluatorAccu evaluatorAccu;
-	public void setEvaluatorAccu(ColumnEvaluatorAccu eval) { this.evaluatorAccu = eval; this.isEvaluator = true; }
+	public void setEvaluatorAccu(ColumnEvaluatorAccu eval) { this.evaluatorAccu = eval; this.formulaKind = ColumnDefinitionKind.NONE; }
 
 	// Generate Evaluator* from ColumnDefinition*
 	// TODO: What if Evaluator* is provided directly without Formulas/Definition?
@@ -354,135 +347,40 @@ public class Column {
 	public void translate() {
 
 		this.translateErrors.clear();
-
-		if(this.isEvaluator) {
-			
-			this.resetDependencies();
-			List<Column> columns = new ArrayList<Column>();
-
-			if(this.kind == DcColumnKind.CALC) {
-				columns.addAll( this.evaluatorCalc.getDependencies() );
-			}
-			else if(this.kind == DcColumnKind.LINK) {
-				columns.addAll( this.evaluatorLink.getDependencies() );
-			}
-			else if(this.kind == DcColumnKind.ACCU) {
-				columns.addAll( this.evaluatorAccu.getDependencies() );
-			}
-			
-			this.setDependencies(columns);
-
-			return;
-		}
-		
-		// Reset
-		this.evaluatorCalc = null;
-		this.evaluatorLink = null;
-		this.evaluatorAccu = null;
-
 		this.resetDependencies();
+
 		List<Column> columns = new ArrayList<Column>();
 		
-		Table inputTable = this.getInput();
-		Table outputTable = this.getOutput();
-
 		// Translate depending on the formula kind
 		if(this.kind == DcColumnKind.CALC) {
-			// In future, this object will be stored in the column instead of multiple formulas
-			ColumnDefinitionCalc definitionCalc = new ColumnDefinitionCalc(this.calcFormula);
 
-			// Translate by preparing expressions and other objects
-			UserDefinedExpression expr = new UdeJava(definitionCalc.getFormula(), inputTable);
-			this.translateErrors.addAll(expr.getTranslateErrors());
-			if(this.hasTranslateErrors()) return; // Cannot proceed
-
-			// Evaluator
-			this.evaluatorCalc = new ColumnEvaluatorCalc(this, expr);
-
-			// Dependencies
-			columns.addAll(this.evaluatorCalc.getDependencies());
-		}
-		else if(this.kind == DcColumnKind.LINK) {
-			// In future, this object will be stored in the column instead of multiple formulas
-			ColumnDefinitionLink definitionLink = new ColumnDefinitionLink(this.linkFormula);
-			this.translateErrors.addAll(definitionLink.getErrors());
-			if(this.hasTranslateErrors()) return; // Cannot proceed
-
-			// Parse tuple and create a collection of assignments
-			Map<String,String> mmbrs = definitionLink.translateLinkFormulas();
-
-			// Create column-expression pairs for each assignment
-			List<Pair<Column,UserDefinedExpression>> exprs = new ArrayList<Pair<Column,UserDefinedExpression>>();
-			for(Entry<String,String> mmbr : mmbrs.entrySet()) { // For each tuple member (assignment) create an expression
-
-				// Right hand side
-				UdeJava expr = new UdeJava(mmbr.getValue(), inputTable);
-				this.translateErrors.addAll(expr.getTranslateErrors());
-				if(this.hasTranslateErrors()) return; // Cannot proceed
-
-				// Left hand side (column of the type table)
-				Column assignColumn = this.schema.getColumn(outputTable.getName(), mmbr.getKey());
-				if(assignColumn == null) { // Binding error
-					this.translateErrors.add(new DcError(DcErrorCode.BIND_ERROR, "Binding error.", "Cannot find column: " + assignColumn));
-					return;
-				}
-
-				exprs.add(Pair.of(assignColumn, expr));
+			if(this.formulaKind != ColumnDefinitionKind.NONE) {
+				ColumnDefinitionCalc definitionCalc = new ColumnDefinitionCalc(this.calcFormula, this.formulaKind); // TODO: In future, this object will be stored in the column instead of multiple formulas
+				this.evaluatorCalc = (ColumnEvaluatorCalc) definitionCalc.translate(this);
+				this.translateErrors.addAll(definitionCalc.getErrors());
 			}
 
-			// Use this list of assignments to create an evaluator
-			this.evaluatorLink = new ColumnEvaluatorLink(this, exprs);
+			columns.addAll(this.evaluatorCalc.getDependencies()); // Dependencies
+		}
+		else if(this.kind == DcColumnKind.LINK) {
 
-			// Dependencies
-			columns.addAll(this.evaluatorLink.getDependencies());
+			if(this.formulaKind != ColumnDefinitionKind.NONE) {
+				ColumnDefinitionLink definitionLink = new ColumnDefinitionLink(this.linkFormula, this.formulaKind); // TODO: In future, this object will be stored in the column instead of multiple formulas
+				this.evaluatorLink = (ColumnEvaluatorLink) definitionLink.translate(this);
+				this.translateErrors.addAll(definitionLink.getErrors());
+			}
+
+			columns.addAll(this.evaluatorLink.getDependencies()); // Dependencies
 		}
 		else if(this.kind == DcColumnKind.ACCU) {
 
-			// Initialization (always initialize - even for empty formula)
-			UserDefinedExpression initExpr = null;
-			if(this.finFormula == null || this.finFormula.isEmpty()) { // TODO: We need UDE for constants and for equality (equal to the specified column)
-				initExpr = new UdeJava(this.getDefaultValue().toString(), inputTable);
-			}
-			else {
-				initExpr = new UdeJava(this.finFormula, inputTable);
-			}
-			this.translateErrors.addAll(initExpr.getTranslateErrors());
-			if(this.hasTranslateErrors()) return; // Cannot proceed
-
-			// Accu table and link (group) path
-			Table accuTable = this.schema.getTable(this.getAccuTable());
-			if(accuTable == null) { // Binding error
-				this.translateErrors.add(new DcError(DcErrorCode.BIND_ERROR, "Binding error.", "Cannot find table: " + accuTable));
-				return;
-			}
-			QName accuLinkPath = QName.parse(this.accuPath);
-			List<Column> accuPathColumns = accuLinkPath.resolveColumns(accuTable);
-			if(accuPathColumns == null) { // Binding error
-				this.translateErrors.add(new DcError(DcErrorCode.BIND_ERROR, "Binding error.", "Cannot find columns: " + this.accuPath));
-				return;
+			if(this.formulaKind != ColumnDefinitionKind.NONE) {
+				ColumnDefinitionAccu definitionAccu = new ColumnDefinitionAccu(this.initFormula, this.accuFormula, this.finFormula, this.accuTable, this.accuPath, this.formulaKind);
+				this.evaluatorAccu = (ColumnEvaluatorAccu) definitionAccu.translate(this);
+				this.translateErrors.addAll(definitionAccu.getErrors());
 			}
 
-			// Accumulation
-			UserDefinedExpression accuExpr = new UdeJava(this.accuFormula, accuTable);
-			this.translateErrors.addAll(accuExpr.getTranslateErrors());
-			if(this.hasTranslateErrors()) return; // Cannot proceed
-
-			// Finalization
-			UserDefinedExpression finExpr = null;
-			if(this.finFormula != null && !this.finFormula.isEmpty()) {
-				finExpr = new UdeJava(this.finFormula, inputTable);
-				this.translateErrors.addAll(finExpr.getTranslateErrors());
-				if(this.hasTranslateErrors()) return; // Cannot proceed
-			}
-
-			// Use these objects to create an evaluator
-			this.evaluatorAccu = new ColumnEvaluatorAccu(this, initExpr, accuExpr, finExpr, accuPathColumns);
-
-			// Dependencies
-			columns.addAll(this.evaluatorAccu.getDependencies());
-		}
-		else if(this.getKind() == DcColumnKind.CLASS) {
-			; // TODO: We do not have CLASS - we will use descriptors in place of formulas. CLASS is then an indicator of formula syntax convention. 
+			columns.addAll(this.evaluatorAccu.getDependencies()); // Dependencies
 		}
 
 		this.setDependencies(columns);

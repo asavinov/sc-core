@@ -185,7 +185,7 @@ public class Tests {
     }
     class CustomCalcUde implements UserDefinedExpression {
     	
-    	@Override public void setParamPaths(List<String> paths) {}
+    	@Override public void setParamPaths(List<QName> paths) {}
     	@Override public List<QName> getParamPaths() { return null; }
 
     	List<List<Column>> inputPaths = new ArrayList<List<Column>>(); // The expression parameters are bound to these input column paths
@@ -423,7 +423,7 @@ public class Tests {
     }
     class CustomAccuUde implements UserDefinedExpression {
     	
-    	@Override public void setParamPaths(List<String> paths) {}
+    	@Override public void setParamPaths(List<QName> paths) {}
     	@Override public List<QName> getParamPaths() { return null; }
 
     	List<List<Column>> inputPaths = new ArrayList<List<Column>>(); // The expression parameters are bound to these input column paths
