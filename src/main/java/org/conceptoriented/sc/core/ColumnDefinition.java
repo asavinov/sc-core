@@ -63,6 +63,41 @@ abstract class ColumnDefinitionBase implements ColumnDefinition {
 
 		return params;
 	}
+	
+	protected UserDefinedExpression createInstance(String descriptor, ClassLoader classLoader) {
+
+		// Parse the descriptor by getting JavaClass name and list of parameters
+		String className = ColumnDefinitionCalc.getDescriptorClass(descriptor);
+		List<QName> params = ColumnDefinitionCalc.getDescriptorParameterPaths(descriptor);
+		if(className == null | params == null) {
+			this.errors.add(new DcError(DcErrorCode.PARSE_ERROR, "Parse error.", "Cannot find class name or parameters: " + descriptor));
+			return null;
+		}
+		
+		// Create instance of Ude class
+		Class clazz=null;
+		try {
+			clazz = classLoader.loadClass(className);
+	    } catch (ClassNotFoundException e) {
+			this.errors.add(new DcError(DcErrorCode.TRANSLATE_ERROR, "Translate error.", "Cannot load class: " + className));
+			return null;
+	    }
+		
+		// Create an instance of an expression class
+		UserDefinedExpression expr = null;
+	    try {
+	    	expr = (UserDefinedExpression) clazz.newInstance();
+		} catch (InstantiationException e) {
+			this.errors.add(new DcError(DcErrorCode.TRANSLATE_ERROR, "Translate error.", "Cannot instantiate class: " + className));
+		} catch (IllegalAccessException e) {
+			this.errors.add(new DcError(DcErrorCode.TRANSLATE_ERROR, "Translate error.", "Illegat access exception. " + e.getMessage()));
+		}
+
+		// Bind its parameters to the paths specified in the descriptor
+	    expr.setParamPaths(params);
+
+	    return expr;
+	}
 
 }
 
@@ -89,34 +124,15 @@ class ColumnDefinitionCalc extends ColumnDefinitionBase {
 			expr = new UdeJava(this.formula, inputTable);
 		}
 		else if(this.formulaKind == ColumnDefinitionKind.UDE) {
-			// Parse the descriptor by getting JavaClass name and list of parameters
-			String className = ColumnDefinitionCalc.getDescriptorClass(this.formula);
-			List<QName> params = ColumnDefinitionCalc.getDescriptorParameterPaths(this.formula);
-	    	// TODO: Create possible translation errors
-			
-			// Create instance of Ude class
-			ClassLoader classLoader = schema.getClassLoader();
-			Class clazz=null;
-			try {
-				clazz = classLoader.loadClass(className);
-		    } catch (ClassNotFoundException e) {
-		        e.printStackTrace(); // TODO: Create translation error
-		    }
-			
-			// Create an instance of an expression class
-		    try {
-		    	expr = (UserDefinedExpression) clazz.newInstance();
-			} catch (InstantiationException e) {
-				e.printStackTrace(); // TODO: Translation errors
-			} catch (IllegalAccessException e) {
-				e.printStackTrace(); // TODO: Translation errors
-			}
-			
-			// Bind its parameters to the paths specified in the descriptor
-		    expr.setParamPaths(params);
+			expr = super.createInstance(this.formula, schema.getClassLoader());
 		}
 		else {
 			; // TODO: Error not implemented
+		}
+		
+		if(expr == null) {
+			this.errors.add(new DcError(DcErrorCode.TRANSLATE_ERROR, "Translate error.", "Cannot create expression. " + this.formula));
+			return null;
 		}
 		
 		this.errors.addAll(expr.getTranslateErrors());
@@ -178,7 +194,10 @@ class ColumnDefinitionLink extends ColumnDefinitionBase {
 			}
 		}
 		else if(this.formulaKind == ColumnDefinitionKind.UDE) {
-			
+			// TODO: List of pairs: "[ { "column": "Col1", "descriptor": { "class": "com.class", "parameters": ["p1","p2"] }  }, {}, ...  ]"
+			// Here more useful would be equality descriptor, e.g., mapping { "MyCol1":"Path1", "MyCol2":"Path2" }
+			// Or as pairs: { "column":"Col1", "expression":"Path1" }, ...
+			// It is similar to having a formula but we use special class of Ude without numeric expressions and fast direct access to certain column or path
 		}
 
 		// Use this list of assignments to create an evaluator
@@ -284,8 +303,23 @@ class ColumnDefinitionAccu extends ColumnDefinitionBase {
 		Table inputTable = column.getInput();
 		Table outputTable = column.getOutput();
 
-		UserDefinedExpression initExpr = null;
+
 		List<Column> accuPathColumns = null;
+
+		// Accu table and link (group) path
+		Table accuTable = schema.getTable(this.accuTable);
+		if(accuTable == null) { // Binding error
+			this.errors.add(new DcError(DcErrorCode.BIND_ERROR, "Binding error.", "Cannot find table: " + accuTable));
+			return null;
+		}
+		QName accuLinkPath = QName.parse(this.accuPath);
+		accuPathColumns = accuLinkPath.resolveColumns(accuTable);
+		if(accuPathColumns == null) { // Binding error
+			this.errors.add(new DcError(DcErrorCode.BIND_ERROR, "Binding error.", "Cannot find columns: " + this.accuPath));
+			return null;
+		}
+
+		UserDefinedExpression initExpr = null;
 		UserDefinedExpression accuExpr = null;
 		UserDefinedExpression finExpr = null;
 
@@ -300,19 +334,6 @@ class ColumnDefinitionAccu extends ColumnDefinitionBase {
 			this.errors.addAll(initExpr.getTranslateErrors());
 			if(this.hasErrors()) return null; // Cannot proceed
 
-			// Accu table and link (group) path
-			Table accuTable = schema.getTable(this.accuTable);
-			if(accuTable == null) { // Binding error
-				this.errors.add(new DcError(DcErrorCode.BIND_ERROR, "Binding error.", "Cannot find table: " + accuTable));
-				return null;
-			}
-			QName accuLinkPath = QName.parse(this.accuPath);
-			accuPathColumns = accuLinkPath.resolveColumns(accuTable);
-			if(accuPathColumns == null) { // Binding error
-				this.errors.add(new DcError(DcErrorCode.BIND_ERROR, "Binding error.", "Cannot find columns: " + this.accuPath));
-				return null;
-			}
-
 			// Accumulation
 			accuExpr = new UdeJava(this.accuFormula, accuTable);
 			this.errors.addAll(accuExpr.getTranslateErrors());
@@ -326,8 +347,24 @@ class ColumnDefinitionAccu extends ColumnDefinitionBase {
 			}
 		}
 		else if(this.formulaKind == ColumnDefinitionKind.UDE) {
-			
+			initExpr = super.createInstance(this.initFormula, schema.getClassLoader());
+			accuExpr = super.createInstance(this.accuFormula, schema.getClassLoader());
+			finExpr = super.createInstance(this.finFormula, schema.getClassLoader());
 		}
+
+		if(initExpr == null || accuExpr  == null /* || finExpr == null */) { // TODO: finExpr can be null in the case of no formula. We need to fix this and distinguis between errors and having no formula.
+			String frml = "";
+			if(initExpr == null) frml = this.initFormula;
+			else if(accuExpr == null) frml = this.accuFormula;
+			else if(finExpr == null) frml = this.finFormula;
+			this.errors.add(new DcError(DcErrorCode.TRANSLATE_ERROR, "Translate error.", "Cannot create expression. " + frml));
+			return null;
+		}
+		
+		this.errors.addAll(initExpr.getTranslateErrors());
+		this.errors.addAll(accuExpr.getTranslateErrors());
+		// this.errors.addAll(finExpr.getTranslateErrors()); // TODO: Fix uncertainty with null expression in the case of no formula and in the case of errors
+		if(this.hasErrors()) return null; // Cannot proceed
 
 		// Use these objects to create an evaluator
 		ColumnEvaluatorAccu evaluatorAccu = new ColumnEvaluatorAccu(column, initExpr, accuExpr, finExpr, accuPathColumns);
