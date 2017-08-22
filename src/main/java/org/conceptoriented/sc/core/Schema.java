@@ -376,14 +376,10 @@ public class Schema {
 
 			col.setKind(kind);
 
-			col.setCalcFormula(calcFormula);
-
-			col.setLinkFormula(linkFormula);
-
-			col.setInitFormula(initFormula);
-			col.setAccuFormula(accuFormula);
-			col.setAccuTable(accuTable);
-			col.setAccuPath(accuPath);
+			// Always create a new definition object
+			col.setDefinitionCalc(new ColumnDefinitionCalc(calcFormula, col.formulaKind));
+			col.setDefinitionLink(new ColumnDefinitionLink(linkFormula, col.formulaKind));
+			col.setDefinitionAccu(new ColumnDefinitionAccu(initFormula, accuFormula, null, accuTable, accuPath, col.formulaKind));
 
 			col.setDescriptor(descr_string);
 			
@@ -461,14 +457,13 @@ public class Schema {
 
 		if(obj.has("kind")) column.setKind(kind);
 
-		if(obj.has("calcFormula")) column.setCalcFormula(calcFormula);
-
-		if(obj.has("linkFormula")) column.setLinkFormula(linkFormula);
-
-		if(obj.has("initFormula")) column.setInitFormula(initFormula);
-		if(obj.has("accuFormula")) column.setAccuFormula(accuFormula);
-		if(obj.has("accuTable")) column.setAccuTable(accuTable);
-		if(obj.has("accuPath")) column.setAccuPath(accuPath);
+		// Always create a new definition object
+		if(obj.has("calcFormula")) 
+			column.setDefinitionCalc(new ColumnDefinitionCalc(calcFormula, column.formulaKind));
+		if(obj.has("linkFormula")) 
+			column.setDefinitionLink(new ColumnDefinitionLink(linkFormula, column.formulaKind));
+		if(obj.has("initFormula") || obj.has("accuFormula") || obj.has("initTable") || obj.has("initPath")) 
+			column.setDefinitionAccu(new ColumnDefinitionAccu(initFormula, accuFormula, null, accuTable, accuPath, column.formulaKind));
 
 		if(obj.has("descriptor")) column.setDescriptor(descr_string);
 	}

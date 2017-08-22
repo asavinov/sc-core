@@ -112,38 +112,45 @@ public class Column {
 	}
 
 	//
-	// Calc formula
+	// Three formula types
 	//
 	
+	// It is used for all definition types (by default) but every definition has its own expression kind
 	public ColumnDefinitionKind formulaKind = ColumnDefinitionKind.EXP4J;
 
-	protected String calcFormula;
-	public String getCalcFormula() {
-		return this.calcFormula;
+	// Calc formula
+	protected ColumnDefinitionCalc definitionCalc;
+	public ColumnDefinitionCalc getDefinitionCalc() {
+		return this.definitionCalc;
 	}
-	public void setCalcFormula(String frml) {
-		if(this.calcFormula != null && this.calcFormula.equals(frml)) return; // Nothing to change
-		this.calcFormula = frml;
+	public void setDefinitionCalc(ColumnDefinitionCalc definition) {
+		this.definitionCalc = definition;
 		this.setFormulaChange(true);
 	}
-	
-	//
+
 	// Link formula
-	//
-	protected String linkFormula;
-	public String getLinkFormula() {
-		return this.linkFormula;
+	protected ColumnDefinitionLink definitionLink;
+	public ColumnDefinitionLink getDefinitionLink() {
+		return this.definitionLink;
 	}
-	public void setLinkFormula(String frml) {
-		if(this.linkFormula != null && this.linkFormula.equals(frml)) return; // Nothing to change
-		this.linkFormula = frml;
+	public void setDefinitionLink(ColumnDefinitionLink definition) {
+		this.definitionLink = definition;
 		this.setFormulaChange(true);
 	}
 
 	//
 	// Accumulation formula
 	//
+	protected ColumnDefinitionAccu definitionAccu;
+	public ColumnDefinitionAccu getDefinitionAccu() {
+		return this.definitionAccu;
+	}
+	public void setDefinitionAccu(ColumnDefinitionAccu definition) {
+		this.definitionAccu = definition;
+		this.setFormulaChange(true);
+	}
 	
+/*
 	protected String accuFormula; // It is applied to accuTable
 	public String getAccuFormula() {
 		return this.accuFormula;
@@ -195,7 +202,7 @@ public class Column {
 		this.finFormula = frml;
 		this.setFormulaChange(true);
 	}
-
+*/
 	//
 	// Formula dirty status (own or inherited)
 	//
@@ -353,33 +360,24 @@ public class Column {
 		
 		// Translate depending on the formula kind
 		if(this.kind == DcColumnKind.CALC) {
-
 			if(this.formulaKind != ColumnDefinitionKind.NONE) {
-				ColumnDefinitionCalc definitionCalc = new ColumnDefinitionCalc(this.calcFormula, this.formulaKind); // TODO: In future, this object will be stored in the column instead of multiple formulas
-				this.evaluatorCalc = (ColumnEvaluatorCalc) definitionCalc.translate(this);
+				this.evaluatorCalc = (ColumnEvaluatorCalc) this.definitionCalc.translate(this);
 				this.translateErrors.addAll(definitionCalc.getErrors());
 			}
-
 			columns.addAll(this.evaluatorCalc.getDependencies()); // Dependencies
 		}
 		else if(this.kind == DcColumnKind.LINK) {
-
 			if(this.formulaKind != ColumnDefinitionKind.NONE) {
-				ColumnDefinitionLink definitionLink = new ColumnDefinitionLink(this.linkFormula, this.formulaKind); // TODO: In future, this object will be stored in the column instead of multiple formulas
-				this.evaluatorLink = (ColumnEvaluatorLink) definitionLink.translate(this);
+				this.evaluatorLink = (ColumnEvaluatorLink) this.definitionLink.translate(this);
 				this.translateErrors.addAll(definitionLink.getErrors());
 			}
-
 			columns.addAll(this.evaluatorLink.getDependencies()); // Dependencies
 		}
 		else if(this.kind == DcColumnKind.ACCU) {
-
 			if(this.formulaKind != ColumnDefinitionKind.NONE) {
-				ColumnDefinitionAccu definitionAccu = new ColumnDefinitionAccu(this.initFormula, this.accuFormula, this.finFormula, this.accuTable, this.accuPath, this.formulaKind);
-				this.evaluatorAccu = (ColumnEvaluatorAccu) definitionAccu.translate(this);
+				this.evaluatorAccu = (ColumnEvaluatorAccu) this.definitionAccu.translate(this);
 				this.translateErrors.addAll(definitionAccu.getErrors());
 			}
-
 			columns.addAll(this.evaluatorAccu.getDependencies()); // Dependencies
 		}
 
@@ -604,14 +602,14 @@ public class Column {
 
 		String jkind = "`kind`:" + this.kind.getValue() + "";
 
-		String jcalc = "`calcFormula`: " + JSONObject.valueToString(this.getCalcFormula()) + "";
+		String jcalc = "`calcFormula`: " + JSONObject.valueToString(this.getDefinitionCalc().getFormula()) + "";
 
-		String jlink = "`linkFormula`: " + JSONObject.valueToString(this.getLinkFormula()) + "";
+		String jlink = "`linkFormula`: " + JSONObject.valueToString(this.getDefinitionCalc().getFormula()) + "";
 
-		String jinit = "`initFormula`: " + JSONObject.valueToString(this.getInitFormula()) + "";
-		String jaccu = "`accuFormula`: " + JSONObject.valueToString(this.getAccuFormula()) + "";
-		String jatbl = "`accuTable`: " + JSONObject.valueToString(this.getAccuTable()) + "";
-		String japath = "`accuPath`: " + JSONObject.valueToString(this.getAccuPath()) + "";
+		String jinit = "`initFormula`: " + JSONObject.valueToString(this.getDefinitionAccu().getInitFormula()) + "";
+		String jaccu = "`accuFormula`: " + JSONObject.valueToString(this.getDefinitionAccu().getAccuFormula()) + "";
+		String jatbl = "`accuTable`: " + JSONObject.valueToString(this.getDefinitionAccu().getAccuTable()) + "";
+		String japath = "`accuPath`: " + JSONObject.valueToString(this.getDefinitionAccu().getAccuPath()) + "";
 
 		//String jdescr = "`descriptor`: " + (this.getDescriptor() != null ? "`"+this.getDescriptor()+"`" : "null");
 		String jdescr = "`descriptor`: " + JSONObject.valueToString(this.getDescriptor()) + "";
@@ -647,6 +645,7 @@ public class Column {
 		
 		// Formula
 		this.kind = DcColumnKind.USER;
+		this.formulaKind = ColumnDefinitionKind.EXP4J; // By default
 
 		// Data
 		this.data = new ColumnData(this);

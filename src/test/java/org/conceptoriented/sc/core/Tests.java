@@ -126,7 +126,7 @@ public class Tests {
         Column columnA = schema.getColumn("T", "A");
         Column columnB = schema.getColumn("T", "B");
 
-        columnB.setCalcFormula("2 * [A] + 1");
+        columnB.setDefinitionCalc(new ColumnDefinitionCalc("2 * [A] + 1", ColumnDefinitionKind.EXP4J));
 
         columnB.translate();
         
@@ -231,7 +231,7 @@ public class Tests {
 
         Column c5 = schema.getColumn("T2", "C");
 
-    	c5.setLinkFormula(" { [A] = [A]; [B] = [B] } ");
+    	c5.setDefinitionLink(new ColumnDefinitionLink(" { [A] = [A]; [B] = [B] } ", ColumnDefinitionKind.EXP4J));
 
         c5.translate();
 
@@ -320,15 +320,12 @@ public class Tests {
 
         // Link (group) formula
         Column t2g = schema.getColumn("T2", "G");
-        t2g.setLinkFormula(" { [Id] = [Id] } ");
+        t2g.setDefinitionLink(new ColumnDefinitionLink(" { [Id] = [Id] } ", ColumnDefinitionKind.EXP4J));
         
         // Accu formula
         Column ta = schema.getColumn("T", "A");
-        ta.setInitFormula(""); // Init to default
-        ta.setAccuTable("T2");
-        ta.setAccuFormula(" [out] + 2.0 * [Id] ");
-        ta.setAccuPath("[G]");
-        
+        ta.setDefinitionAccu(new ColumnDefinitionAccu("", " [out] + 2.0 * [Id] ", null, "T2", "[G]", ColumnDefinitionKind.EXP4J));
+
         //
         // Translate and evaluate
         //
@@ -352,7 +349,7 @@ public class Tests {
 
         // Link (group) formula
         Column t2g = schema.getColumn("T2", "G");
-        t2g.setLinkFormula(" { [Id] = [Id] } ");
+        t2g.setDefinitionLink(new ColumnDefinitionLink(" { [Id] = [Id] } ", ColumnDefinitionKind.EXP4J));
         
         // Accu evaluator
         Column ta = schema.getColumn("T", "A");

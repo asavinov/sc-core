@@ -289,12 +289,27 @@ class ColumnDefinitionLink extends ColumnDefinitionBase {
  */
 class ColumnDefinitionAccu extends ColumnDefinitionBase {
 
-	String initFormula;
-	String accuFormula;
-	String finFormula;
+	private String initFormula;
+	public String getInitFormula() {
+		return this.initFormula;
+	}
+	private String accuFormula;
+	public String getAccuFormula() {
+		return this.accuFormula;
+	}
+	private String finFormula;
+	public String getFinFormula() {
+		return this.finFormula;
+	}
 	
-	String accuTable;
-	String accuPath;
+	private String accuTable;
+	public String getAccuTable() {
+		return this.accuTable;
+	}
+	private String accuPath;
+	public String getAccuPath() {
+		return this.accuPath;
+	}
 	
 	@Override
 	public ColumnEvaluator translate(Column column) {
