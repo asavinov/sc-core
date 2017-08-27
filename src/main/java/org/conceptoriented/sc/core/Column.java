@@ -444,145 +444,6 @@ public class Column {
 	}
 
 	//
-	// Descriptor (if column is computed via Java class and not formula)
-	//
-
-	private String descriptor;
-	public String getDescriptor() {
-		return descriptor;
-	}
-	public void setDescriptor(String descriptor) {
-		this.descriptor = descriptor;
-		
-/*
-		if(this.calcFormula != null && !this.calcFormula.isEmpty()) {
-			return; // If there is formula then descriptor is not used for dependencies
-		}
-
-		//
-		// Resolve all dependencies
-		//
-		List<Column> columns = new ArrayList<Column>();
-
-		if(descriptor != null && !descriptor.isEmpty()) {
-
-			columns = getEvaluatorDependencies();
-
-			this.setDependencies(columns); // Update dependency graph
-			return;
-		}
-		else {
-			this.resetDependencies(); // Non-evaluatable column for any reason
-		}
-*/
-		// Here we might want to check the validity of the dependency graph (cycles, at least for this column)
-	}
-/*
-	public List<Column> getEvaluatorDependencies() {
-		List<Column> columns = new ArrayList<Column>();
-
-		List<QName> deps = new ArrayList<QName>();
-		if(descriptor == null || descriptor.isEmpty()) return columns;
-
-		JSONObject jdescr = new JSONObject(descriptor);
-		if(jdescr == null || !jdescr.has("dependencies")) return columns;
-
-		JSONArray jdeps = jdescr.getJSONArray("dependencies");
-
-		QNameBuilder qnb = new QNameBuilder();
-		for (int i = 0 ; i < jdeps.length(); i++) {
-			QName qn = qnb.buildQName(jdeps.getString(i));
-			deps.add(qn);
-		}
-
-		for(QName dep : deps) {
-			Column col = dep.resolveColumn(schema, this.getInput());
-			columns.add(col);
-		}
-		
-		return columns;
-	}
-	public String getEvaluatorClass() {
-		if(descriptor == null) return null;
-		JSONObject jdescr = new JSONObject(descriptor);
-		return jdescr.getString("class");
-	}
-
-	protected ScEvaluator evaluator;
-	public ScEvaluator setEvaluator() {
-		evaluator = null;
-		
-		String evaluatorClass = getEvaluatorClass(); // Read from the descriptor
-		if(evaluatorClass == null) return null;
-		
-		//
-		// Dynamically load the class by using the schema class loader
-		//
-
-		ClassLoader classLoader = schema.getClassLoader();
-		
-		Class clazz=null;
-		try {
-			clazz = classLoader.loadClass(evaluatorClass);
-	    } catch (ClassNotFoundException e) {
-	        e.printStackTrace();
-	    }
-		
-		//
-		// Create an instance of an evaluator
-		//
-	    try {
-			evaluator = (ScEvaluator) clazz.newInstance();
-		} catch (InstantiationException e) {
-			e.printStackTrace();
-		} catch (IllegalAccessException e) {
-			e.printStackTrace();
-		}
-		
-		return evaluator;
-	}
-
-	protected void begingEvaluate() {
-		//
-		// Prepare evaluator instance
-		//
-
-		if(evaluator == null) {
-			setEvaluator();
-		}
-		
-		if(evaluator == null) return;
-		
-		// Pass direct references to the required columns so that the evaluator can use them during evaluation. The first element has to be this (output) column
-		evaluator.setColumn(this);
-		evaluator.setColumns(this.getDependencies());
-		
-		evaluator.beginEvaluate();
-	}
-
-	protected void endEvaluate() {
-		evaluator.endEvaluate();
-	}
-
-	public void evaluateDescriptor() {
-		
-		if(descriptor == null || descriptor.isEmpty()) return; 
-			
-		this.begingEvaluate(); // Prepare (evaluator, computational resources etc.)
-		
-		if(evaluator == null) return;
-
-		// Evaluate for all rows in the (dirty, new) range
-		Range range = this.getData().getNewRange();
-		for(long i=range.start; i<range.end; i++) {
-			evaluator.evaluate(i);
-		}
-
-		this.endEvaluate(); // De-initialize (evaluator, computational resources etc.)
-	}
-*/
-
-	//
 	// Serialization and construction
 	//
 
@@ -602,19 +463,16 @@ public class Column {
 
 		String jkind = "`kind`:" + this.kind.getValue() + "";
 
-		String jcalc = "`calcFormula`: " + JSONObject.valueToString(this.getDefinitionCalc().getFormula()) + "";
+		String jcalc = "`calcFormula`: " + JSONObject.valueToString(this.getDefinitionCalc() == null ? "" : this.getDefinitionCalc().getFormula()) + "";
 
-		String jlink = "`linkFormula`: " + JSONObject.valueToString(this.getDefinitionCalc().getFormula()) + "";
+		String jlink = "`linkFormula`: " + JSONObject.valueToString(this.getDefinitionLink() == null ? "" : this.getDefinitionLink().getFormula()) + "";
 
-		String jinit = "`initFormula`: " + JSONObject.valueToString(this.getDefinitionAccu().getInitFormula()) + "";
-		String jaccu = "`accuFormula`: " + JSONObject.valueToString(this.getDefinitionAccu().getAccuFormula()) + "";
-		String jatbl = "`accuTable`: " + JSONObject.valueToString(this.getDefinitionAccu().getAccuTable()) + "";
-		String japath = "`accuPath`: " + JSONObject.valueToString(this.getDefinitionAccu().getAccuPath()) + "";
+		String jinit = "`initFormula`: " + JSONObject.valueToString(this.getDefinitionAccu() == null ? "" : this.getDefinitionAccu().getInitFormula()) + "";
+		String jaccu = "`accuFormula`: " + JSONObject.valueToString(this.getDefinitionAccu() == null ? "" : this.getDefinitionAccu().getAccuFormula()) + "";
+		String jatbl = "`accuTable`: " + JSONObject.valueToString(this.getDefinitionAccu() == null ? "" : this.getDefinitionAccu().getAccuTable()) + "";
+		String japath = "`accuPath`: " + JSONObject.valueToString(this.getDefinitionAccu() == null ? "" : this.getDefinitionAccu().getAccuPath()) + "";
 
-		//String jdescr = "`descriptor`: " + (this.getDescriptor() != null ? "`"+this.getDescriptor()+"`" : "null");
-		String jdescr = "`descriptor`: " + JSONObject.valueToString(this.getDescriptor()) + "";
-
-		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jdirty + ", " + jstatus + ", " + jkind + ", " + jcalc + ", " + jlink + ", " + jinit + ", " + jaccu + ", " + jatbl + ", " + japath + ", " + jdescr;
+		String json = jid + ", " + jname + ", " + jin + ", " + jout + ", " + jdirty + ", " + jstatus + ", " + jkind + ", " + jcalc + ", " + jlink + ", " + jinit + ", " + jaccu + ", " + jatbl + ", " + japath;
 
 		return ("{" + json + "}").replace('`', '"');
 	}

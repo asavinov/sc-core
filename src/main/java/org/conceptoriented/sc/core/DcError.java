@@ -22,7 +22,7 @@ public class DcError extends Exception {
 		switch(code) {
 
 			case NOT_FOUND_IDENTITY:
-				message = "Identity not found. Session expired.";
+				message = "Identity not found. Session expired. Enable cookies. Reload page.";
 				break;
 			case GET_ELEMENT:
 				message = "Error getting an element.";

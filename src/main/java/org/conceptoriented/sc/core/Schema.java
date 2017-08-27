@@ -348,18 +348,6 @@ public class Schema {
 		String accuTable = obj.has("accuTable") && !obj.isNull("accuTable") ? obj.getString("accuTable") : "";
 		String accuPath = obj.has("accuPath") && !obj.isNull("accuPath") ? obj.getString("accuPath") : "";
 
-		// Descriptor is either JSON object or JSON string with an object but we want to store a string
-		String descr_string = "";
-		if(obj.has("descriptor")) {
-			Object jdescr = !obj.isNull("descriptor") ? obj.get("descriptor") : "";
-			if(jdescr instanceof String) {
-				descr_string = (String)jdescr;
-			}
-			else if(jdescr instanceof JSONObject) {
-				descr_string = ((JSONObject) jdescr).toString();
-			}
-		}
-
 		//
 		// Check validity
 		//
@@ -381,8 +369,6 @@ public class Schema {
 			col.setDefinitionLink(new ColumnDefinitionLink(linkFormula, col.formulaKind));
 			col.setDefinitionAccu(new ColumnDefinitionAccu(initFormula, accuFormula, null, accuTable, accuPath, col.formulaKind));
 
-			col.setDescriptor(descr_string);
-			
 			if(!col.isDerived()) { // Columns without formula (non-evalatable) are clean
 				col.setFormulaChange(false);
 			}
@@ -464,8 +450,6 @@ public class Schema {
 			column.setDefinitionLink(new ColumnDefinitionLink(linkFormula, column.formulaKind));
 		if(obj.has("initFormula") || obj.has("accuFormula") || obj.has("initTable") || obj.has("initPath")) 
 			column.setDefinitionAccu(new ColumnDefinitionAccu(initFormula, accuFormula, null, accuTable, accuPath, column.formulaKind));
-
-		if(obj.has("descriptor")) column.setDescriptor(descr_string);
 	}
 
 	public void deleteColumn(String id) {

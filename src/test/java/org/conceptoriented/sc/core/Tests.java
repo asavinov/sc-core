@@ -53,8 +53,8 @@ public class Tests {
         // It is expected to write/update its own value
         // If necessary, it can update its type/output by pushing records to its type/output table and using the returned row id for writing into itself
         Column columnB = schema.createColumn("T", "B", "Double");
-        String descr = "{ `class`:`org.conceptoriented.sc.core.EvaluatorB`, `dependencies`:[`A`] }";
-        columnB.setDescriptor(descr.replace('`', '"'));
+        //String descr = "{ `class`:`org.conceptoriented.sc.core.EvaluatorB`, `dependencies`:[`A`] }";
+        //columnB.setDescriptor(descr.replace('`', '"'));
 
         // Add one or more records to the table
         Record record = new Record();
@@ -527,7 +527,7 @@ public class Tests {
         Column columnA = schema.createColumn("T", "A", "Double");
 
         Column columnB = schema.createColumn("T", "B", "Double");
-        columnB.setDescriptor("{ \"class\":\"org.conceptoriented.sc.core.EvaluatorB\" }");
+        //columnB.setDescriptor("{ \"class\":\"org.conceptoriented.sc.core.EvaluatorB\" }");
     }
 
 }
