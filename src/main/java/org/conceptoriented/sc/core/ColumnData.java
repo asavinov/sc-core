@@ -64,7 +64,7 @@ public class ColumnData {
 		this.isChanged = true; // Mark column as dirty
 	}
 	// Convenience method. The first element in the path must be this column. 
-	protected Object getValue(List<Column> columns, long id) {
+	public Object getValue(List<Column> columns, long id) {
 		Object out = id;
 		for(Column col : columns) {
 			out = col.getData().getValue((long)out);

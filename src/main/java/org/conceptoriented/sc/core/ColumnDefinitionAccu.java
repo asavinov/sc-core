@@ -53,17 +53,17 @@ public class ColumnDefinitionAccu extends ColumnDefinitionBase {
 			return null;
 		}
 
-		UserDefinedExpression initExpr = null;
-		UserDefinedExpression accuExpr = null;
-		UserDefinedExpression finExpr = null;
+		UDE initExpr = null;
+		UDE accuExpr = null;
+		UDE finExpr = null;
 
-		if(this.formulaKind == ColumnDefinitionKind.EXP4J || this.formulaKind == ColumnDefinitionKind.EVALEX) {
+		if(this.formulaKind == ExpressionKind.EXP4J || this.formulaKind == ExpressionKind.EVALEX) {
 			// Initialization (always initialize - even for empty formula)
-			if(this.finFormula == null || this.finFormula.isEmpty()) { // TODO: We need UDE for constants and for equality (equal to the specified column)
+			if(this.initFormula == null || this.initFormula.isEmpty()) { // TODO: We need UDE for constants and for equality (equal to the specified column)
 				initExpr = new UdeJava(column.getDefaultValue().toString(), inputTable);
 			}
 			else {
-				initExpr = new UdeJava(this.finFormula, inputTable);
+				initExpr = new UdeJava(this.initFormula, inputTable);
 			}
 			this.errors.addAll(initExpr.getTranslateErrors());
 			if(this.hasErrors()) return null; // Cannot proceed
@@ -80,7 +80,7 @@ public class ColumnDefinitionAccu extends ColumnDefinitionBase {
 				if(this.hasErrors()) return null; // Cannot proceed
 			}
 		}
-		else if(this.formulaKind == ColumnDefinitionKind.UDE) {
+		else if(this.formulaKind == ExpressionKind.UDE) {
 			initExpr = super.createInstance(this.initFormula, schema.getClassLoader());
 			accuExpr = super.createInstance(this.accuFormula, schema.getClassLoader());
 			finExpr = super.createInstance(this.finFormula, schema.getClassLoader());
@@ -106,7 +106,7 @@ public class ColumnDefinitionAccu extends ColumnDefinitionBase {
 		return evaluatorAccu;
 	}
 
-	public ColumnDefinitionAccu(String initFormula, String accuFormula, String finFormula, String accuTable, String accuPath, ColumnDefinitionKind formulaKind) {
+	public ColumnDefinitionAccu(String initFormula, String accuFormula, String finFormula, String accuTable, String accuPath, ExpressionKind formulaKind) {
 		this.initFormula = initFormula;
 		this.accuFormula = accuFormula;
 		this.finFormula = finFormula;

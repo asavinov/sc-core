@@ -1,6 +1,6 @@
 package org.conceptoriented.sc.core;
 
-public enum ColumnDefinitionKind {
+public enum ExpressionKind {
 	NONE(0), // No formula. For example, use directly evaluator object 
 
 	AUTO(10), // Auto. Formula kind has to be determined automatically using other parameters. 
@@ -19,16 +19,16 @@ public enum ColumnDefinitionKind {
 		return value;
 	}
 
-	public static ColumnDefinitionKind fromInt(int value) {
-	    for (ColumnDefinitionKind kind : ColumnDefinitionKind.values()) {
+	public static ExpressionKind fromInt(int value) {
+	    for (ExpressionKind kind : ExpressionKind.values()) {
 	        if (kind.getValue() == value) {
 	            return kind;
 	        }
 	    }
-	    return ColumnDefinitionKind.AUTO;
+	    return ExpressionKind.AUTO;
 	 }
 
-	private ColumnDefinitionKind(int value) {
+	private ExpressionKind(int value) {
 		this.value = value;
 	}
 }

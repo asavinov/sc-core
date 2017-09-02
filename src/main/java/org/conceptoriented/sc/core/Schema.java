@@ -1,29 +1,19 @@
 package org.conceptoriented.sc.core;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.Reader;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.net.URLConnection;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVRecord;
-import org.apache.commons.lang3.StringUtils;
 import org.json.JSONObject;
 
 import com.google.common.io.Files;
@@ -67,6 +57,7 @@ public class Schema {
 	}
 	
 	public boolean autoEvaluate() {
+
 		if(!this.autoevaluationNeeded()) {
 			return false; // No auto-evaluation needed
 		}
@@ -227,7 +218,7 @@ public class Schema {
 		// Find table
 		
 		String id = obj.getString("id");
-		Table tab = getTableById(id);
+		Table tab = this.getTableById(id);
 		if(tab == null) {
 			throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating table. ", "Table not found. ");
 		}
@@ -237,7 +228,7 @@ public class Schema {
 		//
 		if(obj.has("name")) {
 			String name = obj.getString("name");
-			Table t = getTable(name);
+			Table t = this.getTable(name);
 			if(t != null && t != tab) {
 				throw new DcError(DcErrorCode.UPATE_ELEMENT, "Error updating table. ", "Name already exists. ");
 			}
@@ -365,9 +356,9 @@ public class Schema {
 			col.setKind(kind);
 
 			// Always create a new definition object
-			col.setDefinitionCalc(new ColumnDefinitionCalc(calcFormula, col.formulaKind));
-			col.setDefinitionLink(new ColumnDefinitionLink(linkFormula, col.formulaKind));
-			col.setDefinitionAccu(new ColumnDefinitionAccu(initFormula, accuFormula, null, accuTable, accuPath, col.formulaKind));
+			col.setDefinitionCalc(new ColumnDefinitionCalc(calcFormula, col.expressionKind));
+			col.setDefinitionLink(new ColumnDefinitionLink(linkFormula, col.expressionKind));
+			col.setDefinitionAccu(new ColumnDefinitionAccu(initFormula, accuFormula, null, accuTable, accuPath, col.expressionKind));
 
 			if(!col.isDerived()) { // Columns without formula (non-evalatable) are clean
 				col.setFormulaChange(false);
@@ -386,7 +377,7 @@ public class Schema {
 		// Extract all necessary parameters
 		
 		String id = obj.getString("id");
-		Column column = getColumnById(id);
+		Column column = this.getColumnById(id);
 
 		JSONObject input_table = obj.getJSONObject("input");
 		String input_id = input_table.getString("id");
@@ -445,11 +436,11 @@ public class Schema {
 
 		// Always create a new definition object
 		if(obj.has("calcFormula")) 
-			column.setDefinitionCalc(new ColumnDefinitionCalc(calcFormula, column.formulaKind));
+			column.setDefinitionCalc(new ColumnDefinitionCalc(calcFormula, column.expressionKind));
 		if(obj.has("linkFormula")) 
-			column.setDefinitionLink(new ColumnDefinitionLink(linkFormula, column.formulaKind));
+			column.setDefinitionLink(new ColumnDefinitionLink(linkFormula, column.expressionKind));
 		if(obj.has("initFormula") || obj.has("accuFormula") || obj.has("initTable") || obj.has("initPath")) 
-			column.setDefinitionAccu(new ColumnDefinitionAccu(initFormula, accuFormula, null, accuTable, accuPath, column.formulaKind));
+			column.setDefinitionAccu(new ColumnDefinitionAccu(initFormula, accuFormula, null, accuTable, accuPath, column.expressionKind));
 	}
 
 	public void deleteColumn(String id) {
@@ -483,12 +474,68 @@ public class Schema {
 	}
 
 	//
-	// Dependency graph
+	// Translation (parse and bind formulas, prepare for evaluation)
 	//
 	
-	protected void resetDependencies() { // Reset. Normally before generating new dependency graph
-		this.columns.forEach(x -> x.resetDependencies());
+	/**
+	 * Parse, bind and build all column formulas in the schema. 
+	 * Generate dependencies.
+	 */
+	public void translate() {
+		// Translate individual columns
+		for(Column col : this.columns) {
+			if(!col.isDerived()) continue;
+			col.translate();
+		}
 	}
+
+	//
+	// Evaluate (re-compute dirty, selected or all function outputs)
+	//
+	
+	Instant evaluateTime = Instant.now(); // Last time the evaluation has been performed (successfully finished)
+	public Instant getEvaluateTime() {
+		return this.evaluateTime;
+	}
+	public void setEvaluateTime() {
+		this.evaluateTime = Instant.now();
+	}
+	public Duration durationSinceLastEvaluate() {
+		return Duration.between(this.evaluateTime, Instant.now());
+	}
+	
+	/**
+	 * Evaluate all columns of the schema which can be evaluated and need evaluation (dirty output).
+	 * 
+	 * The order of column evaluation is determined by the dependency graph.
+	 * Can evaluate depends on the error status: translate errors, evaluate errors, self-dependence errors, and these errors in dependencies.
+	 * Need evaluate depends on formula changes, data output changes, set changes, and these changes in dependencies.
+	 * 
+	 * Finally, the status of each evaluated column is cleaned (made up-to-date). 
+	 */
+	public void evaluate() {
+		
+		List<Column> done = new ArrayList<Column>();
+		for(List<Column> cols = this.getStartingColumns(); cols.size() > 0; cols = this.getNextColumnsEvaluatable(done)) { // Loop on expansion layers of dependencies forward
+			for(Column col : cols) {
+				if(!col.isDerived()) continue;
+				// TODO: Detect also evaluate errors that could have happened before in this same evaluate loop and prevent this column from evaluation
+				// Evaluate errors have to be also taken into account when generating next layer of columns
+				DcError de = col.getTranslateError();
+				if(de == null || de.code == DcErrorCode.NONE) {
+					col.evaluate();
+				}
+			}
+			done.addAll(cols);
+		}
+
+		this.setEvaluateTime(); // Store the time of evaluation
+	}
+	
+	//
+	// Dependency graph (needed to determine the order of column evaluations, generated by translation)
+	//
+	
 	protected List<Column> getStartingColumns() { // Return all columns which do not depend on other columns (starting nodes in the dependency graph)
 		List<Column> res = this.columns.stream().filter(x -> x.isStartingColumn()).collect(Collectors.<Column>toList());
 		return res;
@@ -536,174 +583,6 @@ public class Schema {
 		}
 		
 		return ret;
-	}
-
-	//
-	// Translation (parse and bind formulas, prepare for evaluation)
-	//
-	
-	/**
-	 * Parse, bind and build all column formulas in the schema. 
-	 * Generate dependencies.
-	 */
-	public void translate() {
-		// TODO:
-
-		// UI shows two statuses and we need two mechanisms:
-
-		// - canEvaluate - translation errors of this (error, cycle) or previous (warning) columns
-		//   - how to propagate canEvaluate/TranslateError/EvalError status?
-		//     - translate or evaluate errors? Probably both are important - if there eval error then we cannot eval next columns precisely as translate errors. the difference is that translate errors are static while eval errors appear during the eval process.
-		//   - we need to store/serialize it in the column properties for visualization purposes - currently status field in json
-		//     - so we can introduce an error property of each column - canEvaluate - is this own error or if absent, previous formula error.
-		//     - 
-
-		// - needEvaluate/isUptodate - dirty status of this (formula changed) or inherited (previous formulas changed)
-		//   - how to propagate need-eval (dirty/up-to-date) status? 
-		//     - Formula change vs data change? Formula -> this and next. Data change (free/starting columns) -> only next change.
-		//  - we need to serialize/store it for visualization purposes - current dirty field in json
-		//    - so we can introduce a boolean property of each column - needEvaluate/isUptodate/isDirty - it is computed using dependency graph (which has to be up-to-date, that is, normally after translation). Yes, if this formula changed or (inherited) previous formula changed.
-
-		// Problems:
-		// - finding/storing/getting inherited errors/status:
-		//   - inherited formula dirty/change
-		//   - inherited data dirty/change
-		//   - inherited translation errors
-		//   - inherited evaluation errors
-		//   - self-dependence - it is viewed as formula error, it cannot be evaluated and hence all next column inherit this status
-		
-		// Final goal:
-		// - We need to define several examples with auto-evaluation (also manual) evaluation and event feeds from different sources like kafka.
-		//   We want to publish these examples in open source by comparing them with kafka and other stream processing engines.
-		//   Scenario 1: using rest api to feed events
-		//   Scenario 2: subscribing to kafka topic and auto-evaluate
-		//   Scenario 3: subscribing to kafka topic and writing the result to another kafka topic.
-		//   Examples: word count, moving average/max/min (we need some domain specific interpretation like average prices for the last 24 hours),
-		//   Scenario 4: Batch processing by loading from csv, evaluation, and writing the result back to csv.
-
-		
-		//
-		// Translate individual columns and build dependency graph
-		//
-
-		this.resetDependencies(); // Reset
-		for(Column col : this.columns) {
-			if(!col.isDerived()) continue;
-			col.translate();
-		}
-		
-	}
-
-	//
-	// Evaluate (re-compute dirty, selected or all function outputs)
-	//
-	
-	Instant evaluateTime = Instant.now(); // Last time the evaluation has been performed (successfully finished)
-	public Instant getEvaluateTime() {
-		return this.evaluateTime;
-	}
-	public void setEvaluateTime() {
-		this.evaluateTime = Instant.now();
-	}
-	public Duration durationSinceLastEvaluate() {
-		return Duration.between(this.evaluateTime, Instant.now());
-	}
-	
-	/**
-	 * Evaluate all columns of the schema which can be evaluated and need evaluation (dirty output).
-	 * 
-	 * The order of column evaluation is determined by the dependency graph.
-	 * Can evaluate depends on the error status: translate errors, evaluate errors, self-dependence errors, and these errors in dependencies.
-	 * Need evaluate depends on formula changes, data output changes, set changes, and these changes in dependencies.
-	 * 
-	 * Finally, the status of each evaluated column is cleaned (made up-to-date). 
-	 */
-	public void evaluate() {
-		
-		List<Column> done = new ArrayList<Column>();
-		for(List<Column> cols = this.getStartingColumns(); cols.size() > 0; cols = this.getNextColumnsEvaluatable(done)) { // Loop on expansion layers of dependencies forward
-			for(Column col : cols) {
-				if(!col.isDerived()) continue;
-				// TODO: Detect also evaluate errors that could have happened before in this same evaluate loop and prevent this column from evaluation
-				// Evaluate errors have to be also taken into account when generating next layer of columns
-				DcError de = col.getTranslateError();
-				if(de == null || de.code == DcErrorCode.NONE) {
-					col.evaluate();
-				}
-			}
-			done.addAll(cols);
-		}
-
-		this.setEvaluateTime(); // Store the time of evaluation
-	}
-	
-	/**
-	 * Empty (reset de-populate) and populate all tables with elements independent of their dirty status.
-	 * The result of population is stored in the state property of each individual table.
-	 * 
-	 *  Population means adding elements with only their key attributes. Population is the only way add or remove elements of a table (evaluation changes only function outputs). 
-	 *  Optionally, non-key attributes can be also generated. We could assume that some key attributes could be computed via functions but it needs to be deeper studied.
-	 *  
-	 * Each table has a (explicit or implicit) definition of its elements, that is, how its elements are generated or where they come from. 
-	 * This definition is used by this procedure. There are the following types of definitions and the ways elements can be generated:
-	 * o Product of key attribute domains. The key domains must be populated before this table can be populated. Only non-primitive tables can be used. 
-	 *   1) Primitive key domains are either ignored, or computed via a function, or the product fails (not permitted).
-	 *   2) If there are no keys then the record-id is a key. Product is not possible (we cannot reference a table via table columns).
-	 *   3) Super means only auto-resolution of columns/functions in the parent tables. 
-	 * o Filtered product. The filter formula/function must be ready for evaluation, that is, all its dependencies have to be clean (already evaluated). Note that is already formula dependency. There are two cases: inheritance and product.
-	 * o Projection (viewed as a filter). In this case, the project formula must be ready for evaluation and there are two dependencies: 
-	 *   1) all its formula dependencies have to be clean (already evaluated) precisely as for filters, and 
-	 *   2) the referencing sub-table has to be already populated (it works as a basis for the filter). Hence, it cannot depend on this table population status (otherwise we get a cycle).
-	 * 
-	 * Importantly, both population and evaluation are directed by the dirty state. If the state is up-to-date then these operations will do nothing and there is only one way to completely recompute the state - mark the complete state as dirty.
-	 * Essentially, these procedures get the ranges that need to be re-computed for each element (table or column) and then do the work for these ranges only.
-	 * For a column, the range is determined by the subset of the inputs. Complete re-evaluation means that all inputs are dirty (and all their outputs are reset to null).
-	 * For tables, the range is determined by ... Complete re-population means removing all elements and then generating new elements. 
-	 * 
-	 * Types of population:
-	 * o Full. All tables are emptied and newly populated. It is full reset of the data state of the schema.
-	 * o Import. Only tables with external element providers are emptied (and hence this reset is propagated to other tables).
-	 * o Internal.
-	 * o Export. Only providers which populate external tables are activated. This does not change this schema.
-	 * o Append (import, internal, export). Here we only append new elements without emptying the table.
-	 * 
-	 * Problems and tasks:
-	 * o There are two types of operations: population and evaluation. Can they be combined and unified?
-	 *   - Solution 1. pop and eval are independent ops. Yet, pop can cause eval (if a column is needed for pop). And eval can cause pop (if table is needed for eval). 
-	 * o There are two types of dependencies: table and column. How they can be combined?
-	 *   - Solution 1. Dependency graph has elements of two types: tables and column. Tables can be populated and columns can be evaluated.
-	 *       However, table nodes can depend on columns and column nodes can depend on tables (e.g., any column depend on its input table).
-	 *   - Solution 2. Table dependencies are reduced to column dependencies. 
-	 * o Table population can depend on column evaluation status and column evaluation can depend on table population status. We need to somehow combine it.
-	 *  
-	 * Limited approach. 
-	 * Assumption: no product, inheritance, filters and no keys -> only link/import columns can populate tables (append records).
-	 * The necessity to populate is determined by the population dirty status/rules. (New/clean/deleted is not population status/rules - it influences evaluation only.)
-	 * Population status/rules is a mechanism which determines if a table need to be populated or de-populated.
-	 * For example, auto-deletion parameters (age etc.) are an example of population rules.
-	 * Also, a table or its import column might define a parameter for regular population.
-	 * If it is supported, then population could be done asynchronously.
-	 * This mechanism can trigger population and the population procedure will change the dirty state for some elements which is then propagated to the whole schema.
-	 *   
-	 * There are rules for triggering evaluation, e.g., doing it periodically or immediately after any dirty state.
-	 * The evaluation procedure will read the dirty state of the schema and make it up-to-date.
-	 * So it is important to distinguish between the mechanism of triggering population/evaluation and the scope of population/evaluation.
-	 * For example, once population or evaluation has been triggered, it will do its work according to the parameters described by the dirty state.
-	 * In the case of stream processing, population is responsible for inserting all new records while triggering evaluation is performed according to other rules, that is, the data can be in dirty state for some time.
-	 * Appending records is then done not explicitly but rather by starting evaluation of import columns but they also are not evaluated explicitly.
-	 * Rather, import columns are marked as having dirty input tables (that is, input table has new records).
-	 * Only after that evaluation of input columns will really do something.
-	 *  
-	 * In fact, this simplified model without product/filters/keys relies on only column evaluations and column dependencies.
-	 * To make it work with import columns, it is enough to maintain dirty status for virtual input tables of input columns.
-	 * Or we need otherwise make it possible evaluation of input columns only when new data is available.
-	 * The main change is that now we do not add records to tables explicitly - we develop special columns for that purpose.
-	 * For example, we could develop an import column has an input buffer with records and then inserts them into the output table during evaluation.
-	 * Another type of an input column could be a connector to an external data source like file or database which reads some data when evaluatino started.
-	 * 
-	 */
-	public void populate() {
-		
 	}
 
 	//

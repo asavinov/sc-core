@@ -26,9 +26,9 @@ public class ColumnDefinitionLink extends ColumnDefinitionBase {
 		Table inputTable = column.getInput();
 		Table outputTable = column.getOutput();
 
-		List<Pair<Column,UserDefinedExpression>> exprs = new ArrayList<Pair<Column,UserDefinedExpression>>();
+		List<Pair<Column,UDE>> exprs = new ArrayList<Pair<Column,UDE>>();
 
-		if(this.formulaKind == ColumnDefinitionKind.EXP4J || this.formulaKind == ColumnDefinitionKind.EVALEX) {
+		if(this.formulaKind == ExpressionKind.EXP4J || this.formulaKind == ExpressionKind.EVALEX) {
 			// Parse tuple and create a collection of assignments
 			Map<String,String> mmbrs = this.translateLinkFormulas();
 			if(this.hasErrors()) return null; // Cannot proceed
@@ -52,7 +52,7 @@ public class ColumnDefinitionLink extends ColumnDefinitionBase {
 				exprs.add(Pair.of(assignColumn, expr));
 			}
 		}
-		else if(this.formulaKind == ColumnDefinitionKind.UDE) {
+		else if(this.formulaKind == ExpressionKind.UDE) {
 			// TODO: List of pairs: "[ { "column": "Col1", "descriptor": { "class": "com.class", "parameters": ["p1","p2"] }  }, {}, ...  ]"
 			// Here more useful would be equality descriptor, e.g., mapping { "MyCol1":"Path1", "MyCol2":"Path2" }
 			// Or as pairs: { "column":"Col1", "expression":"Path1" }, ...
@@ -136,7 +136,7 @@ public class ColumnDefinitionLink extends ColumnDefinitionBase {
 		return mmbrs;
 	}
 
-	public ColumnDefinitionLink(String formula, ColumnDefinitionKind formulaKind) {
+	public ColumnDefinitionLink(String formula, ExpressionKind formulaKind) {
 		this.formula = formula;
 		super.formulaKind = formulaKind;
 	}

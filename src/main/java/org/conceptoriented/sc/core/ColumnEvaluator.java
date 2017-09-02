@@ -48,7 +48,7 @@ abstract class ColumnEvaluatorBase implements ColumnEvaluator { // Convenience c
 		return this.errors;
 	}
 
-	protected void evaluateExpr(UserDefinedExpression expr, List<Column> accuLinkPath) {
+	protected void evaluateExpr(UDE expr, List<Column> accuLinkPath) {
 		
 		errors.clear(); // Clear state
 
@@ -91,7 +91,7 @@ abstract class ColumnEvaluatorBase implements ColumnEvaluator { // Convenience c
 	}
 
 
-	protected void evaluateLink(List<Pair<Column,UserDefinedExpression>> exprs) {
+	protected void evaluateLink(List<Pair<Column,UDE>> exprs) {
 
 		errors.clear(); // Clear state
 
@@ -109,8 +109,8 @@ abstract class ColumnEvaluatorBase implements ColumnEvaluator { // Convenience c
 		Record outRecord = new Record(); // All output values for all expressions along with column names (is used by the search)
 
 		// Initialize items of these lists for each member expression
-		for(Pair<Column,UserDefinedExpression> mmbr : exprs) {
-			UserDefinedExpression eval = mmbr.getRight();
+		for(Pair<Column,UDE> mmbr : exprs) {
+			UDE eval = mmbr.getRight();
 			int paramCount = eval.getParamPaths().size();
 
 			rhsParamPaths.add( eval.getResolvedParamPaths() );
@@ -124,7 +124,7 @@ abstract class ColumnEvaluatorBase implements ColumnEvaluator { // Convenience c
 			
 			// Evaluate ALL child rhs expressions by producing an array of their results 
 			int mmbrNo = 0;
-			for(Pair<Column,UserDefinedExpression> mmbr : exprs) {
+			for(Pair<Column,UDE> mmbr : exprs) {
 
 				List<List<Column>> paramPaths = rhsParamPaths.get(mmbrNo);
 				Object[] paramValues = rhsParamValues.get(mmbrNo);
@@ -137,7 +137,7 @@ abstract class ColumnEvaluatorBase implements ColumnEvaluator { // Convenience c
 				}
 
 				// Evaluate this member expression
-				UserDefinedExpression expr = mmbr.getRight();
+				UDE expr = mmbr.getRight();
 				Object result = expr.evaluate(paramValues, null);
 				if(expr.getEvaluateError() != null) {
 					errors.add(expr.getEvaluateError());
@@ -167,7 +167,7 @@ abstract class ColumnEvaluatorBase implements ColumnEvaluator { // Convenience c
 		}
 	}
 
-	protected List<Column> getExpressionDependencies(UserDefinedExpression expr) { // Get parameter paths from expression and extract (unique) columns from them
+	protected List<Column> getExpressionDependencies(UDE expr) { // Get parameter paths from expression and extract (unique) columns from them
 		List<Column> columns = new ArrayList<Column>();
 		
 		List<List<Column>> paths = expr.getResolvedParamPaths();
@@ -192,7 +192,7 @@ abstract class ColumnEvaluatorBase implements ColumnEvaluator { // Convenience c
  * It loops through the main table, reads inputs, passes them to the expression and then write the output to the main column.
  */
 class ColumnEvaluatorCalc extends ColumnEvaluatorBase {
-	UserDefinedExpression ude;
+	UDE ude;
 
 	@Override
 	public void evaluate() {
@@ -211,7 +211,7 @@ class ColumnEvaluatorCalc extends ColumnEvaluatorBase {
 		return deps;
 	}
 
-	public ColumnEvaluatorCalc(Column column, UserDefinedExpression ude) {
+	public ColumnEvaluatorCalc(Column column, UDE ude) {
 		super(column);
 		this.ude = ude;
 	}
@@ -222,7 +222,7 @@ class ColumnEvaluatorCalc extends ColumnEvaluatorBase {
  * It loops through the main table, reads inputs, passes them to the expression and then write the output to the main column.
  */
 class ColumnEvaluatorLink extends ColumnEvaluatorBase {
-	List<Pair<Column,UserDefinedExpression>> udes = new ArrayList<Pair<Column,UserDefinedExpression>>();
+	List<Pair<Column,UDE>> udes = new ArrayList<Pair<Column,UDE>>();
 
 	@Override
 	public void evaluate() {
@@ -234,7 +234,7 @@ class ColumnEvaluatorLink extends ColumnEvaluatorBase {
 		List<Column> ret = new ArrayList<Column>();
 		if(udes == null) return ret;
 		
-		for(Pair<Column,UserDefinedExpression> pair : udes) {
+		for(Pair<Column,UDE> pair : udes) {
 			Column lhs = pair.getLeft();
 			if(!ret.contains(lhs)) ret.add(lhs);
 
@@ -248,7 +248,7 @@ class ColumnEvaluatorLink extends ColumnEvaluatorBase {
 		return ret;
 	}
 
-	public ColumnEvaluatorLink(Column column, List<Pair<Column,UserDefinedExpression>> udes) {
+	public ColumnEvaluatorLink(Column column, List<Pair<Column,UDE>> udes) {
 		super(column);
 		this.udes.addAll(udes);
 	}
@@ -260,9 +260,9 @@ class ColumnEvaluatorLink extends ColumnEvaluatorBase {
  */
 class ColumnEvaluatorAccu extends ColumnEvaluatorBase {
 
-	UserDefinedExpression initExpr;
-	UserDefinedExpression accuExpr;
-	UserDefinedExpression finExpr;
+	UDE initExpr;
+	UDE accuExpr;
+	UDE finExpr;
 	
 	List<Column> accuPathColumns;
 
@@ -315,7 +315,7 @@ class ColumnEvaluatorAccu extends ColumnEvaluatorBase {
 		return ret;
 	}
 
-	public ColumnEvaluatorAccu(Column column, UserDefinedExpression initExpr, UserDefinedExpression accuExpr, UserDefinedExpression finExpr, List<Column> accuPathColumns) {
+	public ColumnEvaluatorAccu(Column column, UDE initExpr, UDE accuExpr, UDE finExpr, List<Column> accuPathColumns) {
 		super(column);
 
 		this.initExpr = initExpr;

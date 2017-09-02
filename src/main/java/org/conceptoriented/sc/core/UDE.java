@@ -38,7 +38,7 @@ import java.util.regex.Pattern;
  *   The result is a native expression using its native variables.
  * 
  */
-public interface UserDefinedExpression {
+public interface UDE {
 
 	/**
 	 * For each instance, its parameters are bound to certain column paths (normally primitive).
@@ -70,7 +70,7 @@ public interface UserDefinedExpression {
 /**
  * 
  */
-class UdeJava implements UserDefinedExpression {
+class UdeJava implements UDE {
 
 	public static String OUT_VARIABLE_NAME = "out";
 	

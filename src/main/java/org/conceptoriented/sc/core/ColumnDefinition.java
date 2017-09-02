@@ -23,7 +23,7 @@ public interface ColumnDefinition {
 
 abstract class ColumnDefinitionBase implements ColumnDefinition {
 
-	ColumnDefinitionKind formulaKind;
+	ExpressionKind formulaKind;
 
 	List<DcError> errors = new ArrayList<DcError>();
 	public boolean hasErrors() {
@@ -59,7 +59,11 @@ abstract class ColumnDefinitionBase implements ColumnDefinition {
 		return params;
 	}
 	
-	protected UserDefinedExpression createInstance(String descriptor, ClassLoader classLoader) {
+	protected UDE createInstance(String descriptor, ClassLoader classLoader) {
+
+		if(classLoader == null) {
+			classLoader = ClassLoader.getSystemClassLoader();
+		}
 
 		// Parse the descriptor by getting JavaClass name and list of parameters
 		String className = ColumnDefinitionCalc.getDescriptorClass(descriptor);
@@ -79,9 +83,9 @@ abstract class ColumnDefinitionBase implements ColumnDefinition {
 	    }
 		
 		// Create an instance of an expression class
-		UserDefinedExpression expr = null;
+		UDE expr = null;
 	    try {
-	    	expr = (UserDefinedExpression) clazz.newInstance();
+	    	expr = (UDE) clazz.newInstance();
 		} catch (InstantiationException e) {
 			this.errors.add(new DcError(DcErrorCode.TRANSLATE_ERROR, "Translate error.", "Cannot instantiate class: " + className));
 		} catch (IllegalAccessException e) {

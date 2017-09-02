@@ -17,12 +17,12 @@ public class ColumnDefinitionCalc extends ColumnDefinitionBase {
 		Schema schema = column.getSchema();
 		Table inputTable = column.getInput();
 
-		UserDefinedExpression expr = null; // We need only one expression
+		UDE expr = null; // We need only one expression
 
-		if(this.formulaKind == ColumnDefinitionKind.EXP4J || this.formulaKind == ColumnDefinitionKind.EVALEX) {
+		if(this.formulaKind == ExpressionKind.EXP4J || this.formulaKind == ExpressionKind.EVALEX) {
 			expr = new UdeJava(this.formula, inputTable);
 		}
-		else if(this.formulaKind == ColumnDefinitionKind.UDE) {
+		else if(this.formulaKind == ExpressionKind.UDE) {
 			expr = super.createInstance(this.formula, schema.getClassLoader());
 		}
 		else {
@@ -42,7 +42,7 @@ public class ColumnDefinitionCalc extends ColumnDefinitionBase {
 		return evaluatorCalc;
 	}
 
-	public ColumnDefinitionCalc(String formula, ColumnDefinitionKind formulaKind) {
+	public ColumnDefinitionCalc(String formula, ExpressionKind formulaKind) {
 		this.formula = formula;
 		super.formulaKind = formulaKind;
 	}

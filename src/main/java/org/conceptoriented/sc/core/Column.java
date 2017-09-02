@@ -1,43 +1,11 @@
 package org.conceptoriented.sc.core;
 
-import java.text.NumberFormat;
-import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-
-import org.apache.commons.lang3.tuple.Pair;
-import org.json.JSONArray;
 import org.json.JSONObject;
-
-// NEXT:
-//- !!! Example/test with programmatically defined custom ColumnEvaluator (without formula) with Java class as UDE -> anology with MR (map, reduce etc. are like ColumnEvaluatorCalc (map), ColumnEvaluatorAccu (reduce), ColumnEvaluatorLink (join))
-//  - Custom link evaluator, e.g., by searching the output or imposing complex predicate (filter)
-//  - Custom accu evaluator, e.g., using conditional update or selecting only certain facts
-
-// OPTIMIZATION:
-// - We do not need to store dependencies - they are anyway stored in Evaluator*. 
-//   So leave the same methods but read them from Evaluator* rather than from the dedicated field.
-//   Translation then for direct custom Evaluator* is not needed.
-
-// - constant UDE (easy to compute but not necessary)
-// - equal to column UDE (easier to compute but not necessary)
-// - How to deal with empty formulas and defaults in a principled manner?
-// - Issue: multiple [out] occurrences in a formula (currently only one is possible)
-// - Use ColumnDefinition to store formulas instead of individual strings -> Use translation directly from ColumnDefinition* to ColumnEvaluator*
-//
 
 public class Column {
 	private Schema schema;
@@ -116,7 +84,7 @@ public class Column {
 	//
 	
 	// It is used for all definition types (by default) but every definition has its own expression kind
-	public ColumnDefinitionKind formulaKind = ColumnDefinitionKind.EXP4J;
+	public ExpressionKind expressionKind = ExpressionKind.EXP4J;
 
 	// Calc formula
 	protected ColumnDefinitionCalc definitionCalc;
@@ -150,59 +118,6 @@ public class Column {
 		this.setFormulaChange(true);
 	}
 	
-/*
-	protected String accuFormula; // It is applied to accuTable
-	public String getAccuFormula() {
-		return this.accuFormula;
-	}
-	public void setAccuFormula(String accuFrml) {
-		if(this.accuFormula != null && this.accuFormula.equals(accuFrml)) return; // Nothing to change
-		this.accuFormula = accuFrml;
-		this.setFormulaChange(true);
-	}
-	
-	protected String accuTable;
-	public String getAccuTable() {
-		return this.accuTable;
-	}
-	public void setAccuTable(String accuTbl) {
-		if(this.accuTable != null && this.accuTable.equals(accuTbl)) return; // Nothing to change
-		this.accuTable = accuTbl;
-		this.setFormulaChange(true);
-	}
-	
-	protected String accuPath; // It leads from accuTable to the input table of the column
-	public String getAccuPath() {
-		return this.accuPath;
-	}
-	public void setAccuPath(String accuPath) {
-		if(this.accuPath != null && this.accuPath.equals(accuPath)) return; // Nothing to change
-		this.accuPath = accuPath;
-		this.setFormulaChange(true);
-	}
-	
-	// Initialize
-	protected String initFormula;
-	public String getInitFormula() {
-		return this.initFormula;
-	}
-	public void setInitFormula(String frml) {
-		if(this.initFormula != null && this.initFormula.equals(frml)) return; // Nothing to change
-		this.initFormula = frml;
-		this.setFormulaChange(true);
-	}
-	
-	// Finalize
-	protected String finFormula;
-	public String getFinFormula() {
-		return this.finFormula;
-	}
-	public void setFinFormula(String frml) {
-		if(this.finFormula != null && this.finFormula.equals(frml)) return; // Nothing to change
-		this.finFormula = frml;
-		this.setFormulaChange(true);
-	}
-*/
 	//
 	// Formula dirty status (own or inherited)
 	//
@@ -285,7 +200,7 @@ public class Column {
 				}
 				DcError de = dep.getTranslateError();
 				if(de != null && de.code != DcErrorCode.NONE) {
-					return de;
+					return new DcError(DcErrorCode.TRANSLATE_PROPAGATION_ERROR, "Error in column " + dep.getName(), "This column formula depends on a column with errors.");
 				}
 			}
 		}
@@ -306,8 +221,7 @@ public class Column {
 					return true; // Cyclic dependency is also an error and hence dirty
 				}
 				DcError de = dep.getTranslateError();
-				if(de != null && de.code != DcErrorCode.NONE) {
-					return true; // Any error must be treated as dirty status (propagated further down)
+				if(de != null && de.code != DcErrorCode.NONE) {					return true; // Any error must be treated as dirty status (propagated further down)
 				}
 				if(dep.isFormulaDirty()) return true;
 			}
@@ -342,11 +256,11 @@ public class Column {
 	//
 	
 	ColumnEvaluatorCalc evaluatorCalc;
-	public void setEvaluatorCalc(ColumnEvaluatorCalc eval) { this.evaluatorCalc = eval; this.formulaKind = ColumnDefinitionKind.NONE; }
+	public void setEvaluatorCalc(ColumnEvaluatorCalc eval) { this.evaluatorCalc = eval; this.expressionKind = ExpressionKind.NONE; }
 	ColumnEvaluatorLink evaluatorLink;
-	public void setEvaluatorLink(ColumnEvaluatorLink eval) { this.evaluatorLink = eval; this.formulaKind = ColumnDefinitionKind.NONE; }
+	public void setEvaluatorLink(ColumnEvaluatorLink eval) { this.evaluatorLink = eval; this.expressionKind = ExpressionKind.NONE; }
 	ColumnEvaluatorAccu evaluatorAccu;
-	public void setEvaluatorAccu(ColumnEvaluatorAccu eval) { this.evaluatorAccu = eval; this.formulaKind = ColumnDefinitionKind.NONE; }
+	public void setEvaluatorAccu(ColumnEvaluatorAccu eval) { this.evaluatorAccu = eval; this.expressionKind = ExpressionKind.NONE; }
 
 	// Generate Evaluator* from ColumnDefinition*
 	// TODO: What if Evaluator* is provided directly without Formulas/Definition?
@@ -360,25 +274,31 @@ public class Column {
 		
 		// Translate depending on the formula kind
 		if(this.kind == DcColumnKind.CALC) {
-			if(this.formulaKind != ColumnDefinitionKind.NONE) {
+			if(this.expressionKind != ExpressionKind.NONE) {
 				this.evaluatorCalc = (ColumnEvaluatorCalc) this.definitionCalc.translate(this);
 				this.translateErrors.addAll(definitionCalc.getErrors());
 			}
-			columns.addAll(this.evaluatorCalc.getDependencies()); // Dependencies
+			if(this.evaluatorCalc != null && !this.hasTranslateErrors()) {
+				columns.addAll(this.evaluatorCalc.getDependencies()); // Dependencies
+			}
 		}
 		else if(this.kind == DcColumnKind.LINK) {
-			if(this.formulaKind != ColumnDefinitionKind.NONE) {
+			if(this.expressionKind != ExpressionKind.NONE) {
 				this.evaluatorLink = (ColumnEvaluatorLink) this.definitionLink.translate(this);
 				this.translateErrors.addAll(definitionLink.getErrors());
 			}
-			columns.addAll(this.evaluatorLink.getDependencies()); // Dependencies
+			if(this.evaluatorLink != null && !this.hasTranslateErrors()) {
+				columns.addAll(this.evaluatorLink.getDependencies()); // Dependencies
+			}
 		}
 		else if(this.kind == DcColumnKind.ACCU) {
-			if(this.formulaKind != ColumnDefinitionKind.NONE) {
+			if(this.expressionKind != ExpressionKind.NONE) {
 				this.evaluatorAccu = (ColumnEvaluatorAccu) this.definitionAccu.translate(this);
 				this.translateErrors.addAll(definitionAccu.getErrors());
 			}
-			columns.addAll(this.evaluatorAccu.getDependencies()); // Dependencies
+			if(this.evaluatorAccu != null && !this.hasTranslateErrors()) {
+				columns.addAll(this.evaluatorAccu.getDependencies()); // Dependencies
+			}
 		}
 
 		this.setDependencies(columns);
@@ -503,7 +423,7 @@ public class Column {
 		
 		// Formula
 		this.kind = DcColumnKind.USER;
-		this.formulaKind = ColumnDefinitionKind.EXP4J; // By default
+		this.expressionKind = ExpressionKind.EXP4J; // By default
 
 		// Data
 		this.data = new ColumnData(this);

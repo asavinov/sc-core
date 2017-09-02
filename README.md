@@ -26,7 +26,7 @@ The following steps have to be performed:
 
 A list of changes for each release can be found in the UI project.
 
-* v0.7.0 (2017-06-xx)
+* v0.7.0 (2017-09-02)
 * v0.6.0 (2017-05-14)
 * v0.5.0 (2017-03-19)
 * v0.4.0 (2017-02-12)

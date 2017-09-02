@@ -9,21 +9,16 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
-import org.conceptoriented.sc.core.Column;
-import org.conceptoriented.sc.core.EvaluatorBase;
-import org.conceptoriented.sc.core.Record;
-import org.conceptoriented.sc.core.Schema;
-import org.conceptoriented.sc.core.Table;
-import org.json.JSONObject;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import org.conceptoriented.sc.core.Column;
+import org.conceptoriented.sc.core.Record;
+import org.conceptoriented.sc.core.Schema;
+import org.conceptoriented.sc.core.Table;
 
 public class Tests {
 
@@ -126,7 +121,7 @@ public class Tests {
         Column columnA = schema.getColumn("T", "A");
         Column columnB = schema.getColumn("T", "B");
 
-        columnB.setDefinitionCalc(new ColumnDefinitionCalc("2 * [A] + 1", ColumnDefinitionKind.EXP4J));
+        columnB.setDefinitionCalc(new ColumnDefinitionCalc("2 * [A] + 1", ExpressionKind.EXP4J));
 
         columnB.translate();
         
@@ -150,7 +145,7 @@ public class Tests {
         
         // Create ColumnEvaluatorCalc by using a custom Java class as UserDefinedExpression
         List<List<Column>> inputPaths = Arrays.asList( Arrays.asList(columnA) ); // Bind to column objects directly (without names)
-        UserDefinedExpression ude = new CustomCalcUde(inputPaths);
+        UDE ude = new CustomCalcUde(inputPaths);
         ColumnEvaluatorCalc eval = new ColumnEvaluatorCalc(columnB, ude);
         columnB.setEvaluatorCalc(eval);
 
@@ -183,7 +178,7 @@ public class Tests {
 
         return schema;
     }
-    class CustomCalcUde implements UserDefinedExpression {
+    class CustomCalcUde implements UDE {
     	
     	@Override public void setParamPaths(List<QName> paths) {}
     	@Override public List<QName> getParamPaths() { return null; }
@@ -208,30 +203,13 @@ public class Tests {
 
 
     @Test
-    public void tupleParserTest() 
-    {
-    	QNameBuilder nb = new QNameBuilder();
-    	QName name = nb.buildQName("[a1 1 1].b222");
-
-    	ExprNode t = new ExprNode(); 
-
-    	t.formula = "{ bbb = v11 + 1 * sin(bla) / bla ; [ccc]=22,2 }";
-    	t.name = "aaa";
-    	t.parse();
-
-    	t.formula = "{ bbb = v11 + 1 * sin(bla) ; [ccc]= {ddd=22,2} }";
-    	t.name = "aaa";
-    	t.parse();
-    	t = null;
-    }
-    @Test
     public void linkFormulaTest()
     {
     	Schema schema = createLinkSchema();
 
         Column c5 = schema.getColumn("T2", "C");
 
-    	c5.setDefinitionLink(new ColumnDefinitionLink(" { [A] = [A]; [B] = [B] } ", ColumnDefinitionKind.EXP4J));
+    	c5.setDefinitionLink(new ColumnDefinitionLink(" { [A] = [A]; [B] = [B] } ", ExpressionKind.EXP4J));
 
         c5.translate();
 
@@ -256,10 +234,10 @@ public class Tests {
         // Define evaluator for this formula: " { [A] = [A]; [B] = [B] } "
         Column c1 = schema.getColumn("T", "A");
         Column c2 = schema.getColumn("T", "B");
-        UserDefinedExpression expr1 = new UdeJava("[A]", c1.getInput());
-        UserDefinedExpression expr2 = new UdeJava("[B]", c2.getInput());
+        UDE expr1 = new UdeJava("[A]", c1.getInput());
+        UDE expr2 = new UdeJava("[B]", c2.getInput());
 
-        List<Pair<Column,UserDefinedExpression>> udes = new ArrayList<Pair<Column,UserDefinedExpression>>();
+        List<Pair<Column,UDE>> udes = new ArrayList<Pair<Column,UDE>>();
         udes.add(Pair.of(schema.getColumn("T2", "A"), expr1));
         udes.add(Pair.of(schema.getColumn("T2", "B"), expr2));
         
@@ -320,11 +298,11 @@ public class Tests {
 
         // Link (group) formula
         Column t2g = schema.getColumn("T2", "G");
-        t2g.setDefinitionLink(new ColumnDefinitionLink(" { [Id] = [Id] } ", ColumnDefinitionKind.EXP4J));
+        t2g.setDefinitionLink(new ColumnDefinitionLink(" { [Id] = [Id] } ", ExpressionKind.EXP4J));
         
         // Accu formula
         Column ta = schema.getColumn("T", "A");
-        ta.setDefinitionAccu(new ColumnDefinitionAccu("", " [out] + 2.0 * [Id] ", null, "T2", "[G]", ColumnDefinitionKind.EXP4J));
+        ta.setDefinitionAccu(new ColumnDefinitionAccu("", " [out] + 2.0 * [Id] ", null, "T2", "[G]", ExpressionKind.EXP4J));
 
         //
         // Translate and evaluate
@@ -349,16 +327,16 @@ public class Tests {
 
         // Link (group) formula
         Column t2g = schema.getColumn("T2", "G");
-        t2g.setDefinitionLink(new ColumnDefinitionLink(" { [Id] = [Id] } ", ColumnDefinitionKind.EXP4J));
+        t2g.setDefinitionLink(new ColumnDefinitionLink(" { [Id] = [Id] } ", ExpressionKind.EXP4J));
         
         // Accu evaluator
         Column ta = schema.getColumn("T", "A");
         
-        UserDefinedExpression initUde = new UdeJava("0.0", schema.getTable("T"));
+        UDE initUde = new UdeJava("0.0", schema.getTable("T"));
 
         //UserDefinedExpression accuUde = new UdeJava(" [out] + 2.0 * [Id] ", schema.getTable("T2"));;
         List<List<Column>> inputPaths = Arrays.asList( Arrays.asList( schema.getColumn("T2", "Id") ) );
-        UserDefinedExpression accuUde = new CustomAccuUde(inputPaths);
+        UDE accuUde = new CustomAccuUde(inputPaths);
 
         List<Column> accuPathColumns = Arrays.asList(schema.getColumn("T2", "G"));
         
@@ -418,7 +396,7 @@ public class Tests {
         
         return schema;
     }
-    class CustomAccuUde implements UserDefinedExpression {
+    class CustomAccuUde implements UDE {
     	
     	@Override public void setParamPaths(List<QName> paths) {}
     	@Override public List<QName> getParamPaths() { return null; }
